@@ -1,0 +1,9 @@
+# Pesos del score de decision por reglas (ADR 003 secc. 6), por rol. Default
+# explicito del ADR: `w_ideo 0.30, w_int 0.45, w_rel 0.15, w_elec 0.10`.
+# "Los sindicatos y bloques sociales pesan mas w_int; los partidos mas
+# w_elec" (ADR, sin numeros exactos): valores concretos inventados para
+# v0.3, documentados en Notas de implementacion. Todos suman 1.0.
+default: {w_ideo: 0.30, w_int: 0.45, w_rel: 0.15, w_elec: 0.10}
+union: {w_ideo: 0.20, w_int: 0.60, w_rel: 0.10, w_elec: 0.10}
+social_bloc: {w_ideo: 0.15, w_int: 0.65, w_rel: 0.10, w_elec: 0.10}
+party: {w_ideo: 0.25, w_int: 0.35, w_rel: 0.10, w_elec: 0.30}

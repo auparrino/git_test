@@ -1,0 +1,90 @@
+# Matriz de permisos rol -> tipos de accion permitidos (ADR 003 secc. 4).
+# `authorize()` (engine/permissions.py) hace el primero de sus 5 chequeos
+# contra esta tabla. "todos salvo president" del ADR = todos los roles menos
+# `president` para SUPPORT_POLICY/OPPOSE_POLICY; "todos" (PUBLIC_STATEMENT,
+# NO_ACTION) = los 9 roles.
+president:
+  - PUBLIC_STATEMENT
+  - PROPOSE_POLICY
+  - ENACT_POLICY
+  - GRANT_CONCESSION
+  - NO_ACTION
+
+economy_minister:
+  - SUPPORT_POLICY
+  - OPPOSE_POLICY
+  - NEGOTIATE
+  - PUBLIC_STATEMENT
+  - RECOMMEND_RATE
+  - PROPOSE_POLICY
+  - NO_ACTION
+
+central_bank:
+  - SUPPORT_POLICY
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - RECOMMEND_RATE
+  - SET_RATE
+  - NO_ACTION
+
+governor:
+  - SUPPORT_POLICY
+  - OPPOSE_POLICY
+  - NEGOTIATE
+  - PUBLIC_STATEMENT
+  - LOBBY_CONGRESS
+  - FORM_ALLIANCE
+  - BREAK_ALLIANCE
+  - REQUEST_FUNDS
+  - NO_ACTION
+
+party:
+  - SUPPORT_POLICY
+  - OPPOSE_POLICY
+  - NEGOTIATE
+  - PUBLIC_STATEMENT
+  - LOBBY_CONGRESS
+  - FORM_ALLIANCE
+  - BREAK_ALLIANCE
+  - CALL_PROTEST
+  - NO_ACTION
+
+union:
+  - SUPPORT_POLICY
+  - OPPOSE_POLICY
+  - NEGOTIATE
+  - PUBLIC_STATEMENT
+  - LOBBY_CONGRESS
+  - FORM_ALLIANCE
+  - BREAK_ALLIANCE
+  - CALL_PROTEST
+  - STRIKE
+  - NO_ACTION
+
+business:
+  - SUPPORT_POLICY
+  - OPPOSE_POLICY
+  - NEGOTIATE
+  - PUBLIC_STATEMENT
+  - LOBBY_CONGRESS
+  - FORM_ALLIANCE
+  - BREAK_ALLIANCE
+  - WITHHOLD_INVESTMENT
+  - INVEST
+  - NO_ACTION
+
+media:
+  - SUPPORT_POLICY
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - PUBLISH_STORY
+  - ENDORSE
+  - CRITICIZE
+  - NO_ACTION
+
+social_bloc:
+  - SUPPORT_POLICY
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - CALL_PROTEST
+  - NO_ACTION

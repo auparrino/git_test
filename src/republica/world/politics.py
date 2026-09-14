@@ -38,7 +38,11 @@ def step_politics(
 
     # 5.7 apoyo en el congreso
     congress_target = coalition_seats + coeff.cg_a * (approval_new - coeff.approval_ref)
-    congress_new = prev.congress_support + coeff.cg_adj * (congress_target - prev.congress_support)
+    congress_new = (
+        prev.congress_support
+        + coeff.cg_adj * (congress_target - prev.congress_support)
+        + shocks.term("shock_congress")
+    )
 
     # 5.8 confianza institucional (lenta)
     institutional_confidence_new = (

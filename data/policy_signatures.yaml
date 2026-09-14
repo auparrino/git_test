@@ -1,0 +1,11 @@
+# Firma ideologica de cada instrumento de politica por punto (+1 pp), en el
+# mismo espacio que `ideology` de las fichas (ADR 003 secc. 6.1, tabla
+# literal). `scale` = variacion del instrumento a la que la senal satura
+#: (revision v0.3: antes todo saturaba a 5 pp, y un recorte de tasa de 5 pp
+#: valia tanto como subir impuestos 5 pp del PIB).
+scales: {interest_rate_target: 15.0, tax_rate: 3.0, primary_spending: 3.0, provincial_transfers: 2.0, fx_intervention: 0.5}
+interest_rate_target: {economic: 0.3, social: 0.0, federalism: 0.0, institutionalism: 0.2}
+tax_rate: {economic: -0.5, social: 0.2, federalism: 0.0, institutionalism: 0.1}
+primary_spending: {economic: -0.5, social: 0.3, federalism: 0.0, institutionalism: -0.1}
+provincial_transfers: {economic: -0.2, social: 0.0, federalism: 0.8, institutionalism: 0.0}
+fx_intervention: {economic: -0.2, social: 0.0, federalism: 0.0, institutionalism: -0.2}

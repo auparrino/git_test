@@ -35,8 +35,10 @@ def test_play_auto_finishes_and_saves_decisions(tmp_path, monkeypatch) -> None:
 
     history_path = tmp_path / "simulations" / "game_7.jsonl"
     assert history_path.exists()
-    lines = history_path.read_text(encoding="utf-8").splitlines()
-    assert len(lines) == 49  # 48 meses + resumen final
+    lines = [json.loads(line) for line in history_path.read_text(encoding="utf-8").splitlines()]
+    months = [r for r in lines if r.get("kind", "month") == "month" and "month_index" in r]
+    assert len(months) == 48
+    assert any(r.get("kind") == "action" for r in lines)  # actores activos por default en play
 
 
 def test_play_load_resumes_a_saved_game(tmp_path, monkeypatch) -> None:

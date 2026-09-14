@@ -1,0 +1,9 @@
+# Gobernanza minima (ADR 003 secc. 6.4): solo la autonomia del Banco Central
+# por ahora (mas campos en Fases posteriores). `autonomy` en [0, 5]: con
+# `>= 3` el Banco Central puede emitir `SET_RATE` ademas de `RECOMMEND_RATE`
+# (si no, solo puede recomendar, como en v0.1 donde la tasa la fija la
+# `PolicyRule`/el presidente). Valor inventado para v0.3: 2 (BC tecnico pero
+# no plenamente autonomo, consistente con que en v0.1 el presidente/la regla
+# de politica fija la tasa sin intervencion del BC).
+central_bank:
+  autonomy: 2

@@ -1,0 +1,28 @@
+# Coeficientes de `interest_impact` (ADR 003 secc. 6.2), por interes. La
+# *forma* de cada formula vive en `actors/rule_based.py::_INTEREST_IMPACT`
+# (tabulada en YAML solo lo que el ADR ya da como numero); estos son los
+# coeficientes.
+#
+# Los primeros 11 son literales de la tabla del ADR. `social_programs`,
+# `industrial_protection`, `financial_stability`, `law_and_order` y
+# `party_unity` no estan en la tabla del ADR (apenas mencionados como
+# intereses en las fichas): sus coeficientes son inventados para v0.3,
+# calibrados a mano en el mismo orden de magnitud que el resto (docenas, no
+# cientos), documentados en Notas de implementacion de ADR 003.
+provincial_transfers: {coef: 15.0}
+agricultural_exports: {coef_tax: -20.0, coef_fx: 10.0}
+real_wages: {coef_infl: -12.0}
+employment: {coef: -15.0, unemployment_elasticity_spending: -0.03, unemployment_elasticity_rate: 0.02}
+price_stability: {coef_infl: -10.0, coef_rate: 5.0}
+fiscal_balance: {coef: 10.0}
+low_taxes: {coef: -15.0}
+cheap_credit: {coef: -8.0}
+public_employment: {coef: -15.0}
+reelection: {coef: 0.5}
+audience: {coef: 10.0}
+
+social_programs: {coef: 12.0}
+industrial_protection: {coef_tax: -10.0, coef_fx: 5.0}
+financial_stability: {coef_infl: -10.0, coef_vol: -8.0}
+law_and_order: {coef_crime: -0.3, coef_protest: -0.2}
+party_unity: {coef: 0.2}

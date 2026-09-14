@@ -13,6 +13,7 @@ from rich.console import Console
 from rich.table import Table
 
 from republica import __version__
+from republica.actors.sheet import load_actors
 from republica.engine import narrate as narrate_mod
 from republica.engine.advisor import advise
 from republica.engine.dilemmas import compute_aux_vars, render_text
@@ -24,6 +25,8 @@ from republica.engine.simulation import run as run_simulation
 from republica.world.config import load_country
 
 app = typer.Typer(help="Republica Artificial - laboratorio politico jugable.")
+actors_app = typer.Typer(help="Fichas de actores (ADR 003).")
+app.add_typer(actors_app, name="actors")
 console = Console()
 
 
@@ -31,6 +34,28 @@ console = Console()
 def version() -> None:
     """Muestra la version instalada de Republica Artificial."""
     console.print(__version__)
+
+
+@actors_app.command("list")
+def actors_list() -> None:
+    """Tabla de las 29 fichas de actores (`data/actors/*.yaml`, ADR 003 secc. 2)."""
+    actors = load_actors()
+    table = Table(title="Actores (ADR 003)")
+    table.add_column("id")
+    table.add_column("nombre")
+    table.add_column("rol")
+    table.add_column("economic", justify="right")
+    table.add_column("interests")
+    for actor_id in sorted(actors):
+        sheet = actors[actor_id]
+        table.add_row(
+            sheet.id,
+            sheet.name,
+            sheet.role,
+            f"{sheet.ideology.economic:+.2f}",
+            ", ".join(sheet.interests),
+        )
+    console.print(table)
 
 
 def _parse_force_shock(spec: str) -> tuple[int, str]:
@@ -75,6 +100,13 @@ def run(
         list[str],
         typer.Option("--force-shock", help="Fuerza un shock: id@mes (repetible, ej. drought@5)."),
     ] = [],  # noqa: B006 - typer clona la lista, no se muta
+    actors: Annotated[
+        bool | None,
+        typer.Option(
+            "--actors/--no-actors",
+            help="Actores por reglas (ADR 003). Default: `features.actors` de country.json.",
+        ),
+    ] = None,
 ) -> None:
     """Corre una simulacion de `months` meses y la guarda en `out` (JSONL)."""
     country = load_country()
@@ -84,18 +116,20 @@ def run(
         month, shock_id = _parse_force_shock(spec)
         forced_shocks.setdefault(month, []).append(shock_id)
 
+    actors_enabled = actors if actors is not None else country.features.get("actors", True)
     history = run_simulation(
         seed=seed,
         months=months,
         policy_rule=policy_rule,
         forced_shocks=forced_shocks or None,
         country=country,
+        actors_enabled=actors_enabled,
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(history.to_jsonl(), encoding="utf-8")
     console.print(
         f"[green]OK[/green] seed={seed} months={len(history.records)} "
-        f"outcome={history.outcome} -> {out}"
+        f"outcome={history.outcome} actors={actors_enabled} -> {out}"
     )
 
 
@@ -105,7 +139,7 @@ def narrate(
 ) -> None:
     """Narra mes a mes una corrida guardada en JSONL (seccion 10 del spec)."""
     loaded = narrate_mod.load_jsonl(path)
-    narrate_mod.render(loaded.records, loaded.summary, console)
+    narrate_mod.render(loaded.records, loaded.summary, console, loaded.actions_by_month)
 
 
 def _percentiles(values: list[float]) -> tuple[float, float, float]:
@@ -261,6 +295,8 @@ def _render_dashboard(console: Console, game: Game, prev_state: dict | None) -> 
             labels = [EVENT_LABELS.get(e.split(":")[0], e) for e in last_events]
             console.print("● " + "  ".join(labels))
 
+    _render_actor_reactions(console, game)
+
     aux = compute_aux_vars(game.sim.state, month, game.country.months)
     for adv in advise(game.sim.state, aux, game.policy, game.country):
         console.print(f"[cyan]{adv.source}:[/cyan] {adv.text}")
@@ -270,6 +306,44 @@ def _render_dashboard(console: Console, game: Game, prev_state: dict | None) -> 
         console.print(f"  {render_text(dilemma, game.sim.state, aux, month)}")
         for opt in dilemma.options:
             console.print(f"   {opt.key}) {opt.label}")
+
+
+def _render_actor_reactions(console: Console, game: Game) -> None:
+    """Deliverable 8 de ADR 003: reacciones del mes pasado (top 6 por
+    intensidad, con el mensaje publico) y cuantas se denegaron."""
+    if game.sim.actor_engine is None:
+        return
+    records = game.sim.actor_engine.last_records
+    if not records:
+        return
+    dicts = [r.to_dict() for r in records]
+    denied = sum(1 for r in dicts if not r["authorized"])
+    top = narrate_mod.top_actions(dicts, n=6)
+    if not top:
+        console.print(f"[dim]Sin reacciones destacadas de los actores ({denied} denegadas).[/dim]")
+        return
+    console.print(f"[bold]Reacciones de los actores[/bold] ({denied} denegadas este mes):")
+    for action in top:
+        mark = "" if action["authorized"] else " [red](denegada)[/red]"
+        console.print(f"  • {action['actor']} {action['type']}{mark} — {action['reason']}")
+
+
+def _collect_grant_decisions(game: Game, auto: bool) -> None:
+    """Deliverable 8: `REQUEST_FUNDS`/`NEGOTIATE` pendientes como un dilema
+    generado "Conceder/Rechazar" por pedido."""
+    requests = game.pending_actor_requests
+    if not requests:
+        return
+    granted: set[str] = set()
+    for req in requests:
+        prompt = f"  Pedido de {req.actor_id} ({req.type.value}): {req.reason} [Conceder/Rechazar]"
+        if auto:
+            console.print(f"[dim]--auto: {prompt} -> Rechazar[/dim]")
+            continue
+        answer = typer.prompt(prompt, default="Rechazar").strip().lower()
+        if answer.startswith("c"):
+            granted.add(req.actor_id)
+    game.set_grant_decisions(granted)
 
 
 def _collect_choices(game: Game, auto: bool) -> dict[str, str]:
@@ -371,13 +445,21 @@ def play(
         bool,
         typer.Option("--auto", help="Elige la primera opcion de cada dilema sin preguntar."),
     ] = False,
+    actors: Annotated[
+        bool,
+        typer.Option(
+            "--actors/--no-actors",
+            help="Actores por reglas (ADR 003, deliverable 8): reacciones en el tablero "
+            "y pedidos de gobernadores/sindicatos como dilema Conceder/Rechazar.",
+        ),
+    ] = True,
 ) -> None:
     """Modo juego: sos el presidente (SPEC_v0.2_play.md)."""
     if load is not None:
         game = Game.load(load)
         console.print(f"[green]Partida cargada desde {load}[/green]")
     else:
-        game = Game.new(seed=seed, months=months)
+        game = Game.new(seed=seed, months=months, actors_enabled=actors)
 
     save_path = Path(f"simulations/game_{game.seed}.json")
     prev_state = game.sim.records[-1].state if game.sim.records else None
@@ -385,6 +467,7 @@ def play(
     while game.sim.outcome is None and game.sim.month < game.country.months:
         _render_dashboard(console, game, prev_state)
         choices = _collect_choices(game, auto)
+        _collect_grant_decisions(game, auto)
         edits, quit_now = _menu(game, save_path, auto)
         if quit_now:
             game.save(save_path)

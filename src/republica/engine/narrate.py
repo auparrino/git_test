@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -47,17 +47,30 @@ def _arrow(delta: float) -> str:
 class Loaded:
     records: list[dict[str, Any]]
     summary: dict[str, Any]
+    #: `ActionRecord` (ADR 003 secc. 8, `kind: "action"`), agrupados por
+    #: `month`. Vacio si la corrida no tenia actores (`--no-actors`): esas
+    #: lineas simplemente no existen en el archivo.
+    actions_by_month: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
 
 
 def load_jsonl(path: str | Path) -> Loaded:
-    """Lee un archivo JSONL producido por `republica run` (una linea por mes
-    mas una linea final de resumen)."""
+    """Lee un archivo JSONL producido por `republica run` (un `MonthRecord`
+    por mes, `ActionRecord` intercalados si hay actores, mas una linea final
+    de resumen). Las lineas con `"kind": "action"` no son `MonthRecord`: se
+    separan en `actions_by_month` y no entran en `records` (ver Notas de
+    implementacion de ADR 003: asi `render()` no cambia para corridas sin
+    actores)."""
     lines = Path(path).read_text(encoding="utf-8").splitlines()
     if not lines:
         raise ValueError(f"{path} esta vacio")
-    records = [json.loads(line) for line in lines[:-1]]
+    parsed = [json.loads(line) for line in lines[:-1]]
     summary = json.loads(lines[-1])
-    return Loaded(records=records, summary=summary)
+    records = [r for r in parsed if r.get("kind") != "action"]
+    actions_by_month: dict[int, list[dict[str, Any]]] = {}
+    for r in parsed:
+        if r.get("kind") == "action":
+            actions_by_month.setdefault(r["month"], []).append(r)
+    return Loaded(records=records, summary=summary, actions_by_month=actions_by_month)
 
 
 def threshold_sentences(record: dict[str, Any]) -> list[str]:
@@ -85,8 +98,35 @@ def threshold_sentences(record: dict[str, Any]) -> list[str]:
     return sentences
 
 
-def render(records: list[dict[str, Any]], summary: dict[str, Any], console: Console) -> None:
+def _action_intensity(action: dict[str, Any]) -> float:
+    """Intensidad de un `ActionRecord` para ordenar "las 3 mas intensas"
+    (deliverable 9): `params.intensity` si el tipo la tiene, si no
+    `|score.total|/80` (misma escala que `rule_based.INTENSITY_SCALE`), si
+    no 0 (ej. `NO_ACTION`)."""
+    intensity = action.get("params", {}).get("intensity")
+    if isinstance(intensity, int | float):
+        return abs(intensity)
+    score = action.get("score")
+    if score is not None:
+        return abs(score.get("total", 0.0)) / 80.0
+    return 0.0
+
+
+def top_actions(actions: list[dict[str, Any]], n: int = 3) -> list[dict[str, Any]]:
+    """Las `n` acciones mas intensas del mes (deliverable 9 de Fase 3),
+    autorizadas primero (una denegada no tuvo efecto real)."""
+    visible = [a for a in actions if a.get("type") != "NO_ACTION"]
+    return sorted(visible, key=lambda a: (a["authorized"], _action_intensity(a)), reverse=True)[:n]
+
+
+def render(
+    records: list[dict[str, Any]],
+    summary: dict[str, Any],
+    console: Console,
+    actions_by_month: dict[int, list[dict[str, Any]]] | None = None,
+) -> None:
     """Imprime la narracion completa mes a mes y el resumen final."""
+    actions_by_month = actions_by_month or {}
     prev_state: dict[str, Any] | None = None
     for record in records:
         state = record["state"]
@@ -111,6 +151,13 @@ def render(records: list[dict[str, Any]], summary: dict[str, Any], console: Cons
             console.print(f"[bold red]{EVENT_LABELS.get(kind, event)}[/bold red]")
         for sentence in threshold_sentences(record):
             console.print(f"  → {sentence}")
+
+        month_actions = actions_by_month.get(record["month_index"], [])
+        if month_actions:
+            console.print("[bold]Actores (3 mas intensos):[/bold]")
+            for action in top_actions(month_actions):
+                mark = "" if action["authorized"] else " [red](denegada)[/red]"
+                console.print(f"  • {action['actor']} {action['type']}{mark} — {action['reason']}")
 
         prev_state = state
 

@@ -128,5 +128,6 @@
     "devaluation_reserve_injection": 1500.0,
     "devaluation_pi_shock": 5.0,
     "devaluation_conf_shock": -10.0
-  }
+  },
+  "features": {"actors": true}
 }

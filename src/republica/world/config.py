@@ -235,6 +235,13 @@ class Country(BaseModel):
     coalition_seats: float
     shocks: list[dict[str, Any]]
     config_hash: str
+    #: `features.actors` (ADR 003 secc. 7): default `True` si `country.json`
+    #: no trae la clave (la CLI `republica run` prende actores por defecto;
+    #: `--no-actors` la apaga). No confundir con el default `False` de
+    #: `engine.simulation.run()`/`Game.new()` como *funciones* (ver Notas de
+    #: implementacion): ese default se mantiene apagado para no romper
+    #: llamadores existentes que no piden actores explicitamente.
+    features: dict[str, bool] = {"actors": True}
 
 
 def _load_provinces(path: Path) -> list[Province]:
@@ -301,4 +308,5 @@ def load_country(data_dir: Path | str | None = None) -> Country:
         coalition_seats=_coalition_seats(parties),
         shocks=shocks,
         config_hash=config_hash,
+        features=raw.get("features", {"actors": True}),
     )

@@ -1,0 +1,87 @@
+# Coeficientes de las consecuencias de acciones (ADR 003 secc. 5, valores de
+# referencia con intensity = 1). Escalados por la influencia del actor
+# (`influence.<canal>`) segun se indica en cada bloque; los que no traen
+# `scale_by` son flat (no escalan por influencia, ej. relaciones directas).
+# `engine/consequences.py` interpreta esta tabla.
+
+public_statement:
+  oppose: {state: {government_approval: -1.0}, scale_by: public, relationship_president: -2}
+  support: {state: {government_approval: 0.6}, scale_by: public, relationship_president: 2}
+  # `neutral` no esta en la tabla del ADR: sin efecto (documentado).
+  neutral: {state: {}, relationship_president: 0}
+
+lobby_congress:
+  against: {state: {congress_support: -2.0}, scale_by: congress}
+  # "for" no esta en la tabla del ADR (solo da el caso "against"): se agrega
+  # simetrico, mismo coeficiente en positivo (documentado en Notas de
+  # implementacion).
+  for: {state: {congress_support: 2.0}, scale_by: congress}
+
+call_protest:
+  state: {protest_level: 8.0, social_tension: 2.0}
+  scale_by: streets
+  # Solo `protest_level` escala por `influence.streets` (ADR: "protest
+  # +8*influence.streets, tension +2"); `social_tension` es flat.
+  scaled_fields: [protest_level]
+  relationship_president: -3
+
+strike:
+  general:
+    gdp_per_day: -0.15
+    protest: 12.0
+    approval: -1.5
+    relationship_president: -5
+    relationship_business: -3
+  public:
+    gdp_per_day: -0.05
+    protest: 6.0
+    approval: 0.0
+    relationship_president: -3
+    relationship_business: 0
+
+withhold_investment:
+  gdp: -0.2
+  consumer_confidence: -2.0
+  scale_by: markets
+  relationship_president: -2
+
+invest:
+  gdp: 0.15
+  consumer_confidence: 1.0
+  scale_by: markets
+  relationship_president: 2
+
+publish_story:
+  crisis: {consumer_confidence: -1.5, scale_by: public}
+  recovery: {consumer_confidence: 1.0, scale_by: public}
+  scandal: {institutional_confidence: -1.0, approval: -1.0, scale_by: public, relationship_target: -4}
+  neutral: {}
+
+request_funds:
+  relationship_president_if_denied: -1
+
+grant_concession:
+  relationship_to: 8
+
+form_alliance:
+  relationship_with: 10
+
+break_alliance:
+  relationship_with: -15
+
+support_oppose_policy:
+  # "Delta = +-1.5 * intensity * seats/100" (ADR): solo aplica a actores con
+  # `seats` (partidos); el resto solo mueve `relationships.president` (ver
+  # Notas de implementacion: el ADR no aclara si un sindicato/bloque social
+  # que hace SUPPORT/OPPOSE_POLICY tambien mueve `congress_support` sin
+  # bancas propias -- se decidio que no).
+  congress_coef: 1.5
+  relationship_president_coef: 1.0
+
+recommend_rate: {}  # informativo, sin consecuencia de estado/relacion
+
+set_rate: {}  # `interest_rate_target += delta_pp`, manejado en codigo (no es un shock_* del mes siguiente)
+
+relationships:
+  decay_rate: 0.5
+  decay_target: 50

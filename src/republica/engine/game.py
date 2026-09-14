@@ -9,6 +9,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from republica.actors.president_rules import concession_for_request
+from republica.engine.actions import Action, ActionType
 from republica.engine.dilemmas import (
     Dilemma,
     PendingEffect,
@@ -94,6 +96,8 @@ class Game:
     pending_dilemmas: list[Dilemma] = field(default_factory=list)
     clip_report: dict[str, tuple[float, float]] = field(default_factory=dict)
     shocks_enabled: bool = True
+    actors_enabled: bool = False
+    grant_decision_log: list[dict[str, Any]] = field(default_factory=list)
     _rule: _MutablePolicyRule | None = field(default=None, repr=False)
 
     @classmethod
@@ -103,21 +107,65 @@ class Game:
         months: int = 48,
         country: Country | None = None,
         shocks_enabled: bool = True,
+        actors_enabled: bool = False,
     ) -> Game:
-        """Arranca una partida nueva en el mes 0 (antes de jugar el mes 1)."""
+        """Arranca una partida nueva en el mes 0 (antes de jugar el mes 1).
+
+        `actors_enabled` (default `False`, deliverable 8 de ADR 003): prende
+        los 29 actores por reglas en `play` sin presidente por reglas (el
+        presidente es el jugador humano: `sim.president_rule` queda `None`,
+        ver `engine/simulation.py::advance_month`). Default apagado para no
+        romper `tests/test_play_cli.py` (que verifica exactamente 49 lineas
+        de JSONL sin flags nuevos): ver Notas de implementacion."""
         base_country = (country or load_country()).model_copy(update={"months": months})
         rule = _MutablePolicyRule(base_country.default_policy.model_copy())
-        sim = new_simulation(seed, rule, None, base_country, shocks_enabled, True)
+        sim = new_simulation(
+            seed, rule, None, base_country, shocks_enabled, True, actors_enabled=actors_enabled
+        )
         game = cls(
             country=base_country,
             seed=seed,
             sim=sim,
             policy=rule.policy,
             shocks_enabled=shocks_enabled,
+            actors_enabled=actors_enabled,
             _rule=rule,
         )
         game._refresh_pending_dilemmas()
         return game
+
+    @property
+    def pending_actor_requests(self) -> list:
+        """`REQUEST_FUNDS`/`NEGOTIATE` del mes pasado, pendientes de que el
+        jugador conceda o rechace este mes (deliverable 8: dilema generado
+        "Conceder/Rechazar"). Vacio si `actors_enabled=False`."""
+        if self.sim.actor_engine is None:
+            return []
+        return list(self.sim.actor_engine.pending_requests)
+
+    def set_grant_decisions(self, granted_actor_ids: set[str]) -> None:
+        """Fija que pedidos pendientes concede el jugador este mes (el resto
+        se toma como rechazado: `relationships.president -1`, ver ADR 003
+        secc. 5). Debe llamarse antes de `step()`."""
+        grants = []
+        for req in self.pending_actor_requests:
+            if req.actor_id not in granted_actor_ids:
+                continue
+            concession = concession_for_request(req)
+            grants.append(
+                Action(
+                    type=ActionType.GRANT_CONCESSION,
+                    actor_id="president",
+                    target=req.actor_id,
+                    params={"to": req.actor_id, "concession": concession.value},
+                    reason=f"el jugador concede a {req.actor_id}",
+                )
+            )
+        self.sim.pending_grant_override = grants
+        if self.pending_actor_requests:
+            self.grant_decision_log.append(
+                {"month": self.sim.month + 1, "granted": sorted(granted_actor_ids)}
+            )
 
     def _refresh_pending_dilemmas(self) -> None:
         """Recalcula los dilemas disparados para el proximo mes a jugar
@@ -218,6 +266,7 @@ class Game:
             outcome=self.sim.outcome or "en_curso",
             seed=self.seed,
             config_hash=self.country.config_hash,
+            action_records=self.sim.action_records,
         )
         history_path.write_text(history.to_jsonl(), encoding="utf-8")
         data = {
@@ -225,12 +274,14 @@ class Game:
             "month": self.sim.month,
             "months": self.country.months,
             "shocks_enabled": self.shocks_enabled,
+            "actors_enabled": self.actors_enabled,
             "policy": self.policy.model_dump(),
             "flags": self.flags,
             "cooldowns": self.cooldowns,
             "history_path": str(history_path),
             "decisions": self.decisions,
             "instrument_edits": self.instrument_edit_log,
+            "grant_decisions": self.grant_decision_log,
         }
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -245,6 +296,7 @@ class Game:
             months=data.get("months", 48),
             country=country,
             shocks_enabled=data.get("shocks_enabled", True),
+            actors_enabled=data.get("actors_enabled", False),
         )
         by_month: dict[int, dict[str, str]] = {}
         for dec in data["decisions"]:
@@ -252,8 +304,13 @@ class Game:
         edits_by_month: dict[int, dict[str, float]] = {
             e["month"]: e["edits"] for e in data.get("instrument_edits", [])
         }
+        grants_by_month: dict[int, set[str]] = {
+            g["month"]: set(g["granted"]) for g in data.get("grant_decisions", [])
+        }
         target_month = data["month"]
         for m in range(1, target_month + 1):
+            if game.pending_actor_requests:
+                game.set_grant_decisions(grants_by_month.get(m, set()))
             game.step(by_month.get(m, {}), edits_by_month.get(m, {}))
         return game
 

@@ -1,0 +1,43 @@
+# Costo de cada `ConcessionType` (ADR 003 secc. 4).
+#
+# `fiscal_cost_pct_gdp`: cuanto cuesta conceder, en pp de PIB (se resta de
+# `fiscal_balance` del mes siguiente via `shock_fiscal`, mismo mecanismo que
+# los `effects.fiscal` de los dilemas). `political_cost`: costo politico
+# abstracto (0-10, sin unidad fisica) que usa `actors/president_rules.py`
+# para decidir si conceder entra en el "presupuesto mensual" de 0.8 pp de
+# PIB (Fase 3: regla simple, sin negociacion multironda; eso es Fase 5).
+#
+# Valores inventados para v0.3 (documentados en "Notas de implementacion" de
+# ADR 003), calibrados a mano para que ninguna concesion por si sola agote
+# el presupuesto mensual de 0.8 pp de PIB, salvo `public_works` (la mas cara,
+# a proposito: obliga al presidente a elegir).
+restore_transfers:
+  fiscal_cost_pct_gdp: 0.5
+  political_cost: 5
+  policy_field: provincial_transfers
+  policy_bump: 0.5
+public_works:
+  fiscal_cost_pct_gdp: 0.8
+  political_cost: 3
+  policy_field: primary_spending
+  policy_bump: 0.5
+wage_bonus:
+  fiscal_cost_pct_gdp: 0.6
+  political_cost: 4
+  policy_field: primary_spending
+  policy_bump: 0.3
+tax_exemption:
+  fiscal_cost_pct_gdp: 0.4
+  political_cost: 6
+  policy_field: tax_rate
+  policy_bump: -0.5
+cabinet_seat:
+  fiscal_cost_pct_gdp: 0.0
+  political_cost: 10
+  policy_field: null
+  policy_bump: 0.0
+delay_policy:
+  fiscal_cost_pct_gdp: 0.0
+  political_cost: 2
+  policy_field: null
+  policy_bump: 0.0

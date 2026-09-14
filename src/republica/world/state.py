@@ -27,9 +27,16 @@ def clamp(value: float, lo: float, hi: float) -> float:
 
 
 class WorldState(BaseModel):
-    """Las 20 variables de estado del pais (seccion 2) + `inflation_lag1`."""
+    """Las 20 variables de estado del pais (seccion 2) + `inflation_lag1`.
 
-    model_config = ConfigDict(validate_assignment=False)
+    `frozen=True` (ADR 003 secc. 1): fuera de `engine/` nadie puede mutar el
+    estado por asignacion de atributo (`state.gdp = 1` lanza `ValidationError`).
+    La unica via para cambiar el estado del mundo es `engine.authorize()` +
+    `engine.consequences()`, que producen un `WorldState` *nuevo* via
+    `model_copy`/`model_construct` (que no pasan por `__setattr__`).
+    """
+
+    model_config = ConfigDict(validate_assignment=False, frozen=True)
 
     # economia
     gdp: float
