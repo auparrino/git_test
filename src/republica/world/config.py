@@ -278,12 +278,55 @@ def _coalition_seats(parties: list[Party]) -> float:
     return total
 
 
+#: Archivos de datos "de motor" que entran en `config_hash` (REVIEW_001
+#: hallazgo #8), en el orden en que se listan aca (no alfabetico: agrupa
+#: primero los de `Country` propiamente y despues los de actores/permisos/
+#: consecuencias, mas legible que un glob ciego). `data/actors/*.yaml` se
+#: agrega aparte, ordenado por ruta (`sorted(glob(...))`, deterministico).
+#: Deliberadamente NO incluye `data/brains.yaml` (ADR 004, cerebros de
+#: actor: config de la capa IA, no del motor/mundo) ni
+#: `data/scenarios/dilemmas.yaml` (SPEC_v0.2, config de `play`, no de
+#: `Country`): ninguno de los dos lo carga `load_country`.
+_CONFIG_HASH_FILES: tuple[str, ...] = (
+    "country.json",
+    "provinces.csv",
+    "parties.json",
+    "shocks.json",
+    "permissions.yaml",
+    "consequences.yaml",
+    "concessions.yaml",
+    "interests.yaml",
+    "policy_signatures.yaml",
+    "actor_weights.yaml",
+    "governance.yaml",
+)
+
+
+def _compute_config_hash(d: Path) -> str:
+    """`sha256` de todos los archivos de datos que carga el motor (hallazgo
+    #8 de REVIEW_001: antes solo cubria `country.json`), en orden de ruta
+    relativa a `d` -- los de `_CONFIG_HASH_FILES` primero (orden fijo, mas
+    legible) y despues `data/actors/*.yaml` ordenados alfabeticamente. Cada
+    archivo entra como `ruta relativa \\0 contenido \\0`, para que ni una
+    ruta ambigua ni una concatenacion de bytes sin separador puedan producir
+    el mismo hash para dos configuraciones distintas."""
+    paths = [d / name for name in _CONFIG_HASH_FILES]
+    paths.extend(sorted((d / "actors").glob("*.yaml")))
+    h = hashlib.sha256()
+    for p in paths:
+        h.update(p.relative_to(d).as_posix().encode("utf-8"))
+        h.update(b"\0")
+        h.update(p.read_bytes())
+        h.update(b"\0")
+    return h.hexdigest()
+
+
 def load_country(data_dir: Path | str | None = None) -> Country:
     """Carga `country.json`, `provinces.csv`, `parties.json` y `shocks.json`."""
     d = Path(data_dir) if data_dir else DEFAULT_DATA_DIR
     country_path = d / "country.json"
     raw = json.loads(country_path.read_text(encoding="utf-8"))
-    config_hash = hashlib.sha256(country_path.read_bytes()).hexdigest()
+    config_hash = _compute_config_hash(d)
 
     provinces = _load_provinces(d / "provinces.csv")
     parties = _load_parties(d / "parties.json")

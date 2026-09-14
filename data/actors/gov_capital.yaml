@@ -17,6 +17,7 @@ interests:
 - fiscal_balance
 - low_taxes
 - reelection
+- provincial_transfers
 influence:
   public: 0.6
   congress: 0.4

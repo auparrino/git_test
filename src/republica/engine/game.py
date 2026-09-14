@@ -193,11 +193,21 @@ class Game:
         last_events = (
             [e.split(":")[0] for e in self.sim.records[-1].events] if self.sim.records else []
         )
+        # Un shock de duracion 1 (p.ej. `corruption_scandal`) se borra de
+        # `sim.active_shocks` en el mismo mes en que se sortea
+        # (`ShockCatalog.apply_month`): sin sumar `shocks_new` del ultimo
+        # `MonthRecord`, un trigger `shock_active:<id>` sobre uno de esos
+        # nunca se cumplia -- `scandal_response`/`general_strike_response`/
+        # `protest_wave_response` (REVIEW_001 hallazgo #2) no aparecian
+        # nunca en 120 semillas.
+        shocks_for_triggers = set(self.sim.active_shocks) | (
+            set(self.sim.records[-1].shocks_new) if self.sim.records else set()
+        )
         self.pending_dilemmas = evaluate_triggers(
             self.sim.state,
             aux,
             month,
-            self.sim.active_shocks,
+            shocks_for_triggers,
             last_events,
             self.flags,
             self.cooldowns,

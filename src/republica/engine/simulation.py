@@ -145,8 +145,21 @@ class Simulation:
     actors_enabled: bool = False
     actor_engine: ActorEngine | None = None
     president_rule: RuleBasedPresident | None = None
+    #: `Policy` que devolvio `policy_rule.decide()` el mes pasado, *antes* de
+    #: sumarle `concessions_delta` (hallazgo #5 de REVIEW_001): sirve de
+    #: base para la `PolicyProposal` de este mes (`compute_policy_proposal`),
+    #: para que una concesion ya otorgada no aparezca como una propuesta de
+    #: recorte fantasma el mes que viene (ver `advance_month`).
     last_policy: Policy | None = None
-    pending_policy_delta: dict[str, float] = field(default_factory=dict)
+    #: Bump acumulativo y persistente por instrumento de `Policy`, de las
+    #: concesiones `policy_*` otorgadas (`GRANT_CONCESSION`/`SET_RATE`,
+    #: hallazgo #5 de REVIEW_001): a diferencia de un `shock_*`, que dura lo
+    #: que dure el efecto, una concesion sobre un instrumento queda "pegada"
+    #: (se suma a la `Policy` de la regla vigente TODOS los meses, hasta que
+    #: una concesion nueva sobre el mismo campo la cambie) -- antes se
+    #: aplicaba una vez y se descartaba, lo que producia un "recorte"
+    #: fantasma al mes siguiente (ver `advance_month`).
+    concessions_delta: dict[str, float] = field(default_factory=dict)
     pending_grant_override: list[Action] | None = None
     action_records: list[ActionRecord] = field(default_factory=list)
     #: `DecisionTrace` de los `LLMActor` (ADR 004 secc. 6), acumuladas mes a
@@ -236,6 +249,11 @@ def advance_month(sim: Simulation) -> MonthRecord:
     month = sim.month
     country = sim.country
     coeff = country.coefficients
+    # Calculada temprano (hallazgo #12 de REVIEW_001): antes solo se
+    # calculaba al final, al armar el `MonthRecord` (paso 9), asi que
+    # `Perception.date` (paso 3, actores) siempre quedaba vacio -- no habia
+    # fecha todavia con que poblarla.
+    date = _format_date(country.start["year"], country.start["month"], month)
 
     # 1. exogenas (AR1 + ruido)
     commodity_base, world_base = step_exogenous(
@@ -255,12 +273,13 @@ def advance_month(sim: Simulation) -> MonthRecord:
         # Los terminos `policy_*` (ADR 003 secc. 5: `GRANT_CONCESSION`/
         # `SET_RATE` que tocan un instrumento de `Policy`, no una variable de
         # `WorldState`) no son un `shock_*` de una formula del motor: se
-        # acumulan aparte y se aplican a la `Policy` del paso 3, no a `agg`.
+        # acumulan aparte, en `concessions_delta` -- de forma persistente
+        # (hallazgo #5 de REVIEW_001: antes se aplicaban una vez y se
+        # descartaban, ver el campo en `Simulation`) -- y se suman a la
+        # `Policy` del paso 3 cada mes, no a `agg`.
         if name.startswith("policy_"):
             field_name = name.removeprefix("policy_")
-            sim.pending_policy_delta[field_name] = (
-                sim.pending_policy_delta.get(field_name, 0.0) + value
-            )
+            sim.concessions_delta[field_name] = sim.concessions_delta.get(field_name, 0.0) + value
         else:
             agg.terms[name] = agg.terms.get(name, 0.0) + value
     sim.pending_terms = {}
@@ -270,12 +289,22 @@ def advance_month(sim: Simulation) -> MonthRecord:
     # 3. politica: presidente decide Policy (+ PROPOSE_POLICY/GRANT_CONCESSION
     # si `actors_enabled`, ADR 003 secc. 7 paso 2) y, si hay actores, corren
     # perceptions -> decide -> authorize -> consequences (pasos 3-6).
-    policy = sim.policy_rule.decide(sim.state, month)
+    raw_policy = sim.policy_rule.decide(sim.state, month)
+    policy = raw_policy
     if sim.actors_enabled:
         assert sim.actor_engine is not None
-        policy = apply_pending_policy_delta(policy, sim.pending_policy_delta, country.policy_ranges)
-        sim.pending_policy_delta = {}
-        proposal = compute_policy_proposal(policy, sim.last_policy)
+        # `policy` (lo que efectivamente rige este mes) le suma a
+        # `raw_policy` (lo que la regla/el jugador decidio, sin concesiones)
+        # el bump persistente de `concessions_delta`. La `PolicyProposal`
+        # (hallazgo #5) se calcula entre `raw_policy` y `sim.last_policy`
+        # (el `raw_policy` del mes pasado, tambien pre-bump): comparar dos
+        # valores post-bump haria aparecer como "propuesta" el bump en si
+        # mismo, y con `concessions_delta` ahora persistente (no se resetea)
+        # ya no hay una "reversion" fantasma que generarle a nadie.
+        policy = apply_pending_policy_delta(
+            raw_policy, sim.concessions_delta, country.policy_ranges
+        )
+        proposal = compute_policy_proposal(raw_policy, sim.last_policy)
 
         if sim.pending_grant_override is not None:
             grants = sim.pending_grant_override
@@ -287,7 +316,12 @@ def advance_month(sim: Simulation) -> MonthRecord:
         else:
             grants = []
 
-        active_shock_ids = sorted(sim.active_shocks.keys())
+        # Los shocks de duracion 1 se borran de `sim.active_shocks` en el
+        # mismo mes en que se sortean (`ShockCatalog.apply_month`, arriba):
+        # sin sumar `new_ids`, la percepcion de este mes nunca los veia
+        # (hallazgo #3 de REVIEW_001 -- el frame `scandal` de medios nunca
+        # se disparaba porque `corruption_scandal` dura 1 mes).
+        active_shock_ids = sorted(set(sim.active_shocks) | set(new_ids))
         recent_events = sim.records[-1].events if sim.records else []
         # ADR 003 no define elecciones (Fase 6): se usa `months_left` de
         # SPEC_v0.2_play como placeholder (ver Notas de implementacion).
@@ -305,6 +339,7 @@ def advance_month(sim: Simulation) -> MonthRecord:
             months_to_election,
             proposal,
             grants,
+            date=date,
         )
         sim.action_records.extend(action_records)
         sim.trace_records.extend(sim.actor_engine.last_traces)
@@ -314,7 +349,7 @@ def advance_month(sim: Simulation) -> MonthRecord:
         # via que `check_forced_devaluation`/dilemas).
         for name, value in actor_pending.items():
             sim.pending_terms[name] = sim.pending_terms.get(name, 0.0) + value
-        sim.last_policy = policy.model_copy()
+        sim.last_policy = raw_policy.model_copy()
 
     # 4. economia (4.1 -> 4.8)
     econ_state, aux = step_economy(
@@ -364,7 +399,7 @@ def advance_month(sim: Simulation) -> MonthRecord:
     )
     record = MonthRecord(
         month_index=month,
-        date=_format_date(country.start["year"], country.start["month"], month),
+        date=date,
         state=clamped.model_dump(),
         exo=exo_new.model_dump(),
         policy=policy.model_dump(),

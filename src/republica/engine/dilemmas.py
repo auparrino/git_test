@@ -4,11 +4,20 @@ elegida sobre la `Policy` y los efectos pendientes.
 
 Los `effects` de una opcion se mapean a los mismos terminos `shock_*` que
 consume el motor (ver `world/events.py` / `world/economy.py` / `world/society.py`
-/ `world/politics.py`), reusando el mecanismo de `Simulation.pending_terms`:
-un efecto elegido este mes se aplica recien en el mes siguiente (igual que
-los `pending` de `check_forced_devaluation`). Los efectos con `months` (solo
-`fiscal`) se representan como una cola de `PendingEffect` que se consume un
-mes a la vez (ver `engine/game.py::Game._consume_pending_effects`).
+/ `world/politics.py`), reusando el mecanismo de `Simulation.pending_terms`.
+
+**Nota (REVIEW_001 hallazgo #10, corrige una version anterior de este
+docstring/`SPEC_v0.2_play.md` secc. 2 que decia "el mes siguiente"):** un
+efecto elegido este mes se aplica dentro del mismo mes que se esta jugando
+(`Game.step` consume `pending_effects` -> `sim.pending_terms` *antes* de
+llamar `advance_month` para ese mes), no en el mes siguiente -- distinto de
+los `pending` de `check_forced_devaluation`/las consecuencias de actores,
+que si se difieren un mes. Se decidio documentar el comportamiento tal cual
+esta (opcion recomendada por la revision) en vez de cambiar el codigo: nadie
+depende del desfasaje de un mes, y cambiarlo correria todas las corridas
+existentes. Los efectos con `months` (solo `fiscal`) se representan como una
+cola de `PendingEffect` que se consume un mes a la vez, uno de esos meses ya
+dentro del mismo mes jugado (ver `engine/game.py::Game._consume_pending_effects`).
 """
 
 from __future__ import annotations
@@ -76,7 +85,8 @@ class Trigger(BaseModel):
 
 class Option(BaseModel):
     """Una opcion de un dilema: efectos sobre `Policy`, sobre el estado del
-    mes siguiente y sobre `flags` persistentes."""
+    mismo mes jugado (ver nota del docstring del modulo, hallazgo #10 de
+    REVIEW_001: no "el mes siguiente") y sobre `flags` persistentes."""
 
     model_config = ConfigDict(extra="forbid")
 

@@ -9,7 +9,18 @@
 # intereses en las fichas): sus coeficientes son inventados para v0.3,
 # calibrados a mano en el mismo orden de magnitud que el resto (docenas, no
 # cientos), documentados en Notas de implementacion de ADR 003.
-provincial_transfers: {coef: 15.0}
+# `coef` subido de 15.0 a 150.0 (REVIEW_001 hallazgo #6, documentado en
+# ADR 003 secc. 12): con 15.0, el `interest_impact` de un recorte MODERADO
+# de transferencias (−1.0, el caso real de una `Policy` que cambia de a
+# poco) quedaba muy por debajo del `ideological_fit` del mismo delta para
+# un gobernador con alto `federalism` -- el test "interes vence ideologia"
+# solo pasaba con un delta artificialmente grande (−5.0) que en los hechos
+# hacia dominar a la ideologia, no al interes (razon contraria a la que
+# pretendia probar). A 150.0, `w_int·int` domina a `w_ideo·ideo` para un
+# gobernador con `dependence=0.8` ya en −1.0, y sigue siendo chico para uno
+# con `dependence=0.1` (ver `tests/test_actors.py::
+# test_provincial_dependence_beats_shared_ideology`).
+provincial_transfers: {coef: 150.0}
 agricultural_exports: {coef_tax: -20.0, coef_fx: 10.0}
 real_wages: {coef_infl: -12.0}
 employment: {coef: -15.0, unemployment_elasticity_spending: -0.03, unemployment_elasticity_rate: 0.02}

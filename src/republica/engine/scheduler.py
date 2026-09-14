@@ -17,6 +17,7 @@ from republica.ai.tracing import DecisionTrace, make_run_id
 from republica.engine.actions import Action, ActionType
 from republica.engine.consequences import (
     ConsequenceContext,
+    RelationshipDelta,
     Relationships,
     apply_consequences,
     load_concessions,
@@ -25,7 +26,9 @@ from republica.engine.consequences import (
 )
 from republica.engine.perception import PolicyProposal, build_perception, build_provinces_table
 from republica.engine.permissions import (
+    Allowed,
     AuthContext,
+    Denied,
     Governance,
     authorize_all,
     load_governance,
@@ -187,13 +190,19 @@ def run_actor_turn(
     months_to_election: int,
     proposal: PolicyProposal,
     grant_actions: list[Action],
+    *,
+    date: str = "",
 ) -> tuple[list[ActionRecord], dict[str, float]]:
     """Pasos 3-6 de ADR 003 secc. 7. `grant_actions` son las
     `GRANT_CONCESSION` ya decididas por el presidente (regla o humano) para
     los pedidos del mes anterior (`engine.pending_requests`); se autorizan y
     aplican junto con el resto. Devuelve los `ActionRecord` del mes (tambien
     guardados en `engine.last_records`) y los `pending_terms`
-    (`shock_*`/`policy_*`) para el mes siguiente."""
+    (`shock_*`/`policy_*`) para el mes siguiente.
+
+    `date` (hallazgo #12 de REVIEW_001, keyword-only con default `""` para
+    no romper llamadores/tests que arman un `ActorEngine` suelto sin fecha
+    a mano): la fecha `AAAA-MM` de este mes, para `Perception.date`."""
     provinces_table = build_provinces_table(state, policy, country.provinces, agg)
     parties_by_id = {p.id: p for p in country.parties}
 
@@ -216,6 +225,9 @@ def run_actor_turn(
             provinces_table,
             country.parties,
             policy=policy,
+            date=date,
+            relationships=engine.relationships,
+            agg=agg,
         )
         decision_actor = engine.decision_actors[actor_id]
         actions = decision_actor.decide(perception, engine.actor_rngs[actor_id])
@@ -237,7 +249,6 @@ def run_actor_turn(
         permissions=engine.permissions,
     )
     allowed, denied = authorize_all(all_actions, engine.actors, auth_ctx)
-    allowed_ids = {id(a.action) for a in allowed}
 
     cons_ctx = ConsequenceContext(
         state=state,
@@ -246,10 +257,35 @@ def run_actor_turn(
         coeffs=engine.consequence_coeffs,
         concessions=engine.concessions,
     )
-    allowed_actions = [a.action for a in allowed]
-    pending_terms, rel_deltas, _events = apply_consequences(
-        allowed_actions, engine.actors, cons_ctx
-    )
+    # Una sola pasada (hallazgo #9 de REVIEW_001): antes se llamaba
+    # `apply_consequences` una vez para todas las `allowed` (el agregado
+    # "real", `pending_terms`/`rel_deltas`) y de nuevo, accion por accion,
+    # solo para loguear el desglose de cada `ActionRecord.consequences`. Como
+    # `apply_consequences` es lineal -- cada accion aporta sus terminos
+    # independientemente, via `add()` -- calcularlo accion por accion una
+    # sola vez y sumar da exactamente el mismo agregado, sin recomputar cada
+    # accion dos veces ni depender de `id(action)` (fragil: un `id()` de
+    # Python puede reciclarse) para saber cual resultado es de cual accion:
+    # `per_action_results` queda alineado por posicion con `allowed`.
+    pending_terms: dict[str, float] = {}
+    rel_deltas: list[RelationshipDelta] = []
+    per_action_results: list[tuple[dict[str, float], list[RelationshipDelta]]] = []
+    for al in allowed:
+        one_pending, one_rel, _ = apply_consequences([al.action], engine.actors, cons_ctx)
+        for term, value in one_pending.items():
+            pending_terms[term] = pending_terms.get(term, 0.0) + value
+        rel_deltas.extend(one_rel)
+        per_action_results.append((one_pending, one_rel))
+
+        if al.action.type is ActionType.GRANT_CONCESSION:
+            # Cooldown de 6 meses por (actor, concesion) despues de una
+            # concesion otorgada (hallazgo #5 de REVIEW_001, documentado en
+            # `RuleBasedActor`): sin esto, un actor podia volver a pedir en
+            # `NEGOTIATE` la misma concesion que acaba de recibir.
+            recipient = engine.decision_actors.get(al.action.params["to"])
+            note_grant = getattr(recipient, "note_concession_granted", None)
+            if note_grant is not None:
+                note_grant(al.action.params["concession"], month)
 
     granted_ids = {
         a.action.params["to"] for a in allowed if a.action.type is ActionType.GRANT_CONCESSION
@@ -263,29 +299,40 @@ def run_actor_turn(
     decay_cfg = engine.consequence_coeffs["relationships"]
     engine.relationships.decay(decay_cfg["decay_rate"], decay_cfg["decay_target"])
 
-    records: list[ActionRecord] = []
-    for result in [*allowed, *denied]:
+    def _make_record(result: Allowed | Denied, per_action: dict) -> ActionRecord:
         action = result.action
-        per_action: dict = {}
-        if id(action) in allowed_ids:
-            one_pending, one_rel, _ = apply_consequences([action], engine.actors, cons_ctx)
-            rel_for_action = {b: d for a2, b, d in one_rel if a2 == action.actor_id}
-            per_action = {**one_pending}
-            if rel_for_action:
-                per_action["relationships"] = rel_for_action
-        records.append(
-            ActionRecord(
-                month=month,
-                actor=action.actor_id,
-                type=action.type.value,
-                params=action.params,
-                target=action.target,
-                reason=action.reason,
-                score=scores.get(action.actor_id),
-                consequences=per_action,
-                **to_record_dict(result),
-            )
+        return ActionRecord(
+            month=month,
+            actor=action.actor_id,
+            type=action.type.value,
+            params=action.params,
+            target=action.target,
+            reason=action.reason,
+            score=scores.get(action.actor_id),
+            consequences=per_action,
+            **to_record_dict(result),
         )
+
+    records: list[ActionRecord] = []
+    for al, (one_pending, one_rel) in zip(allowed, per_action_results, strict=True):
+        # El efecto relacional de una accion no siempre tiene a su actor del
+        # lado `a` del par (hallazgo #9): un `GRANT_CONCESSION` lo emite
+        # `president`, pero el delta de relacion es `(destinatario,
+        # president, +N)` -- `president` esta del lado `b`. Se matchea
+        # `action.actor_id` contra cualquiera de los dos lados y se guarda
+        # "la otra punta" como clave.
+        rel_for_action: dict[str, float] = {}
+        for a2, b, d in one_rel:
+            if a2 == al.action.actor_id:
+                rel_for_action[b] = d
+            elif b == al.action.actor_id:
+                rel_for_action[a2] = d
+        per_action = {**one_pending}
+        if rel_for_action:
+            per_action["relationships"] = rel_for_action
+        records.append(_make_record(al, per_action))
+    for den in denied:
+        records.append(_make_record(den, {}))
 
     engine.pending_requests = [a.action for a in allowed if a.action.type in REQUEST_ACTION_TYPES]
     # `engine.last_aux` se actualiza desde `advance_month` con el `Aux` real

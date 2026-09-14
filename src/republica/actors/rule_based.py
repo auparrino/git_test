@@ -17,7 +17,7 @@ import yaml
 from republica.actors.sheet import ActorSheet
 from republica.engine.actions import Action, ActionType, ConcessionType
 from republica.engine.perception import Perception
-from republica.engine.permissions import Governance, load_governance
+from republica.engine.permissions import ACTION_BUDGET_PER_TURN, Governance, load_governance
 from republica.world.config import Party, TaylorParams
 from republica.world.state import clamp, pos
 
@@ -39,6 +39,22 @@ STATEMENT_MIN_INTENSITY = 0.15
 
 NEGOTIATE_CAPABLE_ROLES = frozenset({"governor", "party", "union", "business", "economy_minister"})
 
+#: Umbrales base de la regla de medios (ADR 003 secc. 6.3, literal) y cuanto
+#: los desplaza la distancia ideologica del medio al partido de gobierno
+#: (hallazgo #4 de REVIEW_001: `ideology.economic` no se usaba, los 3
+#: medios emitian el mismo frame siempre). Un medio mas lejos del gobierno
+#: en el eje economico es mas critico: le alcanza con una aprobacion mas
+#: alta o una inflacion mas baja para llamar "crisis", y le hace falta mas
+#: crecimiento para llamar "recovery". Coeficientes inventados para v0.3,
+#: documentados en ADR 003 secc. 12 (mismo orden de magnitud que el resto
+#: de los `coef` inventados del modulo).
+MEDIA_CRISIS_APPROVAL_BASE = 45.0
+MEDIA_CRISIS_INFLATION_BASE = 3.0
+MEDIA_RECOVERY_GROWTH_BASE = 2.0
+MEDIA_BIAS_APPROVAL_COEF = 10.0
+MEDIA_BIAS_INFLATION_COEF = 1.0
+MEDIA_BIAS_GROWTH_COEF = 1.0
+
 #: Concesion que cada rol pide al negociar (ADR 003 secc. 4/6 no especifica
 #: cual: se elige la mas afin al rol, documentado en Notas de implementacion).
 _NEGOTIATE_CONCESSION: dict[str, ConcessionType] = {
@@ -48,6 +64,16 @@ _NEGOTIATE_CONCESSION: dict[str, ConcessionType] = {
     "business": ConcessionType.TAX_EXEMPTION,
     "economy_minister": ConcessionType.DELAY_POLICY,
 }
+
+#: Cooldown en meses, por (actor, concesion), despues de recibir un
+#: `GRANT_CONCESSION` (hallazgo #5 de REVIEW_001, documentado ahi: "agregar
+#: un cooldown de 6 meses ... si hace falta"). Con la propuesta fantasma ya
+#: arreglada (`Simulation.concessions_delta` persistente,
+#: `engine/simulation.py::advance_month`) esto es una segunda barrera, mas
+#: barata que dejarlo librado a que el score baje solo: un actor recien
+#: concedido no vuelve a pedir la MISMA concesion en el corto plazo aunque
+#: su score siga en zona de `NEGOTIATE`.
+CONCESSION_COOLDOWN_MONTHS = 6
 
 
 @lru_cache(maxsize=4)
@@ -81,15 +107,6 @@ def make_actor_rng(seed: int, actor_id: str) -> random.Random:
     actor nuevo no consume RNG de los demas, y quitar uno tampoco lo
     desplaza (cada semilla depende solo de `(seed, actor_id)`)."""
     return random.Random(actor_seed(seed, actor_id))
-
-
-def _cosine(a: tuple[float, ...], b: tuple[float, ...]) -> float:
-    dot = sum(x * y for x, y in zip(a, b, strict=True))
-    na = math.sqrt(sum(x * x for x in a))
-    nb = math.sqrt(sum(y * y for y in b))
-    if na == 0.0 or nb == 0.0:
-        return 0.0
-    return dot / (na * nb)
 
 
 def ideological_fit(
@@ -436,6 +453,17 @@ class RuleBasedActor:
         #: firma de `decide()` (fijada por el ADR): ver Notas de
         #: implementacion.
         self.last_score: ScoreBreakdown | None = None
+        #: `{concesion: mes_hasta_el_que_esta_en_cooldown}` (hallazgo #5),
+        #: poblado por `note_concession_granted` (`engine/scheduler.py`,
+        #: cuando este actor recibe un `GRANT_CONCESSION` autorizado).
+        self._concession_cooldowns: dict[str, int] = {}
+
+    def note_concession_granted(self, concession: str, month: int) -> None:
+        """Llamado por `engine/scheduler.py::run_actor_turn` cuando este
+        actor recibe un `GRANT_CONCESSION` este `month`: bloquea `NEGOTIATE`
+        por la misma `concession` los proximos `CONCESSION_COOLDOWN_MONTHS`
+        meses (hallazgo #5 de REVIEW_001)."""
+        self._concession_cooldowns[concession] = month + CONCESSION_COOLDOWN_MONTHS
 
     def decide(self, perception: Perception, rng: random.Random) -> list[Action]:
         role = self.sheet.role
@@ -487,13 +515,15 @@ class RuleBasedActor:
                 actions.extend(_escalate(actor, intensity, reason))
         else:
             stance = "neutral"
+            concession = _NEGOTIATE_CONCESSION.get(actor.role, ConcessionType.DELAY_POLICY)
+            cooldown_until = self._concession_cooldowns.get(concession.value, -1)
             if (
                 actor.role in NEGOTIATE_CAPABLE_ROLES
                 and perception.proposal is not None
                 and perception.proposal.delta
                 and abs(score.total) >= NEGOTIATE_MIN_ABS_SCORE
+                and perception.month >= cooldown_until
             ):
-                concession = _NEGOTIATE_CONCESSION.get(actor.role, ConcessionType.DELAY_POLICY)
                 actions.append(
                     Action(
                         type=ActionType.NEGOTIATE,
@@ -517,6 +547,19 @@ class RuleBasedActor:
                     reason=reason,
                 )
             )
+
+        # Presupuesto de acciones por turno (hallazgo #11 de REVIEW_001,
+        # ADR 003 secc. 4/9: max 3 por actor): un `governor` que se opone y
+        # escala emite 4 (OPPOSE_POLICY + LOBBY_CONGRESS + REQUEST_FUNDS de
+        # `_escalate` + PUBLIC_STATEMENT), y antes la 4a se perdia en
+        # `authorize()` por puro orden de llegada. El actor elige que gasta:
+        # descarta primero el `PUBLIC_STATEMENT` (el gesto, no la sustancia)
+        # y, si todavia sobra, la ultima accion de la escalada (la mas
+        # debil: `_escalate` agrega la principal primero).
+        if len(actions) > ACTION_BUDGET_PER_TURN:
+            actions = [a for a in actions if a.type is not ActionType.PUBLIC_STATEMENT]
+            while len(actions) > ACTION_BUDGET_PER_TURN:
+                actions.pop()
         return actions
 
     # -- 6.3: medios ---------------------------------------------------
@@ -525,15 +568,38 @@ class RuleBasedActor:
         approval = perception.public_indicators.get("government_approval", 50.0)
         inflation = perception.public_indicators.get("inflation", 0.0)
         gdp_growth = perception.public_indicators.get("gdp_growth", 0.0)
-        scandal = any("scandal" in e or "corruption" in e for e in perception.recent_events)
+        # Hallazgo #3 de REVIEW_001: `recent_events` (los `events` del
+        # `MonthRecord` del mes pasado) nunca contiene ids de shocks -- ahi
+        # solo caen `forced_devaluation`/`term_end:*`. El id de un shock
+        # (p.ej. `corruption_scandal`) esta en `active_shocks`, que desde el
+        # fix de `engine/simulation.py::advance_month` ya incluye los
+        # `shocks_new` de este mismo mes (antes se perdian: duran 1 mes y se
+        # borran de `sim.active_shocks` el mismo mes en que se sortean).
+        scandal = any(
+            "scandal" in e or "corruption" in e
+            for e in (*perception.recent_events, *perception.active_shocks)
+        )
+
+        gov_party = next((p for p in self.parties_by_id.values() if p.in_government), None)
+        # Distancia ideologica al gobierno (hallazgo #4): un medio mas lejos
+        # (en cualquier direccion) es mas critico -- ve crisis mas facil, ve
+        # recuperacion mas dificil. `0.0` (sin partido de gobierno resuelto,
+        # no deberia pasar con `country.json` real) deja los umbrales base.
+        distance = abs(actor.ideology.economic - gov_party.economic) if gov_party else 0.0
+        crisis_approval = MEDIA_CRISIS_APPROVAL_BASE + distance * MEDIA_BIAS_APPROVAL_COEF
+        crisis_inflation = max(
+            0.5, MEDIA_CRISIS_INFLATION_BASE - distance * MEDIA_BIAS_INFLATION_COEF
+        )
+        recovery_growth = MEDIA_RECOVERY_GROWTH_BASE + distance * MEDIA_BIAS_GROWTH_COEF
 
         if scandal:
             frame = "scandal"
-        elif approval < 45.0 or inflation > 3.0:
+        elif approval < crisis_approval or inflation > crisis_inflation:
             # "si Delta_aprobacion < -2": sin el mes anterior a mano se usa
-            # aprobacion < 45 como proxy (ver Notas de implementacion).
+            # aprobacion < umbral (desplazado por sesgo) como proxy (ver
+            # Notas de implementacion).
             frame = "crisis"
-        elif gdp_growth > 2.0:
+        elif gdp_growth > recovery_growth:
             frame = "recovery"
         else:
             frame = "neutral"

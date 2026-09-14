@@ -66,7 +66,9 @@ Vocabulario:
 - `cooldown` (meses), `once` (bool), `priority` (int; se muestran los 2 de mayor prioridad).
 - `policy_delta`: suma al instrumento (persistente hasta que el jugador lo cambie).
 - `policy_set`: fija el instrumento.
-- `effects`: efectos puntuales del mes siguiente sobre estado, mapeados a los términos `shock_*`
+- `effects`: efectos puntuales sobre el estado, aplicados dentro del mismo mes jugado (no "el mes
+  siguiente": revisión REVIEW_001 hallazgo #10 — corrige esta sección, que antes decía eso),
+  mapeados a los términos `shock_*`
   (`approval`, `tension`, `protest`, `institutional_confidence`, `consumer_confidence`, `reserves`,
   `fiscal` (pp PIB por N meses: `{fiscal: -0.8, months: 3}`), `gdp`).
 - `flags`: marcas booleanas persistentes (`promised_no_devaluation`) consultables por triggers

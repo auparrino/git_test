@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel, ConfigDict, Field
 
 from republica.actors.sheet import ActorSheet
+from republica.engine.consequences import Relationships
 from republica.engine.narrate import KEY_INDICATORS, annualized_inflation
 from republica.world.config import Party, Province
 from republica.world.economy import Aux
@@ -219,14 +220,24 @@ def _private_union(actor: ActorSheet, state: WorldState, policy: Policy) -> dict
     return values
 
 
-def _private_business(state: WorldState) -> dict[str, float]:
-    return {
+def _private_business(
+    actor: ActorSheet, state: WorldState, agg: ShockAggregate
+) -> dict[str, float]:
+    values = {
         "gdp_growth": state.gdp_growth,
         "interest_rate": state.interest_rate,
         "exchange_rate": state.exchange_rate,
         "tax_rate": 0.0,  # placeholder: `tax_rate` viaja via `policy`, ver abajo
         "consumer_confidence": state.consumer_confidence,
     }
+    if actor.sector:
+        # `sector` (ficha, ADR 003 secc. 2) no llegaba a `private_indicators`
+        # (hallazgo #12 de REVIEW_001): una empresa deberia poder ver si su
+        # propio sector esta afectado por los shocks de este mes, igual que
+        # un `governor` ve `affected_by_shocks` de su provincia.
+        affected = agg.province_sector.get(actor.sector, 0.0)
+        values["sector_affected_by_shocks"] = float(bool(affected))
+    return values
 
 
 def _private_media(state: WorldState, recent_events: list[str]) -> dict[str, float]:
@@ -262,6 +273,8 @@ def build_perception(
     *,
     policy: Policy,
     date: str = "",
+    relationships: Relationships | None = None,
+    agg: ShockAggregate | None = None,
 ) -> Perception:
     """Arma la `Perception` de `actor` para este mes (ADR 003 secc. 3,
     visibilidad por rol en ADR 004 secc. 5).
@@ -270,9 +283,21 @@ def build_perception(
     literal de ADR 003 secc. 3, pero hace falta para `private_indicators` de
     `president`/`economy_minister` ("policy actual") y para `tax_rate` de
     `business`/`public_employment` de `union_public"; ver Notas de
-    implementacion de ADR 003."""
+    implementacion de ADR 003.
+
+    `relationships` (hallazgo #1 de REVIEW_001, ADR 003 secc. 5/7): las
+    `Relationships` *vivas* del motor (consecuencias, decaimiento), no la
+    ficha estatica. `view_of(actor.id)` es lo unico que un actor deberia ver
+    ("solo las propias", ADR 003 secc. 3). `None` (default, uso en tests que
+    arman una `Perception` suelta sin `ActorEngine` a mano) cae a la ficha,
+    igual que antes de este fix: solo semilla, no hay motor que la actualice.
+
+    `agg` (hallazgo #12): el `ShockAggregate` de este mes, para que una
+    `business` pueda ver si su propio `sector` esta afectado (ver
+    `_private_business`); `None` (default) cae a un agregado vacio."""
     parties_by_id = {p.id: p for p in parties}
     public = _public_indicators(state)
+    agg = agg if agg is not None else ShockAggregate()
 
     if actor.role in ("president", "economy_minister"):
         private = _private_president(state, policy, aux)
@@ -285,14 +310,16 @@ def build_perception(
     elif actor.role == "union":
         private = _private_union(actor, state, policy)
     elif actor.role == "business":
-        private = _private_business(state)
+        private = _private_business(actor, state, agg)
         private["tax_rate"] = policy.tax_rate
     elif actor.role == "media":
         private = _private_media(state, recent_events)
     else:  # social_bloc
         private = _private_social_bloc(state)
 
-    relationships = dict(actor.relationships)
+    relationships_view = (
+        relationships.view_of(actor.id) if relationships is not None else dict(actor.relationships)
+    )
 
     return Perception(
         month=month,
@@ -303,7 +330,7 @@ def build_perception(
         proposal=policy_proposal,
         active_shocks=list(active_shocks),
         recent_events=list(recent_events),
-        relationships=relationships,
+        relationships=relationships_view,
         memories=[],
         goals=goals_from_interests(actor.interests),
     )

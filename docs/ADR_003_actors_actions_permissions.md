@@ -276,10 +276,17 @@ Ambigüedades, decisiones de diseño y valores inventados al implementar `actors
    `WorldState` vía `shock_*`. Una concesión que "restaura transferencias" cambia un instrumento de
    `Policy`, no una variable de estado. Se agregó una convención: toda clave `pending_terms` con
    prefijo `policy_<campo>` no entra a `ShockAggregate.terms`, se acumula aparte
-   (`Simulation.pending_policy_delta`) y se suma/recorta a la `Policy` del mes siguiente
-   (`actors/president_rules.py::apply_pending_policy_delta`), antes de construir la `PolicyProposal`
-   de ese mes. Es decir: una concesión otorgada el mes `t` (a partir de pedidos del mes `t-1`) modifica
+   (`Simulation.concessions_delta`) y se suma/recorta a la `Policy` de la regla vigente cada mes
+   (`actors/president_rules.py::apply_pending_policy_delta`, antes de construir la `PolicyProposal` de
+   ese mes). Es decir: una concesión otorgada el mes `t` (a partir de pedidos del mes `t-1`) modifica
    recién la `Policy` de `t+1` — mismo desfasaje de un mes que el resto de las consecuencias.
+   **Revisión (REVIEW_001, hallazgo #5):** `concessions_delta` es **persistente** (se acumula, nunca se
+   resetea solo): la versión original lo aplicaba una vez y lo descartaba, así que si la `PolicyRule`
+   volvía a proponer el mismo valor de base al mes siguiente, la `Policy` "perdía" la concesión —
+   apareciendo como un recorte fantasma que los actores renegociaban sin fin. Además, la
+   `PolicyProposal` ahora se calcula entre `raw_policy` (lo que la regla/el jugador decidió, antes del
+   bump) del mes actual y del mes anterior — no entre las `Policy` ya bumpeadas — para que el bump en
+   sí mismo nunca aparezca como "propuesta".
 5. **`Aux` que ve la percepción es la del mes anterior, no la del mes en curso.** El orden de turno
    (secc. 7) pide construir `perceptions` (paso 3) *antes* de correr la economía (paso 7), pero
    `economy.Aux` (`deficit`, `intervention_usd`, etc.) recién se calcula en el paso 7. Se resolvió
@@ -402,6 +409,13 @@ Ambigüedades, decisiones de diseño y valores inventados al implementar `actors
     negociar: se asignó una por rol en `actors/rule_based.py::_NEGOTIATE_CONCESSION` (`governor` →
     `restore_transfers`, `party` → `cabinet_seat`, `union` → `wage_bonus`, `business` →
     `tax_exemption`, `economy_minister` → `delay_policy`), la más afín a cada uno.
+    **Revisión (REVIEW_001, hallazgo #5):** además, `RuleBasedActor` guarda un cooldown de
+    `CONCESSION_COOLDOWN_MONTHS = 6` meses por `(actor, concesión)`, poblado por
+    `note_concession_granted` (llamado desde `engine/scheduler.py::run_actor_turn` cuando ese actor
+    recibe un `GRANT_CONCESSION` autorizado): mientras dure, ese actor no vuelve a pedir esa misma
+    concesión en `NEGOTIATE`. Segunda barrera, más barata que dejarlo librado solo a que el score
+    salga de la zona `NEGOTIATE`, sobre todo ahora que `concessions_delta` (ver punto 4) es
+    persistente y no genera más una propuesta fantasma que empujara a renegociar.
 24. **Regla de medios: `Δaprobación < -2` se aproxima con `aprobación < 45`.** Mismo problema que el
     punto 20 (no hay aprobación del mes anterior en `Perception`); se usa un umbral absoluto en vez
     de un delta.
@@ -450,13 +464,18 @@ Ambigüedades, decisiones de diseño y valores inventados al implementar `actors
     objeto `Dilemma` de `dilemmas.py` — esos están atados a `Policy`/`effects` de dilemas de estado,
     no a pedidos de actores) y esa decisión se graba (`Game.grant_decision_log`) y se re-ejecuta en
     `Game.load` para que `--load` siga siendo determinista.
-33. **`republica play --actors` apaga por default.** El deliverable 8 pide integrar actores al modo
-    juego, pero `tests/test_play_cli.py` (ya existente, sin flags nuevos) verifica que el JSONL
-    guardado tenga *exactamente* 49 líneas (48 meses + resumen) — con actores prendidos por default
-    esas corridas ganarían líneas `"kind": "action"`. Se agregó `--actors/--no-actors` a `republica
-    play` con default `False` (a diferencia de `republica run`, que por `features.actors` en
-    `country.json` arranca en `True`): un usuario que quiere ver actores en su partida lo pide
-    explícitamente con `--actors`.
+33. **`republica play --actors`.** El deliverable 8 pide integrar actores al modo juego. En Fase 3,
+    `tests/test_play_cli.py` (ya existente, sin flags nuevos en ese momento) verificaba que el JSONL
+    guardado tuviera *exactamente* 49 líneas (48 meses + resumen) — con actores prendidos por default
+    esas corridas hubieran ganado líneas `"kind": "action"` — así que se agregó `--actors/--no-actors`
+    a `republica play` con default `False` (a diferencia de `republica run`, que por `features.actors`
+    en `country.json` arranca en `True`).
+    **Corrección (REVIEW_001, hallazgo #12): esta nota quedó desactualizada.** Fase 4 (ADR 004) cambió
+    el default de `republica play --actors` a `True` (ver `src/republica/cli.py`, comando `play`) y
+    actualizó `tests/test_play_cli.py` en consecuencia (ya no cuenta líneas a mano; verifica que
+    aparezca `"kind": "action"` — comentario en el test: "actores activos por default en play"). El
+    resto del punto (por qué existía el flag, y que `run`/`play` resuelven el default cada uno por su
+    lado) sigue siendo correcto.
 
 
 ## 12. Revisión del orquestador (v0.3)
@@ -472,3 +491,24 @@ Tras leer los registros de la semilla 7 se corrigieron tres cosas respecto del A
    (738 negociaciones en 48 meses; ahora ~370 con motivo).
 3. **`NO_ACTION` no es una reacción.** El tablero y `narrate` no lo muestran; si no hay nada
    destacable, se dice.
+4. **Revisión de seguimiento (REVIEW_001, tras leer semilla 7 con `TaylorPolicy` en vez de la
+   `ConstantPolicy` de arriba).** Cuatro calibraciones más:
+   - **`provincial_transfers.coef` de `interests.yaml`: 15.0 → 150.0** (hallazgo #6). A 15.0, el
+     `interest_impact` de un recorte moderado (−1.0 pp, el caso real de una `Policy` que cambia de a
+     poco) quedaba muy por debajo del `ideological_fit` del mismo delta para un gobernador con
+     `federalism` alto: el test que probaba "el interés vence a la ideología" solo pasaba con un
+     delta artificial de −5.0 que en los hechos hacía dominar a la ideología, lo contrario de lo que
+     pretendía probar. A 150.0, `w_int·int` domina a `w_ideo·ideo` ya en −1.0 para un gobernador con
+     `dependence=0.8`, y sigue siendo chico para uno con `dependence=0.1` (`gov_capital`, al que
+     además se le agregó el interés `provincial_transfers`, que no tenía).
+   - **Umbrales de medios desplazados por sesgo ideológico** (hallazgos #3/#4): los 3 medios emitían
+     siempre el mismo frame (`ideology.economic` no se usaba) y el frame `scandal` nunca se disparaba
+     (miraba `recent_events`, que no trae ids de shocks). Ahora `_decide_media` mira también
+     `active_shocks` para `scandal`, y desplaza los umbrales de `crisis`/`recovery` según la distancia
+     ideológica del medio al partido de gobierno (`MEDIA_BIAS_*_COEF` en `actors/rule_based.py`,
+     coeficientes inventados del mismo orden de magnitud que el resto del módulo).
+   - **`concessions_delta` persistente + cooldown de negociación** (hallazgo #5, ver también punto 23
+     de la sección 11): una concesión sobre un instrumento de `Policy` quedaba "pegada" un solo mes y
+     generaba una propuesta fantasma de recorte al mes siguiente; en 48 meses con `TaylorPolicy` esto
+     producía 370 `NEGOTIATE` / 78 `GRANT_CONCESSION`. Con el fix (persistencia + cooldown de 6 meses
+     por `(actor, concesión)`), la misma corrida queda en 159 `NEGOTIATE` / 39 `GRANT_CONCESSION`.

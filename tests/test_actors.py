@@ -8,7 +8,7 @@ import time
 import pydantic
 import pytest
 
-from republica.actors.rule_based import RuleBasedActor, make_actor_rng
+from republica.actors.rule_based import RuleBasedActor, load_weights, make_actor_rng
 from republica.actors.sheet import ActorSheet, load_actors
 from republica.engine.actions import Action, ActionType
 from republica.engine.consequences import ConsequenceContext, apply_consequences
@@ -20,6 +20,7 @@ from republica.engine.permissions import (
     load_governance,
     load_permissions,
 )
+from republica.engine.policy import TaylorPolicy
 from republica.engine.scheduler import build_actor_engine, run_actor_turn
 from republica.engine.simulation import advance_month, new_simulation, run
 from republica.world.config import load_country
@@ -133,10 +134,16 @@ def _fill_minimal_params(action_type: ActionType, actor: ActorSheet) -> Action:
 
 
 def test_provincial_dependence_beats_shared_ideology() -> None:
-    """`gov_norte` (federalism 0.9, dependence 0.8) se opone a un recorte
-    fuerte de `provincial_transfers` aunque comparta signo economico con el
-    presidente; `gov_capital` (dependence 0.1, sin ese interes) no."""
-    delta = {"provincial_transfers": -5.0}
+    """REVIEW_001 hallazgo #6: con un recorte MODERADO de `provincial_transfers`
+    (−1.0, no el −5.0 original: a −5.0 la ideologia ya opone por si sola, lo
+    que hacia pasar el test por la razon contraria), `gov_norte` (federalism
+    0.85, dependence 0.8) se opone porque el INTERES (`w_int·int`) domina el
+    score, no la ideologia -- se asierta sobre el desglose. `gov_capital`
+    (dependence 0.1) tiene el MISMO interes (`provincial_transfers`, agregado
+    a su ficha por este mismo hallazgo) pero el impacto es 8x mas chico por
+    su baja dependencia: ahi la ideologia (alineada con el ajuste fiscal)
+    domina y no se opone."""
+    delta = {"provincial_transfers": -1.0}
     sheet_norte, perc_norte = _perception("gov_norte", delta)
     sheet_capital, perc_capital = _perception("gov_capital", delta)
 
@@ -160,6 +167,13 @@ def test_provincial_dependence_beats_shared_ideology() -> None:
 
     assert any(a.type is ActionType.OPPOSE_POLICY for a in norte_actions)
     assert not any(a.type is ActionType.OPPOSE_POLICY for a in capital_actions)
+
+    score_norte = ra_norte.last_score
+    assert score_norte is not None
+    w = load_weights()["default"]  # "governor" no tiene entrada propia, cae al default
+    assert abs(w["w_int"] * score_norte.interest) > abs(w["w_ideo"] * score_norte.ideo), (
+        "el interes deberia dominar la ideologia en el desglose del score, no al reves"
+    )
 
 
 # 3. Inmutabilidad ---------------------------------------------------------
@@ -411,3 +425,156 @@ def test_action_rejects_out_of_range_params() -> None:
             params={"sector": "general", "days": 99},
             reason="r",
         )
+
+
+# REVIEW_001 hallazgo #1: relationships vivas, no la ficha -------------------
+
+
+def test_relationships_change_between_months_after_a_strike() -> None:
+    """`build_perception` debe leer `engine.relationships` (vivas: mutan con
+    las consecuencias) y no solo sembrar desde la ficha estatica: el
+    `score.rel` de `union_cgt` en el mes siguiente a un STRIKE (que le baja
+    la relacion con `president`) tiene que ser distinto del mes 1."""
+    actors = {k: v for k, v in ACTORS.items() if k in ("union_cgt", "president", "gov_norte")}
+    engine = build_actor_engine(7, COUNTRY, actors)
+    proposal = PolicyProposal(delta={}, label="sin cambios")
+    agg = ShockAggregate()
+
+    def _union_rel_score(month: int) -> float:
+        records, _ = run_actor_turn(
+            engine,
+            COUNTRY,
+            COUNTRY.initial_state,
+            COUNTRY.default_policy,
+            agg,
+            [],
+            [],
+            month,
+            40,
+            proposal,
+            [],
+        )
+        return next(r.score["rel"] for r in records if r.actor == "union_cgt" and r.score)
+
+    rel_score_month1 = _union_rel_score(1)
+
+    strike = Action(
+        type=ActionType.STRIKE,
+        actor_id="union_cgt",
+        params={"sector": "general", "days": 3},
+        reason="test",
+    )
+    ctx = ConsequenceContext(
+        state=COUNTRY.initial_state, policy=COUNTRY.default_policy, parties_by_id={}
+    )
+    _, rel_deltas, _events = apply_consequences([strike], ACTORS, ctx)
+    for a, b, delta in rel_deltas:
+        engine.relationships.bump(a, b, delta)
+
+    rel_score_month2 = _union_rel_score(2)
+
+    assert rel_score_month1 != rel_score_month2
+
+
+# REVIEW_001 hallazgos #3/#4: medios ven active_shocks y se diferencian -----
+
+
+def test_media_outlets_diverge_in_frame_sequences_over_48_months() -> None:
+    """Los 3 medios (economic +0.7/-0.6/+0.1) no deberian emitir la misma
+    secuencia de frames en 48 meses: `_decide_media` ahora desplaza sus
+    umbrales `crisis`/`recovery` segun la distancia ideologica al partido de
+    gobierno (hallazgo #4) ademas de mirar `active_shocks` para `scandal`
+    (hallazgo #3, antes solo miraba `recent_events`, que nunca trae ids de
+    shocks)."""
+    policy_rule = TaylorPolicy(
+        COUNTRY.default_policy,
+        COUNTRY.taylor,
+        COUNTRY.structure.r_neutral,
+        COUNTRY.policy_ranges["interest_rate_target"],
+    )
+    history = run(seed=7, months=48, policy_rule=policy_rule, actors_enabled=True)
+
+    frames: dict[str, list[str]] = {"media_mercado": [], "media_popular": [], "media_nacional": []}
+    for rec in history.action_records:
+        if rec.actor in frames and rec.type == "PUBLISH_STORY":
+            frames[rec.actor].append(rec.params["frame"])
+
+    assert all(len(seq) == 48 for seq in frames.values())
+    assert not (frames["media_mercado"] == frames["media_popular"] == frames["media_nacional"])
+
+
+# REVIEW_001 hallazgo #5: concesion persistente, sin propuesta fantasma -----
+
+
+def test_granted_concession_persists_and_does_not_trigger_phantom_renegotiation() -> None:
+    """Una concesion `restore_transfers` otorgada el mes 1 debe quedar
+    "pegada" a `provincial_transfers` (+0.5) en los meses 2 y 3 -- no
+    revertirse el mes 2 y desaparecer el 3 (el bug original) -- y no debe
+    generar un `NEGOTIATE` de `gov_norte` pidiendo la misma concesion en los
+    meses siguientes (cooldown de `RuleBasedActor`, ver `rule_based.py::
+    CONCESSION_COOLDOWN_MONTHS`)."""
+    actors = {k: v for k, v in ACTORS.items() if k in ("gov_norte", "president")}
+    sim = new_simulation(7, None, None, COUNTRY, True, True, actors_enabled=True, actors=actors)
+    baseline_transfers = COUNTRY.default_policy.provincial_transfers
+
+    grant = Action(
+        type=ActionType.GRANT_CONCESSION,
+        actor_id="president",
+        target="gov_norte",
+        params={"to": "gov_norte", "concession": "restore_transfers"},
+        reason="test",
+    )
+    sim.pending_grant_override = [grant]
+    advance_month(sim)  # mes 1: se otorga la concesion (efecto recien mes 2)
+    rec2 = advance_month(sim)  # mes 2
+    rec3 = advance_month(sim)  # mes 3
+
+    assert rec2.policy["provincial_transfers"] == pytest.approx(baseline_transfers + 0.5)
+    assert rec3.policy["provincial_transfers"] == pytest.approx(baseline_transfers + 0.5)
+
+    negotiate_months = {
+        r.month
+        for r in sim.action_records
+        if r.actor == "gov_norte"
+        and r.type == "NEGOTIATE"
+        and r.params.get("requested_concession") == "restore_transfers"
+        and r.month in (2, 3)
+    }
+    assert not negotiate_months
+
+
+# REVIEW_001 hallazgo #11: escalada de gobernadores respeta el presupuesto --
+
+
+def test_governor_escalation_never_exceeds_the_action_budget() -> None:
+    """OPPOSE_POLICY + escalada (LOBBY_CONGRESS + REQUEST_FUNDS) +
+    PUBLIC_STATEMENT son 4 acciones: el actor debe elegir cuales de las 3
+    del presupuesto por turno gasta (ADR 003 secc. 4/9), no dejar que
+    `authorize()` descarte la ultima por puro orden de llegada."""
+    sheet = ACTORS["gov_norte"].model_copy(
+        update={
+            "personality": ACTORS["gov_norte"].personality.model_copy(
+                update={"risk_tolerance": 1.0, "ambition": 1.0, "pragmatism": 1.0}
+            )
+        }
+    )
+    ra = RuleBasedActor(
+        sheet,
+        COUNTRY.parties,
+        COUNTRY.taylor,
+        COUNTRY.structure.r_neutral,
+        COUNTRY.policy_ranges["interest_rate_target"],
+    )
+    _, perception = _perception("gov_norte", {"provincial_transfers": -5.0, "tax_rate": 3.0})
+
+    import random
+
+    escalated_at_least_once = False
+    for seed in range(30):
+        actions = ra.decide(perception, random.Random(seed))
+        types = [a.type for a in actions]
+        if ActionType.OPPOSE_POLICY in types and ActionType.LOBBY_CONGRESS in types:
+            escalated_at_least_once = True
+            assert len(actions) <= 3, f"seed {seed}: {len(actions)} acciones, {types}"
+    msg = "el escenario deberia disparar OPPOSE + escalada al menos una vez"
+    assert escalated_at_least_once, msg

@@ -130,6 +130,31 @@ def test_rate_hike_at_month_one_lowers_inflation_by_month_twelve() -> None:
     assert hiked.sim.records[11].state["inflation"] < base.sim.records[11].state["inflation"]
 
 
+def test_scandal_response_dilemma_appears_after_forced_corruption_scandal() -> None:
+    """REVIEW_001 hallazgo #2: `corruption_scandal` dura 1 mes y se borra de
+    `sim.active_shocks` en el mismo mes en que se sortea (`ShockCatalog.
+    apply_month`); los triggers `shock_active:` de los dilemas se evaluaban
+    DESPUES de `advance_month`, sobre ese `active_shocks` ya vacio de shocks
+    de 1 mes, asi que `scandal_response` (y `general_strike_response`/
+    `protest_wave_response`, los otros dos disparados por un shock de 1 mes)
+    nunca aparecian. `Game._refresh_pending_dilemmas` ahora mira tambien
+    `records[-1].shocks_new`. Se fuerza `corruption_scandal` en el mes 5
+    (`sim.forced_shocks`, sin pasar por la CLI) y se juega con --auto
+    (primera opcion de cada dilema, via `_auto_choices`, usando la API de
+    `Game` directamente)."""
+    game = Game.new(seed=7, months=8, actors_enabled=False)
+    game.sim.forced_shocks[5] = ["corruption_scandal"]
+
+    months_offered: list[int] = []
+    for _ in range(8):
+        if any(d.id == "scandal_response" for d in game.pending_dilemmas):
+            months_offered.append(game.sim.month + 1)
+        game.step(_auto_choices(game), {})
+
+    assert months_offered, "scandal_response nunca se ofrecio"
+    assert all(m in (5, 6) for m in months_offered)
+
+
 def test_counterfactual_impact_reports_final_diff_and_top_decisions() -> None:
     game = Game.new(seed=7, months=12)
     for _ in range(12):
