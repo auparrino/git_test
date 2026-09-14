@@ -1,0 +1,9 @@
+cohort,media_nacional,media_popular,media_mercado
+urban_workers,0.35,0.55,0.10
+rural,0.45,0.15,0.40
+middle_class,0.40,0.10,0.50
+public_employees,0.40,0.45,0.15
+young_professionals,0.35,0.30,0.35
+informal,0.30,0.60,0.10
+retirees,0.55,0.35,0.10
+students,0.30,0.50,0.20
