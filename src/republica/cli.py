@@ -15,6 +15,7 @@ from rich.table import Table
 from republica import __version__
 from republica.actors.sheet import load_actors
 from republica.ai.brains import BrainsConfig, load_brains_config
+from republica.engine import emergence as emergence_mod
 from republica.engine import narrate as narrate_mod
 from republica.engine.advisor import advise
 from republica.engine.dilemmas import compute_aux_vars, render_text
@@ -120,6 +121,20 @@ def run(
             help="Actores por reglas (ADR 003). Default: `features.actors` de country.json.",
         ),
     ] = None,
+    congress: Annotated[
+        bool | None,
+        typer.Option(
+            "--congress/--no-congress",
+            help="Congreso (ADR 005 secc. 1). Default: `features.congress` de country.json.",
+        ),
+    ] = None,
+    negotiation: Annotated[
+        bool | None,
+        typer.Option(
+            "--negotiation/--no-negotiation",
+            help="Negociacion (ADR 005 secc. 2). Default: `features.negotiation` de country.json.",
+        ),
+    ] = None,
     brain: Annotated[
         str | None,
         typer.Option(
@@ -143,6 +158,10 @@ def run(
         forced_shocks.setdefault(month, []).append(shock_id)
 
     actors_enabled = actors if actors is not None else country.features.get("actors", True)
+    congress_enabled = congress if congress is not None else country.features.get("congress", True)
+    negotiation_enabled = (
+        negotiation if negotiation is not None else country.features.get("negotiation", True)
+    )
     brains_cfg = _resolve_brains(brain, brains)
     history = run_simulation(
         seed=seed,
@@ -155,12 +174,15 @@ def run(
         default_brain=brains_cfg.default,
         llm_temperature=brains_cfg.temperature,
         llm_cache_dir=brains_cfg.cache_dir,
+        congress_enabled=congress_enabled,
+        negotiation_enabled=negotiation_enabled,
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(history.to_jsonl(), encoding="utf-8")
     console.print(
         f"[green]OK[/green] seed={seed} months={len(history.records)} "
-        f"outcome={history.outcome} actors={actors_enabled} -> {out}"
+        f"outcome={history.outcome} actors={actors_enabled} "
+        f"congress={congress_enabled} negotiation={negotiation_enabled} -> {out}"
     )
 
 
@@ -170,7 +192,55 @@ def narrate(
 ) -> None:
     """Narra mes a mes una corrida guardada en JSONL (seccion 10 del spec)."""
     loaded = narrate_mod.load_jsonl(path)
-    narrate_mod.render(loaded.records, loaded.summary, console, loaded.actions_by_month)
+    narrate_mod.render(
+        loaded.records,
+        loaded.summary,
+        console,
+        loaded.actions_by_month,
+        loaded.votes_by_month,
+        loaded.negotiations_by_month,
+    )
+
+
+@app.command()
+def emergence(
+    path: Annotated[Path, typer.Argument(help="Archivo JSONL de una corrida (`republica run`).")],
+) -> None:
+    """`republica emergence` (ADR 005 secc. 6): alianzas, coaliciones de
+    voto repetidas contra el score ideologico, acuerdos rotos y medios que
+    cambiaron de linea. Materia prima de `docs/EMERGENCE_LOG.md`."""
+    loaded = narrate_mod.load_jsonl(path)
+    report = emergence_mod.detect(loaded)
+
+    console.print(f"[bold]Alianzas formadas[/bold] ({len(report.alliances)}):")
+    if not report.alliances:
+        console.print("  [dim](ninguna)[/dim]")
+    for a in report.alliances:
+        console.print(f"  • mes {a['month']}: {a['actor']} <-> {a['with']}")
+
+    n_coalitions = len(report.repeated_coalitions)
+    console.print(f"[bold]Coaliciones de voto repetidas[/bold] ({n_coalitions}):")
+    if not report.repeated_coalitions:
+        console.print("  [dim](ninguna con >= 3 repeticiones -- tambien es un resultado)[/dim]")
+    for c in report.repeated_coalitions:
+        parties = ", ".join(c["parties"])
+        bills = ", ".join(c["bills"])
+        console.print(f"  • {parties} — {c['count']} veces ({bills})")
+
+    console.print(f"[bold]Acuerdos rotos[/bold] ({len(report.broken_agreements)}):")
+    if not report.broken_agreements:
+        console.print("  [dim](ninguno)[/dim]")
+    for b in report.broken_agreements:
+        console.print(
+            f"  • mes {b['month']}: {b['actor']} ({b['concession']}), roto por {b['broken_by']}"
+        )
+
+    n_media = len(report.media_line_changes)
+    console.print(f"[bold]Medios que cambiaron de linea[/bold] ({n_media}):")
+    if not report.media_line_changes:
+        console.print("  [dim](ninguno)[/dim]")
+    for m in report.media_line_changes:
+        console.print(f"  • {m['outlet']}: {m['line_changes']} cambios de linea")
 
 
 def _percentiles(values: list[float]) -> tuple[float, float, float]:
@@ -360,13 +430,32 @@ def _render_actor_reactions(console: Console, game: Game) -> None:
 
 
 def _collect_grant_decisions(game: Game, auto: bool) -> None:
-    """Deliverable 8: `REQUEST_FUNDS`/`NEGOTIATE` pendientes como un dilema
-    generado "Conceder/Rechazar" por pedido."""
+    """Deliverable 8 de ADR 003 (`REQUEST_FUNDS`) + deliverable 5 de ADR 005
+    (`NEGOTIATE`, reemplaza el dilema Conceder/Rechazar de Fase 3 por
+    "Conceder / Contraoferta 50 % / Rechazar", ver `engine/game.py::
+    Game.set_grant_decisions`). `--auto` elige Conceder (ADR 005, literal)."""
     requests = game.pending_actor_requests
     if not requests:
         return
     granted: set[str] = set()
+    negotiation_decisions: dict[str, str] = {}
     for req in requests:
+        if req.type.value == "NEGOTIATE":
+            prompt = (
+                f"  NEGOTIATE de {req.actor_id}: {req.reason} [Conceder/Contraoferta 50 %/Rechazar]"
+            )
+            if auto:
+                console.print(f"[dim]--auto: {prompt} -> Conceder[/dim]")
+                negotiation_decisions[req.actor_id] = "grant"
+                continue
+            answer = typer.prompt(prompt, default="Conceder").strip().lower()
+            if answer.startswith("con") or answer.startswith("50"):
+                negotiation_decisions[req.actor_id] = "counter"
+            elif answer.startswith("c"):
+                negotiation_decisions[req.actor_id] = "grant"
+            else:
+                negotiation_decisions[req.actor_id] = "refuse"
+            continue
         prompt = f"  Pedido de {req.actor_id} ({req.type.value}): {req.reason} [Conceder/Rechazar]"
         if auto:
             console.print(f"[dim]--auto: {prompt} -> Rechazar[/dim]")
@@ -374,7 +463,7 @@ def _collect_grant_decisions(game: Game, auto: bool) -> None:
         answer = typer.prompt(prompt, default="Rechazar").strip().lower()
         if answer.startswith("c"):
             granted.add(req.actor_id)
-    game.set_grant_decisions(granted)
+    game.set_grant_decisions(granted, negotiation_decisions)
 
 
 def _collect_choices(game: Game, auto: bool) -> dict[str, str]:

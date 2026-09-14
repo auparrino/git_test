@@ -11,6 +11,7 @@ from typing import Any
 
 from republica.actors.president_rules import concession_for_request
 from republica.engine.actions import Action, ActionType
+from republica.engine.consequences import load_concessions
 from republica.engine.dilemmas import (
     Dilemma,
     PendingEffect,
@@ -112,6 +113,8 @@ class Game:
         default_brain: str = "rules",
         llm_temperature: float = 0.4,
         llm_cache_dir: str | None = None,
+        congress_enabled: bool = True,
+        negotiation_enabled: bool = True,
     ) -> Game:
         """Arranca una partida nueva en el mes 0 (antes de jugar el mes 1).
 
@@ -124,7 +127,18 @@ class Game:
 
         `brain_map`/`default_brain`/`llm_temperature`/`llm_cache_dir` (ADR
         004 secc. 7): idem `engine.simulation.new_simulation`, default
-        `"rules"` para todos."""
+        `"rules"` para todos.
+
+        `congress_enabled`/`negotiation_enabled` (ADR 005): default `True`
+        (a diferencia de `actors_enabled`, que en `play` decide la CLI:
+        `cli.py::play` ya pasa `actors=True` por defecto) -- con Congreso
+        siempre activo cuando hay actores, `Bill`/votos aparecen tambien en
+        `play` cuando el jugador edita instrumentos que requieren ley. El
+        protocolo multironda de `engine/negotiation.py` en si solo corre con
+        `sim.president_rule` (presidente por reglas, nunca el caso en
+        `play`): con un humano, `negotiation_enabled=True` solo habilita la
+        opcion "Contraoferta 50 %" del dilema generado (ver
+        `set_grant_decisions`), no cambia el resto del comportamiento."""
         base_country = (country or load_country()).model_copy(update={"months": months})
         rule = _MutablePolicyRule(base_country.default_policy.model_copy())
         sim = new_simulation(
@@ -139,6 +153,8 @@ class Game:
             default_brain=default_brain,
             llm_temperature=llm_temperature,
             llm_cache_dir=llm_cache_dir,
+            congress_enabled=congress_enabled,
+            negotiation_enabled=negotiation_enabled,
         )
         game = cls(
             country=base_country,
@@ -161,12 +177,64 @@ class Game:
             return []
         return list(self.sim.actor_engine.pending_requests)
 
-    def set_grant_decisions(self, granted_actor_ids: set[str]) -> None:
-        """Fija que pedidos pendientes concede el jugador este mes (el resto
-        se toma como rechazado: `relationships.president -1`, ver ADR 003
-        secc. 5). Debe llamarse antes de `step()`."""
-        grants = []
+    def set_grant_decisions(
+        self,
+        granted_actor_ids: set[str],
+        negotiation_decisions: dict[str, str] | None = None,
+    ) -> None:
+        """Fija que pedidos pendientes concede el jugador este mes. Debe
+        llamarse antes de `step()`.
+
+        `granted_actor_ids`: pedidos `REQUEST_FUNDS` a conceder por completo
+        (el resto se toma como rechazado: `relationships.president -1`, ver
+        ADR 003 secc. 5) -- sin cambios desde Fase 3.
+
+        `negotiation_decisions` (ADR 005 secc. 2, play mode: deliverable 5):
+        `{actor_id: "grant"|"counter"|"refuse"}` para los pedidos
+        `NEGOTIATE` pendientes -- "Conceder / Contraoferta 50 % / Rechazar"
+        del dilema generado en la CLI (ver `cli.py::_collect_grant_decisions`).
+        Con un presidente humano no corre el protocolo multironda de
+        `engine/negotiation.py` (no es viable de forma sincronica en una
+        CLI, ver Notas de implementacion de ADR 005): "grant" reusa el mismo
+        camino `GRANT_CONCESSION` que un `REQUEST_FUNDS` concedido;
+        "counter" aplica la mitad del bump de `Policy`/costo fiscal de la
+        concesion directo a `sim.pending_terms` (no hay una accion "conceder
+        a medias" en el catalogo de ADR 003) mas la mitad del `+8` de
+        relacion de una negociacion exitosa; un pedido sin entrada (o
+        "refuse") queda igual que antes: rechazado."""
+        negotiation_decisions = negotiation_decisions or {}
+        grants: list[Action] = []
+        concessions_cfg = load_concessions()
         for req in self.pending_actor_requests:
+            if req.type is ActionType.NEGOTIATE:
+                decision = negotiation_decisions.get(req.actor_id, "refuse")
+                if decision == "refuse":
+                    continue
+                concession = concession_for_request(req)
+                if decision == "grant":
+                    grants.append(
+                        Action(
+                            type=ActionType.GRANT_CONCESSION,
+                            actor_id="president",
+                            target=req.actor_id,
+                            params={"to": req.actor_id, "concession": concession.value},
+                            reason=f"el jugador concede a {req.actor_id} (negociacion)",
+                        )
+                    )
+                elif decision == "counter":
+                    cfg = concessions_cfg[concession.value]
+                    if cfg.get("policy_field"):
+                        key = f"policy_{cfg['policy_field']}"
+                        self.sim.pending_terms[key] = (
+                            self.sim.pending_terms.get(key, 0.0) + cfg["policy_bump"] * 0.5
+                        )
+                    self.sim.pending_terms["shock_fiscal"] = (
+                        self.sim.pending_terms.get("shock_fiscal", 0.0)
+                        - cfg["fiscal_cost_pct_gdp"] * 0.5
+                    )
+                    if self.sim.actor_engine is not None:
+                        self.sim.actor_engine.relationships.bump(req.actor_id, "president", 5.0)
+                continue
             if req.actor_id not in granted_actor_ids:
                 continue
             concession = concession_for_request(req)
@@ -182,7 +250,11 @@ class Game:
         self.sim.pending_grant_override = grants
         if self.pending_actor_requests:
             self.grant_decision_log.append(
-                {"month": self.sim.month + 1, "granted": sorted(granted_actor_ids)}
+                {
+                    "month": self.sim.month + 1,
+                    "granted": sorted(granted_actor_ids),
+                    "negotiation": dict(negotiation_decisions),
+                }
             )
 
     def _refresh_pending_dilemmas(self) -> None:
@@ -295,6 +367,8 @@ class Game:
             seed=self.seed,
             config_hash=self.country.config_hash,
             action_records=self.sim.action_records,
+            vote_records=self.sim.vote_records,
+            negotiation_records=self.sim.negotiation_records,
         )
         history_path.write_text(history.to_jsonl(), encoding="utf-8")
         data = {
@@ -335,10 +409,15 @@ class Game:
         grants_by_month: dict[int, set[str]] = {
             g["month"]: set(g["granted"]) for g in data.get("grant_decisions", [])
         }
+        negotiation_by_month: dict[int, dict[str, str]] = {
+            g["month"]: dict(g.get("negotiation", {})) for g in data.get("grant_decisions", [])
+        }
         target_month = data["month"]
         for m in range(1, target_month + 1):
             if game.pending_actor_requests:
-                game.set_grant_decisions(grants_by_month.get(m, set()))
+                game.set_grant_decisions(
+                    grants_by_month.get(m, set()), negotiation_by_month.get(m, {})
+                )
             game.step(by_month.get(m, {}), edits_by_month.get(m, {}))
         return game
 

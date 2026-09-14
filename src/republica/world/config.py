@@ -212,6 +212,10 @@ class Party(BaseModel):
     in_government: bool
     is_ally: bool = False
     coalition_weight: float = 1.0
+    #: Disciplina de bloque en [0, 1] (ADR 005 secc. 1.2): FF 0.7, UR 0.8,
+    #: PS 0.6, ML 0.9, AP 0.4 (`data/parties.json`). Default 1.0 (bloque
+    #: perfecto) para cualquier partido de test que no la declare.
+    discipline: float = 1.0
 
 
 class Country(BaseModel):
@@ -241,7 +245,13 @@ class Country(BaseModel):
     #: `engine.simulation.run()`/`Game.new()` como *funciones* (ver Notas de
     #: implementacion): ese default se mantiene apagado para no romper
     #: llamadores existentes que no piden actores explicitamente.
-    features: dict[str, bool] = {"actors": True}
+    #: `features.congress`/`features.negotiation` (ADR 005 secc. 1/2, Notas
+    #: de implementacion): default `True` igual que `actors`, unicamente
+    #: activos cuando `actors` tambien lo esta (Congreso/negociacion no
+    #: existen sin actores). `--no-congress`/`--no-negotiation` los apagan
+    #: (CLI); con ambos apagados el motor reproduce exactamente el
+    #: comportamiento de Fase 3/4 (bytes identicos, ver test de aceptacion).
+    features: dict[str, bool] = {"actors": True, "congress": True, "negotiation": True}
 
 
 def _load_provinces(path: Path) -> list[Province]:
@@ -351,5 +361,5 @@ def load_country(data_dir: Path | str | None = None) -> Country:
         coalition_seats=_coalition_seats(parties),
         shocks=shocks,
         config_hash=config_hash,
-        features=raw.get("features", {"actors": True}),
+        features=raw.get("features", {"actors": True, "congress": True, "negotiation": True}),
     )

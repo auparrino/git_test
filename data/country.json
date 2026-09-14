@@ -129,5 +129,5 @@
     "devaluation_pi_shock": 5.0,
     "devaluation_conf_shock": -10.0
   },
-  "features": {"actors": true}
+  "features": {"actors": true, "congress": true, "negotiation": true}
 }

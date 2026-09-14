@@ -274,6 +274,20 @@ def interest_impact(
     return clamp(total / n, -100.0, 100.0)
 
 
+def electoral_pressure_raw(
+    in_government: bool | None, months_to_election: int, approval: float
+) -> float:
+    """Igual que `electoral_pressure`, pero sobre valores sueltos en vez de
+    una `Perception` completa: la usa tambien `engine/congress.py` (ADR 005
+    secc. 1.2) para puntuar un `Bill` sin tener que armar una `Perception`
+    de partido para eso."""
+    if in_government is None:
+        return 0.0
+    proximity = clamp(1.0 - months_to_election / 12.0, 0.0, 1.0)
+    sign = 1.0 if in_government else -1.0
+    return sign * proximity * (approval - 50.0)
+
+
 def electoral_pressure(in_government: bool | None, perception: Perception) -> float:
     """No hay formula explicita en el ADR (solo el peso `w_elec`): se define
     como la presion de la aprobacion actual, creciente a medida que se
@@ -281,12 +295,8 @@ def electoral_pressure(in_government: bool | None, perception: Perception) -> fl
     el actor esta alineado con el gobierno (documentado en Notas de
     implementacion). Solo `governor`/`party` tienen una nocion clara de
     "en el gobierno"; el resto no siente presion electoral directa (0)."""
-    if in_government is None:
-        return 0.0
-    proximity = clamp(1.0 - perception.months_to_election / 12.0, 0.0, 1.0)
-    sign = 1.0 if in_government else -1.0
     approval = perception.public_indicators.get("government_approval", 50.0)
-    return sign * proximity * (approval - 50.0)
+    return electoral_pressure_raw(in_government, perception.months_to_election, approval)
 
 
 @dataclass(frozen=True)

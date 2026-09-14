@@ -212,8 +212,8 @@ def test_adding_a_new_actor_does_not_change_existing_actors_first_month() -> Non
         proposal,
     )
 
-    records_base, _ = run_actor_turn(engine_base, *common_args, [])
-    records_extended, _ = run_actor_turn(engine_extended, *common_args, [])
+    records_base, _, _ = run_actor_turn(engine_base, *common_args, [])
+    records_extended, _, _ = run_actor_turn(engine_extended, *common_args, [])
 
     def _key(records):
         return sorted(
@@ -441,7 +441,7 @@ def test_relationships_change_between_months_after_a_strike() -> None:
     agg = ShockAggregate()
 
     def _union_rel_score(month: int) -> float:
-        records, _ = run_actor_turn(
+        records, _, _ = run_actor_turn(
             engine,
             COUNTRY,
             COUNTRY.initial_state,

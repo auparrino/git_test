@@ -51,26 +51,45 @@ class Loaded:
     #: `month`. Vacio si la corrida no tenia actores (`--no-actors`): esas
     #: lineas simplemente no existen en el archivo.
     actions_by_month: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
+    #: `VoteRecord`/`NegotiationRecord` (ADR 005 secc. 1/2, `kind: "vote"`/
+    #: `"negotiation"`), agrupados por mes. Vacios con `--no-congress`/
+    #: `--no-negotiation` (o sin actores).
+    votes_by_month: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
+    negotiations_by_month: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
 
 
 def load_jsonl(path: str | Path) -> Loaded:
     """Lee un archivo JSONL producido por `republica run` (un `MonthRecord`
-    por mes, `ActionRecord` intercalados si hay actores, mas una linea final
-    de resumen). Las lineas con `"kind": "action"` no son `MonthRecord`: se
-    separan en `actions_by_month` y no entran en `records` (ver Notas de
-    implementacion de ADR 003: asi `render()` no cambia para corridas sin
-    actores)."""
+    por mes, `ActionRecord`/`VoteRecord`/`NegotiationRecord` intercalados si
+    hay actores, mas una linea final de resumen). Las lineas con
+    `"kind": "action"`/`"vote"`/`"negotiation"` no son `MonthRecord`: se
+    separan cada una en su propio `dict` por mes y no entran en `records`
+    (ver Notas de implementacion de ADR 003: asi `render()` no cambia para
+    corridas sin actores)."""
     lines = Path(path).read_text(encoding="utf-8").splitlines()
     if not lines:
         raise ValueError(f"{path} esta vacio")
     parsed = [json.loads(line) for line in lines[:-1]]
     summary = json.loads(lines[-1])
-    records = [r for r in parsed if r.get("kind") != "action"]
+    records = [r for r in parsed if r.get("kind") not in ("action", "vote", "negotiation")]
     actions_by_month: dict[int, list[dict[str, Any]]] = {}
+    votes_by_month: dict[int, list[dict[str, Any]]] = {}
+    negotiations_by_month: dict[int, list[dict[str, Any]]] = {}
     for r in parsed:
-        if r.get("kind") == "action":
+        kind = r.get("kind")
+        if kind == "action":
             actions_by_month.setdefault(r["month"], []).append(r)
-    return Loaded(records=records, summary=summary, actions_by_month=actions_by_month)
+        elif kind == "vote":
+            votes_by_month.setdefault(r["month"], []).append(r)
+        elif kind == "negotiation":
+            negotiations_by_month.setdefault(r["month"], []).append(r)
+    return Loaded(
+        records=records,
+        summary=summary,
+        actions_by_month=actions_by_month,
+        votes_by_month=votes_by_month,
+        negotiations_by_month=negotiations_by_month,
+    )
 
 
 def threshold_sentences(record: dict[str, Any]) -> list[str]:
@@ -119,14 +138,54 @@ def top_actions(actions: list[dict[str, Any]], n: int = 3) -> list[dict[str, Any
     return sorted(visible, key=lambda a: (a["authorized"], _action_intensity(a)), reverse=True)[:n]
 
 
+def _render_votes(console: Console, votes: list[dict[str, Any]]) -> None:
+    """`republica narrate` (ADR 005 secc. 1, deliverable 7): "Ley: ...
+    54/100 aprobada"."""
+    for v in votes:
+        instruments = ", ".join(f"{k} {d:+.1f}" for k, d in v["policy_delta"].items())
+        verdict = "aprobada" if v["passed"] else "rechazada"
+        color = "green" if v["passed"] else "red"
+        console.print(
+            f"[bold]Ley:[/bold] {instruments} — [{color}]{v['yes_total']}/{v['threshold']} "
+            f"{verdict}[/{color}]"
+        )
+
+
+def _render_negotiations(console: Console, negotiations: list[dict[str, Any]]) -> None:
+    """`republica narrate` (ADR 005 secc. 2, deliverable 7): una linea por
+    acuerdo/ruptura."""
+    for n in negotiations:
+        outcome = n["outcome"]
+        if outcome == "agreement" and n["agreement"]:
+            a = n["agreement"]
+            console.print(
+                f"[bold]Negociacion:[/bold] {n['actor']} <-> presidente — acuerdo por "
+                f"{a['concession']} ({a['scale']:.0%}) a cambio de {a['in_exchange']}"
+            )
+        elif outcome == "walk_away":
+            console.print(
+                f"[bold]Negociacion:[/bold] {n['actor']} <-> presidente — {n['actor']} se retira "
+                f"({n['requested_concession']})"
+            )
+        else:
+            console.print(
+                f"[dim]Negociacion: {n['actor']} <-> presidente — sin acuerdo "
+                f"({n['requested_concession']})[/dim]"
+            )
+
+
 def render(
     records: list[dict[str, Any]],
     summary: dict[str, Any],
     console: Console,
     actions_by_month: dict[int, list[dict[str, Any]]] | None = None,
+    votes_by_month: dict[int, list[dict[str, Any]]] | None = None,
+    negotiations_by_month: dict[int, list[dict[str, Any]]] | None = None,
 ) -> None:
     """Imprime la narracion completa mes a mes y el resumen final."""
     actions_by_month = actions_by_month or {}
+    votes_by_month = votes_by_month or {}
+    negotiations_by_month = negotiations_by_month or {}
     prev_state: dict[str, Any] | None = None
     for record in records:
         state = record["state"]
@@ -158,6 +217,9 @@ def render(
             for action in top_actions(month_actions):
                 mark = "" if action["authorized"] else " [red](denegada)[/red]"
                 console.print(f"  • {action['actor']} {action['type']}{mark} — {action['reason']}")
+
+        _render_negotiations(console, negotiations_by_month.get(record["month_index"], []))
+        _render_votes(console, votes_by_month.get(record["month_index"], []))
 
         prev_state = state
 

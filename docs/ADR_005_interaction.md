@@ -179,3 +179,184 @@ rotos y medios que cambiaron de línea. Es la materia prima de `docs/EMERGENCE_L
    contiene registros `vote`, `negotiation` y `perception`.
 6. `emergence` sobre 20 semillas encuentra al menos una alianza o coalición de voto repetida
    (si no encuentra ninguna, se documenta: también es un resultado).
+
+## 8. Notas de implementación (Congreso y negociación)
+
+Alcance de este commit: solo §1 (Congreso) y §2 (negociación), "la primera mitad" de Fase 5.
+Cohortes sociales (§3) y medios/percepción (§4) quedan para el próximo commit — `PUBLISH_STORY`
+sigue afectando `consumer_confidence` agregado (ADR 003 §5), no hay `perceived_inflation_c` todavía,
+así que el test de aceptación 5 de §7 se cubre parcial (`vote`/`negotiation` sí, `perception` no) y el
+6 queda documentado con el `emergence` que sí existe.
+
+### Congreso (`engine/congress.py`)
+
+1. **`score_p = rule_score(p, bill)` se calcula directo sobre `bill.policy_delta`, no armando una
+   `Perception` de partido.** ADR 003 §6 define el score de cualquier actor a partir de una
+   `Perception` completa (`compute_score`); reconstruir una para cada uno de los 5 partidos en cada
+   voto (incluida la `derive_congress_support` "genérica" de cada mes) sería más caro y no aporta nada
+   que `ideological_fit`/`interest_impact`/`electoral_pressure_raw` no den ya con los argumentos
+   sueltos. Se extrajo `electoral_pressure_raw(in_government, months_to_election, approval)` de
+   `actors/rule_based.py::electoral_pressure` (que ahora es un envoltorio de una línea) para poder
+   reusarlo sin una `Perception`. El término de relación usa `relationships.get(party_actor.id,
+   "president")` (la ficha `party_<id>.yaml` de ADR 003, no una ficha nueva por partido de
+   `parties.json`), y el término de interés usa `dependence = 0.5` fijo (los partidos no tienen
+   provincia).
+2. **`affinity(a, p)`** se resuelve contra las relaciones vivas del motor con el actor **`party_<id>`**
+   (ya existen en las 29 fichas — `gov_norte.relationships.party_alianza_provincial: 80`, etc. — ADR
+   003 §11 punto 9 ya establecía relaciones actor-actor incluyendo actores de rol `party`), no una
+   relación actor→partido nueva. Gobernador de ese partido o el propio actor-partido → 1.0 directo, sin
+   mirar relación.
+3. **`concession_bonus_p` (+25)** se paga al partido si hay un `Agreement` `vigente` con el actor-partido
+   mismo o con un gobernador de ese partido — coincide con `affinity = 1.0`, es la lectura más literal
+   de "hay acuerdo con alianza_provincial" del test de aceptación 1.
+4. **`congress_support` derivado (§1.3) gateado por `actors_enabled AND features.congress`.** Sin
+   actores no hay partidos-actor que votar (la fórmula de v0.1, `world/politics.py::step_politics`, sin
+   tocar, sigue siendo el único camino); con actores pero `features.congress=False` también se usa la
+   de v0.1 — es exactamente el fallback que pide el ADR. Se calcula sobre `full_state` (ya con el
+   `government_approval` del mes, después de `step_politics`), no sobre el estado de entrada de mes:
+   mismo criterio que usa la fórmula de v0.1 para `congress_target` (usa `approval_new`, no `prev`).
+5. **Redondeo por partido:** `round(yes_seats_p)` estándar (banker's rounding de Python), sin ningún rol
+   para el `rng` que pide la firma sugerida del encargo — el `rng` se usa donde sí hace falta: el
+   término de ruido de `rule_score` (`sigma = 5*(1-pragmatism)`, igual que ADR 003 §6), uno por partido
+   y por voto.
+
+### Bill: de dónde sale el `policy_delta` que se vota
+
+**Ambigüedad no resuelta por el ADR:** ¿una concesión de negociación que toca un instrumento que
+requiere ley (`restore_transfers`→`provincial_transfers`, `tax_exemption`→`tax_rate`) pasa por el
+Congreso, o es un acto de gobierno directo como en Fase 3? Leído junto con la mención explícita de
+`concession_bonus_p` en la fórmula de presión del Congreso (§1.2), la lectura más consistente es que
+**sí pasa**: si una concesión negociada no necesitara nunca aprobación legislativa, no tendría sentido
+que un acuerdo vigente sesgue el voto — sesgaría el voto de *qué*. Se implementó así, con un diseño que
+evita la circularidad de "votar en el mismo mes en que se negoció":
+
+- Cada `Agreement` nuevo (`engine/negotiation.py::negotiate_one`) sabe si `law_required` mirando si su
+  `concessions.yaml[concession].policy_field` cae en `requires_law` (con el propio `policy_bump` como
+  delta de prueba). Con `congress_enabled=False`, **nunca** requiere ley (se ejecuta directo, camino de
+  Fase 3): sin Congreso no hay nada que lo bloquee.
+- Un acuerdo `law_required=True` queda `vigente` sin ejecutar (`executed=False`) y entra a una "cola"
+  (no es una lista aparte: son los `Agreement` de `engine.agreements` con `status == "vigente" and
+  law_required and not executed`).
+- Cada mes, el `Bill` que se vota (`engine/simulation.py::advance_month`) es la unión de dos partes:
+  (a) `requires_law(proposal.delta)` — lo que la `PolicyRule`/el jugador propuso este mes — y (b)
+  `sum_queue_delta(...)` sobre la cola **tal como estaba antes de correr las negociaciones de este
+  mes** (el snapshot se toma antes de llamar `run_actor_turn`). Un acuerdo recién pactado este mes
+  entra a la cola pero se vota recién **el mes que viene**, nunca el mismo mes que se negoció — evita
+  tener que cerrar el `Bill` antes de saber qué se negoció, y le da sentido literal a "2 meses para
+  ejecutar" (como máximo, 2 intentos de voto).
+- Si el `Bill` pasa: la parte (a) ya estaba aplicada en `policy` (nada que hacer); la parte (b) se
+  ejecuta (`apply_execution_results`, `passed=True`): `policy_<campo>`/`shock_fiscal` a
+  `pending_terms` (mismo desfasaje de un mes que un `GRANT_CONCESSION` de Fase 3), `Agreement.status =
+  "honored"`.
+- Si el `Bill` no pasa: la parte (a) se revierte (`policy` vuelve al valor de
+  `sim.last_effective_policy`, **no** al `default_policy` ni al `raw_policy` de la regla: el valor
+  *efectivamente vigente* el mes pasado, después de bumps/vetos previos — campo nuevo en `Simulation`,
+  distinto de `last_policy` que sigue siendo el `raw_policy` pre-bump usado para calcular la
+  `PolicyProposal`); la parte (b) suma un mes de `months_pending` a cada `Agreement` de la cola, y al
+  segundo mes sin pasar, `broken_by_government` (relación −15, evento `agreement_broken:*:government`).
+  `shock_approval −1`/`institutional_confidence +0.5` van a `pending_terms` (aplican el mes que viene,
+  como toda consecuencia del motor).
+- **Las concesiones `GRANT_CONCESSION` "de la vía vieja"** (pedidos `REQUEST_FUNDS`, resueltos por
+  `RuleBasedPresident.decide_grants`, sin tocar) **no pasan por el Congreso**, incluso con
+  `features.congress=True`: el ADR solo menciona el `Bill` naciendo de "la `PolicyProposal` del mes" y
+  de negociaciones (§2); extenderlo a `REQUEST_FUNDS` también habría sido razonable pero no es lo que
+  pide el texto, y hacerlo hubiera significado tocar `RuleBasedPresident` (fuera del scope declarado del
+  encargo, que pide reemplazar específicamente "la lógica simple de Fase 3" de concesión vía
+  `NEGOTIATE`, no la de `REQUEST_FUNDS`).
+
+### Negociación (`engine/negotiation.py`)
+
+6. **`leverage_a`**: `seats_controlled(a) / max(51 - coalition_seats, 1) + influence.streets`.
+   `seats_controlled`: bancas del propio partido si `a.role == "party"`, bancas del partido de su
+   gobernación si `a.role == "governor"`, `0` para el resto (sindicatos/empresas/ministro no "controlan"
+   bancas: su leverage es puro `influence.streets`).
+7. **Hallazgo empírico: con los datos reales de v0.3, la banda `[0.15, 0.3)` (contraoferta) nunca se
+   alcanza.** `seats_needed = max(51 - coalition_seats, 1) ≈ 6.2` (el gobierno ya tiene ~44.8 bancas
+   propias+aliadas): cualquier gobernador/partido con bancas propias (mínimo 8, `alianza_provincial`)
+   ya da `leverage ≥ 1.29`; los sin bancas (sindicatos, empresas, el ministro) dependen solo de
+   `influence.streets` — `union_cgt`/`union_public` (0.6-0.65) caen igual arriba de 0.3 (concesión
+   plena); `biz_*`/`minister_economy` (0.0-0.1) caen debajo de 0.15 (rechazo directo). Verificado
+   corriendo `run(seed=7, policy=taylor, congress=True, negotiation=True)` 48 meses: 284 `NEGOTIATE`,
+   174 acuerdos, **0** con más de una ronda, **0** votos rechazados (46/46 aprobados). No se tocaron
+   `data/parties.json`/`data/actors/*.yaml` para forzar un caso (cambiar `influence.streets` de un
+   actor solo para que aparezca una demo no es una calibración real, y mover esos archivos infla
+   `config_hash` sin necesidad). El ejemplo de negociación a 2 rondas del reporte final se generó con
+   un actor sintético (`biz_agro` con `influence.streets = 0.2`, `personality.ambition = 0.8`) llamando
+   `negotiate_one` directo — documentado ahí como tal, no sale de una corrida real.
+8. **`in_exchange` por rol** (el ADR no lo tabula): `union → "no_strike"`, `governor`/`party →
+   "vote_yes"`, el resto → `"support"` genérico.
+9. **Umbral de aceptación**: `0.6 − 0.2·pragmatism` (↓ hasta 0.4 en `pragmatism=1`), `0.75` fijo si
+   `ambition > 0.7` (el ADR da ambos ajustes como si fueran independientes/aditivos, pero sumar ambos
+   podía superar 1.0 sin motivo del ADR para ese caso límite; se aplicó `ambition` como un override, no
+   como un sumando adicional — más simple y sigue moviéndose en el rango que pide el texto).
+10. **Ronda 2/3 del presidente**: siempre `COUNTER` a escala `0.75` (la otra escala de `{0.5, 0.75}`)
+    si el presupuesto alcanza, si no `REFUSE`. El ADR da las dos escalas sin decir en qué ronda va cada
+    una; `0.5` en la primera contraoferta y `0.75` si el actor la rechaza y contraoferta a su vez es la
+    lectura más natural de "escalar la oferta".
+11. **`GRANT_CONCESSION` NO ganó un parámetro `scale`.** La primera implementación de "Contraoferta 50
+    %" en `play` agregaba `scale: float = 1.0` a `GrantConcessionParams` (reusar la acción existente,
+    escalada) — se descartó: como `Action.params` se serializa completo en cada `ActionRecord`, el
+    nuevo campo (aún en `1.0` por default) aparece en **cualquier** `GRANT_CONCESSION` de **cualquier**
+    corrida con actores, rompiendo el requisito de bytes idénticos con los features nuevos apagados (el
+    camino viejo de `REQUEST_FUNDS`/`RuleBasedPresident.decide_grants` sigue usando esa acción sin
+    tocar). En su lugar, "Contraoferta 50 %" en `play` (`Game.set_grant_decisions`, parámetro nuevo
+    `negotiation_decisions`) aplica la mitad del `policy_bump`/`fiscal_cost_pct_gdp` **directo** a
+    `sim.pending_terms` (fuera del catálogo de `Action` — no hay una acción "conceder a medias" en ADR
+    003) más la mitad del `+8` de relación de un acuerdo exitoso (`+5`, ver Nota de implementación de
+    `set_grant_decisions`); como no genera un `GRANT_CONCESSION`, `resolve_pending_requests` igual
+    aplica el `−1` de "pedido no concedido íntegro" — simplificación aceptada, documentada en el
+    docstring del método.
+12. **Negociación multironda en `play` (presidente humano) no corre.** El protocolo de 3 rondas del
+    ADR asume que ambas partes (presidente, actor) deciden en el mismo turno; un humano no puede
+    negociar de forma síncrona dentro de un `advance_month()` ya en curso. Se resolvió con la misma
+    regla que ya distingue `run` de `play` en Fase 3 (`sim.president_rule is not None`, `True` solo con
+    presidente por reglas): con un humano, `NEGOTIATE` sigue el camino de un mes de desfasaje
+    (`engine.pending_requests`), con el dilema "Conceder / Contraoferta 50 % / Rechazar" reemplazando
+    "Conceder/Rechazar" (punto 11). `Game.new`/`Simulation.negotiation_enabled` en `play` queda en
+    `True` por default pero, en la práctica, solo habilita esa tercera opción del dilema — el protocolo
+    de `engine/negotiation.py` en sí nunca corre con un humano al mando.
+13. **`ActorDecision.negotiation_reply`/`counter_concession` (deliverable 4), alcance mínimo.** Un
+    `LLMActor` guarda la última respuesta declarada (`self.last_negotiation_reply`, efecto de lado,
+    mismo patrón que `last_score`/`last_trace`); `negotiate_one` la usa TAL CUAL en la ronda 1 si está
+    presente (`decision_actor` es un parámetro nuevo, opcional). No hay una segunda llamada al LLM para
+    las rondas 2/3: si el actor contraoferta o el modelo no declaró nada, cae a la fórmula por reglas,
+    igual que un `RuleBasedActor` — construir un segundo prompt de negociación completo (con su propio
+    `ai/prompts.py`) es la otra mitad de trabajo que pide ADR 004 para esto y no entra en el alcance de
+    este commit. `FakeBackend(policy="rules")` no declara `negotiation_reply` (su payload viene de
+    `_actions_to_decision_payload`, que no lo conoce): cae al mismo `None` que un `RuleBasedActor`, así
+    que **"`fake:rules` reproduce `rules`" sigue valiendo con Congreso/negociación activos** — verificado
+    con `tests/test_congress_negotiation.py::test_fake_rules_matches_rules_with_congress_and_negotiation`
+    y a mano contra 48 meses con `policy=taylor` (acciones, `vote_records` idénticos byte a byte).
+
+### Orden de turno y compatibilidad
+
+14. **`check_actor_compliance` (`broken_by_actor`) corre después de `apply_consequences`, antes del
+    voto del Congreso.** El ADR pone "cumplimiento de acuerdos" en el paso 10 (después de la economía),
+    pero un acuerdo roto por el actor este mismo mes no debería seguir aportando `concession_bonus_p` a
+    *este* voto — se adelantó el chequeo de incumplimiento del actor (no el del gobierno, que sigue
+    atado al resultado del voto) a antes del paso 6, y se documenta acá en vez de tocar la numeración
+    del ADR.
+15. **Golden hash de "features apagados = bytes idénticos".** Se corrió `run(seed=7, policy=constant)`
+    y `run(seed=42, policy=taylor)`, 48 meses, `actors_enabled=True`, contra el HEAD anterior a este
+    commit (`bc3a3b2`, sin `congress`/`negotiation` en el código), con `config_hash` reemplazado por un
+    placeholder antes de hashear (mismo precedente que ADR 003 §11 punto 6/REVIEW_001 hallazgo #8: tocar
+    `data/country.json`/`data/parties.json` — acá para agregar `features.congress`/`negotiation` y
+    `discipline` — cambia `config_hash` inevitablemente, no el resto del JSONL). Los hashes SHA-256
+    quedan como constantes en `tests/test_congress_negotiation.py::
+    test_features_off_matches_pre_adr005_golden_hash`; se corrieron de nuevo con el código de este
+    commit y `congress_enabled=False, negotiation_enabled=False` y coinciden byte a byte.
+16. **`data/parties.json.discipline`** (FF 0.7, UR 0.8, PS 0.6, ML 0.9, AP 0.4) tal cual los da el
+    encargo; `Party.discipline` en `world/config.py` con default `1.0` (bloque perfecto) para cualquier
+    `Party` de test que no lo declare.
+
+### Archivos nuevos/tocados
+
+`engine/congress.py`, `engine/negotiation.py`, `engine/emergence.py` (nuevos); `engine/simulation.py`
+(orden de turno, `Bill`/voto, `congress_support` derivado, `last_effective_policy`), `engine/
+scheduler.py` (negociación + cumplimiento del actor dentro de `run_actor_turn`), `engine/game.py`
+(`set_grant_decisions` con "Contraoferta 50 %"), `engine/narrate.py`/`cli.py` (`vote`/`negotiation` en
+`narrate`, comando `emergence`, flags `--congress`/`--negotiation` de `run`), `actors/rule_based.py`
+(`electoral_pressure_raw`), `actors/llm_based.py`/`ai/schemas.py` (deliverable 4), `world/config.py`
+(`Party.discipline`, `features.congress`/`negotiation`), `data/country.json`, `data/parties.json`.
+`actors/president_rules.py` **no se tocó**: `RuleBasedPresident.decide_grants` sigue siendo el camino
+de `REQUEST_FUNDS` y el fallback completo de `NEGOTIATE` con `features.negotiation=False`.

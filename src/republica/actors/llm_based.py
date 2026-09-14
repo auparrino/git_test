@@ -61,6 +61,14 @@ class LLMActor:
         #: `actions_denied`/`consequences` todavia sin completar (eso solo
         #: se sabe despues de `authorize_all`/`apply_consequences`).
         self.last_trace: DecisionTrace | None = None
+        #: `ActorDecision.negotiation_reply`/`counter_concession` de la
+        #: ultima llamada (ADR 005 secc. 2/deliverable 4), leidos por
+        #: `engine/negotiation.py` si este actor pidio `NEGOTIATE` este mes:
+        #: `None` (default, o si `decide()` nunca corrio -- rol sin
+        #: propuesta, parseo fallido, etc.) hace que la negociacion caiga a
+        #: la formula de aceptacion por reglas, igual que un `RuleBasedActor`.
+        self.last_negotiation_reply: str | None = None
+        self.last_counter_concession: str | None = None
 
     @property
     def brain_name(self) -> str:
@@ -112,6 +120,11 @@ class LLMActor:
             ]
         else:
             actions = to_actions(decision, actor)
+
+        self.last_negotiation_reply = decision.negotiation_reply if decision else None
+        self.last_counter_concession = (
+            decision.counter_concession.value if decision and decision.counter_concession else None
+        )
 
         self.last_trace = DecisionTrace(
             run_id="",  # lo completa engine/scheduler.py (conoce el run_id de la corrida)

@@ -7,7 +7,8 @@
     "social": 0.2,
     "in_government": true,
     "is_ally": false,
-    "coalition_weight": 1.0
+    "coalition_weight": 1.0,
+    "discipline": 0.7
   },
   {
     "id": "union_republicana",
@@ -17,7 +18,8 @@
     "social": 0.1,
     "in_government": false,
     "is_ally": false,
-    "coalition_weight": 1.0
+    "coalition_weight": 1.0,
+    "discipline": 0.8
   },
   {
     "id": "partido_social",
@@ -27,7 +29,8 @@
     "social": 0.6,
     "in_government": false,
     "is_ally": false,
-    "coalition_weight": 1.0
+    "coalition_weight": 1.0,
+    "discipline": 0.6
   },
   {
     "id": "movimiento_libertad",
@@ -37,7 +40,8 @@
     "social": -0.2,
     "in_government": false,
     "is_ally": false,
-    "coalition_weight": 1.0
+    "coalition_weight": 1.0,
+    "discipline": 0.9
   },
   {
     "id": "alianza_provincial",
@@ -47,6 +51,7 @@
     "social": 0.0,
     "in_government": false,
     "is_ally": true,
-    "coalition_weight": 0.85
+    "coalition_weight": 0.85,
+    "discipline": 0.4
   }
 ]

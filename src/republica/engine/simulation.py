@@ -16,6 +16,13 @@ from republica.actors.sheet import ActorSheet
 from republica.ai.brains import DEFAULT_BRAIN
 from republica.ai.tracing import DecisionTrace
 from republica.engine.actions import Action
+from republica.engine.congress import Bill, VoteRecord, derive_congress_support, requires_law
+from republica.engine.congress import vote as congress_vote
+from republica.engine.negotiation import (
+    NegotiationRecord,
+    apply_execution_results,
+    sum_queue_delta,
+)
 from republica.engine.policy import ConstantPolicy, PolicyRule
 from republica.engine.scheduler import ActionRecord, ActorEngine, build_actor_engine, run_actor_turn
 from republica.world.config import Country, load_country
@@ -82,6 +89,12 @@ class History:
     #: `to_jsonl()` sigue produciendo el mismo texto que antes de ADR 004,
     #: igual que ya garantizaba ADR 003 secc. 11 punto 6 para `action_records`.
     trace_records: list[DecisionTrace] = field(default_factory=list)
+    #: `VoteRecord`/`NegotiationRecord` (ADR 005 secc. 1/2, `kind: "vote"`/
+    #: `"negotiation"`), vacios con `features.congress`/`features.negotiation`
+    #: apagados (mismo patron que `action_records`/`trace_records`: con
+    #: ambos vacios, `to_jsonl()` produce el mismo texto que antes de ADR 005).
+    vote_records: list[VoteRecord] = field(default_factory=list)
+    negotiation_records: list[NegotiationRecord] = field(default_factory=list)
 
     def to_jsonl(self) -> str:
         by_month: dict[int, list[Any]] = {}
@@ -90,6 +103,12 @@ class History:
         traces_by_month: dict[int, list[DecisionTrace]] = {}
         for trace in self.trace_records:
             traces_by_month.setdefault(trace.month, []).append(trace)
+        negotiations_by_month: dict[int, list[NegotiationRecord]] = {}
+        for neg in self.negotiation_records:
+            negotiations_by_month.setdefault(neg.month, []).append(neg)
+        votes_by_month: dict[int, list[VoteRecord]] = {}
+        for v in self.vote_records:
+            votes_by_month.setdefault(v.month, []).append(v)
 
         lines = []
         for r in self.records:
@@ -98,6 +117,10 @@ class History:
                 lines.append(json.dumps(action_rec.to_dict(), ensure_ascii=False))
             for trace in traces_by_month.get(r.month_index, []):
                 lines.append(json.dumps(trace.to_dict(), ensure_ascii=False))
+            for neg in negotiations_by_month.get(r.month_index, []):
+                lines.append(json.dumps(neg.to_dict(), ensure_ascii=False))
+            for v in votes_by_month.get(r.month_index, []):
+                lines.append(json.dumps(v.to_dict(), ensure_ascii=False))
         lines.append(
             json.dumps(
                 {"outcome": self.outcome, "seed": self.seed, "config_hash": self.config_hash},
@@ -114,6 +137,8 @@ class History:
             "config_hash": self.config_hash,
             "action_records": [a.to_dict() for a in self.action_records],
             "trace_records": [t.to_dict() for t in self.trace_records],
+            "vote_records": [v.to_dict() for v in self.vote_records],
+            "negotiation_records": [n.to_dict() for n in self.negotiation_records],
         }
 
 
@@ -166,6 +191,23 @@ class Simulation:
     #: mes igual que `action_records`; vacio con el `default_brain`
     #: `"rules"` (comportamiento identico a antes de ADR 004).
     trace_records: list[DecisionTrace] = field(default_factory=list)
+    #: `VoteRecord`/`NegotiationRecord` (ADR 005), acumulados igual que
+    #: `action_records`; vacios con `features.congress`/`features.negotiation`
+    #: apagados.
+    vote_records: list[VoteRecord] = field(default_factory=list)
+    negotiation_records: list[NegotiationRecord] = field(default_factory=list)
+    #: `Policy` efectivamente vigente el mes pasado (post-bump de concesiones
+    #: Y post-veto de Congreso, ADR 005 secc. 1.3): distinta de `last_policy`
+    #: (la que *propuso* la regla/el jugador, pre-bump/pre-veto, usada para
+    #: calcular la `PolicyProposal` de este mes). Sirve para revertir un
+    #: instrumento al valor del mes pasado cuando el Congreso rechaza el
+    #: `Bill` que lo tocaba (ver `advance_month`).
+    last_effective_policy: Policy | None = None
+    #: `features.congress`/`features.negotiation` resueltos para esta
+    #: corrida (ADR 005): copiados de `Country.features` al construir la
+    #: `Simulation` (ver `new_simulation`), no se releen mes a mes.
+    congress_enabled: bool = False
+    negotiation_enabled: bool = False
 
 
 def new_simulation(
@@ -182,6 +224,8 @@ def new_simulation(
     default_brain: str = DEFAULT_BRAIN,
     llm_temperature: float = 0.4,
     llm_cache_dir: str | None = None,
+    congress_enabled: bool = False,
+    negotiation_enabled: bool = False,
 ) -> Simulation:
     """Construye una `Simulation` nueva sin correrla (uso interactivo, Fase 2:
     ver `engine/game.py`, que llama `advance_month` mes a mes).
@@ -196,7 +240,12 @@ def new_simulation(
     `brain_map`/`default_brain`/`llm_temperature`/`llm_cache_dir` (ADR 004
     secc. 7) solo importan si `actors_enabled`: que cerebro usa cada actor
     (default `"rules"` para todos, comportamiento identico a antes de ADR
-    004) y los parametros de los cerebros LLM."""
+    004) y los parametros de los cerebros LLM.
+
+    `congress_enabled`/`negotiation_enabled` (ADR 005, default `False` a
+    nivel de funcion, mismo criterio que `actors_enabled`: quien resuelve
+    `country.features` es la CLI, no esta funcion) solo tienen efecto si
+    `actors_enabled` tambien lo esta."""
     country = country or load_country()
     catalog = ShockCatalog(build_catalog(country.shocks))
     resolved_policy_rule = policy_rule or ConstantPolicy(country.default_policy)
@@ -232,6 +281,9 @@ def new_simulation(
         actor_engine=actor_engine,
         president_rule=president_rule,
         last_policy=country.default_policy.model_copy(),
+        last_effective_policy=country.default_policy.model_copy(),
+        congress_enabled=congress_enabled and actors_enabled,
+        negotiation_enabled=negotiation_enabled and actors_enabled,
     )
 
 
@@ -291,6 +343,14 @@ def advance_month(sim: Simulation) -> MonthRecord:
     # perceptions -> decide -> authorize -> consequences (pasos 3-6).
     raw_policy = sim.policy_rule.decide(sim.state, month)
     policy = raw_policy
+    #: Eventos de Congreso/negociacion de este mes (ADR 005: `agreement_broken`
+    #: y afines, "para memoria de Fase 6"), sumados a `MonthRecord.events`
+    #: (paso 8/11) mas abajo. Vacio si `actors_enabled` esta apagado.
+    agreement_events: list[str] = []
+    #: Igual que en ADR 003 secc. 11 punto 7: placeholder de elecciones.
+    # Se calcula siempre (no solo con actores) porque `derive_congress_support`
+    # (mas abajo) tambien la necesita.
+    months_to_election = max(country.months - month + 1, 0)
     if sim.actors_enabled:
         assert sim.actor_engine is not None
         # `policy` (lo que efectivamente rige este mes) le suma a
@@ -323,11 +383,43 @@ def advance_month(sim: Simulation) -> MonthRecord:
         # se disparaba porque `corruption_scandal` dura 1 mes).
         active_shock_ids = sorted(set(sim.active_shocks) | set(new_ids))
         recent_events = sim.records[-1].events if sim.records else []
-        # ADR 003 no define elecciones (Fase 6): se usa `months_left` de
-        # SPEC_v0.2_play como placeholder (ver Notas de implementacion).
-        months_to_election = max(country.months - month + 1, 0)
 
-        action_records, actor_pending = run_actor_turn(
+        # ADR 005 secc. 1: parte del `Bill` que viene de la propuesta del mes
+        # (deltas de instrumentos que requieren ley) mas la que viene de
+        # concesiones de negociacion ya acordadas y todavia no ejecutadas
+        # (`pre_queue_agreements`, tomada ANTES de correr las negociaciones
+        # de este mes: una concesion acordada este mes recien puede votarse
+        # el mes que viene, ver Notas de implementacion). Ambas gateadas por
+        # `congress_enabled`: sin Congreso, ninguna concesion "requiere ley"
+        # (`negotiation.negotiate_one` decide `law_required=False` siempre),
+        # asi que `pre_queue_agreements` nunca tiene nada que aportar.
+        pre_queue_agreements = [
+            a
+            for a in sim.actor_engine.agreements
+            if a.status == "vigente" and a.law_required and not a.executed
+        ]
+        pre_queue_delta = (
+            sum_queue_delta(pre_queue_agreements, sim.actor_engine.concessions)
+            if sim.congress_enabled
+            else {}
+        )
+        proposal_law_delta = requires_law(proposal.delta) if sim.congress_enabled else {}
+        bill_delta = dict(pre_queue_delta)
+        for field_name, value in proposal_law_delta.items():
+            bill_delta[field_name] = bill_delta.get(field_name, 0.0) + value
+        bill = (
+            Bill(id=f"bill_{month}", month=month, policy_delta=bill_delta) if bill_delta else None
+        )
+
+        # ADR 005 secc. 2: el protocolo de negociacion multironda solo corre
+        # con un presidente por reglas (`run`): con un humano jugando
+        # (`play`), una negociacion sincronica dentro del mismo turno no es
+        # viable en una CLI, asi que `NEGOTIATE` sigue el camino de un mes de
+        # desfasaje (`engine.pending_requests` + `Game.set_grant_decisions`,
+        # con la opcion "Contraoferta 50%" agregada, ver `engine/game.py` y
+        # Notas de implementacion).
+        negotiation_enabled = sim.negotiation_enabled and sim.president_rule is not None
+        action_records, actor_pending, negotiation_records = run_actor_turn(
             sim.actor_engine,
             country,
             sim.state,
@@ -340,9 +432,13 @@ def advance_month(sim: Simulation) -> MonthRecord:
             proposal,
             grants,
             date=date,
+            negotiation_enabled=negotiation_enabled,
+            congress_enabled=sim.congress_enabled,
         )
         sim.action_records.extend(action_records)
         sim.trace_records.extend(sim.actor_engine.last_traces)
+        sim.negotiation_records.extend(negotiation_records)
+        agreement_events.extend(sim.actor_engine.last_compliance_events)
         # `actor_pending` (shock_*/policy_*) se guarda tal cual en
         # `sim.pending_terms`: el mismo split policy_/shock_* de arriba lo
         # procesa el mes que viene, al principio de `advance_month` (misma
@@ -350,6 +446,50 @@ def advance_month(sim: Simulation) -> MonthRecord:
         for name, value in actor_pending.items():
             sim.pending_terms[name] = sim.pending_terms.get(name, 0.0) + value
         sim.last_policy = raw_policy.model_copy()
+
+        if bill is not None:
+            assert sim.congress_enabled
+            allowed_actions_this_month = [ar for ar in action_records if ar.authorized]
+            vigente_agreements = [a for a in sim.actor_engine.agreements if a.status == "vigente"]
+            vote_record = congress_vote(
+                bill,
+                country.parties,
+                sim.actor_engine.actors,
+                allowed_actions_this_month,
+                sim.state,
+                sim.actor_engine.relationships,
+                vigente_agreements,
+                months_to_election,
+                sim.actor_engine.congress_rng,
+            )
+            sim.vote_records.append(vote_record)
+            if not vote_record.passed:
+                # ADR 005 secc. 1.3: la parte legislativa del delta no se
+                # aplica -- se revierte al valor efectivamente vigente el mes
+                # pasado (no al `raw_policy` de este mes) -- y el sistema
+                # "funciono": `approval -1`, `institutional_confidence +0.5`,
+                # diferido al mes que viene (misma via que toda consecuencia).
+                base = sim.last_effective_policy or country.default_policy
+                reverted = {
+                    field_name: getattr(base, field_name) for field_name in bill.policy_delta
+                }
+                policy = policy.model_copy(update=reverted)
+                sim.pending_terms["shock_approval"] = (
+                    sim.pending_terms.get("shock_approval", 0.0) - 1.0
+                )
+                sim.pending_terms["shock_conf"] = sim.pending_terms.get("shock_conf", 0.0) + 0.5
+            exec_pending, exec_events = apply_execution_results(
+                sim.actor_engine,
+                vote_record.passed,
+                pre_queue_agreements,
+                sim.actor_engine.concessions,
+                month,
+            )
+            for name, value in exec_pending.items():
+                sim.pending_terms[name] = sim.pending_terms.get(name, 0.0) + value
+            agreement_events.extend(exec_events)
+
+    sim.last_effective_policy = policy.model_copy()
 
     # 4. economia (4.1 -> 4.8)
     econ_state, aux = step_economy(
@@ -370,11 +510,28 @@ def advance_month(sim: Simulation) -> MonthRecord:
         sim.state, soc_state, aux.demand_gap, country.coalition_seats, agg, coeff
     )
 
+    # 6.bis Congreso: `congress_support` derivado (ADR 005 secc. 1.3), en vez
+    # de la formula de v0.1 (`step_politics` arriba, sin tocar: sigue siendo
+    # el fallback con `features.congress = False`).
+    if sim.actors_enabled and sim.congress_enabled:
+        assert sim.actor_engine is not None
+        vigente_agreements = [a for a in sim.actor_engine.agreements if a.status == "vigente"]
+        derived_support = derive_congress_support(
+            country.parties,
+            sim.actor_engine.actors,
+            full_state,
+            sim.actor_engine.relationships,
+            vigente_agreements,
+            months_to_election,
+            sim.actor_engine.congress_rng,
+        )
+        full_state = full_state.model_copy(update={"congress_support": derived_support})
+
     # 7. clamp
     clamped, overflow = clamp_state(full_state, country.ranges)
 
     # 8. eventos endogenos y fin de partida
-    events: list[str] = []
+    events: list[str] = list(agreement_events)
     clamped, pending, dev_event = check_forced_devaluation(
         clamped, month, country.terminal, sim.tracker
     )
@@ -432,6 +589,8 @@ def run(
     default_brain: str = DEFAULT_BRAIN,
     llm_temperature: float = 0.4,
     llm_cache_dir: str | None = None,
+    congress_enabled: bool = False,
+    negotiation_enabled: bool = False,
 ) -> History:
     """Corre `months` meses (o hasta un fin de partida temprano) y devuelve
     la `History`.
@@ -446,7 +605,12 @@ def run(
 
     `brain_map`/`default_brain`/`llm_temperature`/`llm_cache_dir` (ADR 004
     secc. 7): idem `new_simulation`, default `"rules"` para todos (cero LLM,
-    corrida identica a antes de ADR 004)."""
+    corrida identica a antes de ADR 004).
+
+    `congress_enabled`/`negotiation_enabled` (ADR 005): default `False` a
+    nivel de funcion, mismo criterio que `actors_enabled` de arriba;
+    `republica run` los activa por defecto via `country.features`
+    (`--no-congress`/`--no-negotiation` los apagan)."""
     sim = new_simulation(
         seed,
         policy_rule,
@@ -461,6 +625,8 @@ def run(
         default_brain=default_brain,
         llm_temperature=llm_temperature,
         llm_cache_dir=llm_cache_dir,
+        congress_enabled=congress_enabled,
+        negotiation_enabled=negotiation_enabled,
     )
     sim.country = sim.country.model_copy(update={"months": months})
     for _ in range(months):
@@ -474,4 +640,6 @@ def run(
         config_hash=sim.country.config_hash,
         action_records=sim.action_records,
         trace_records=sim.trace_records,
+        vote_records=sim.vote_records,
+        negotiation_records=sim.negotiation_records,
     )

@@ -47,6 +47,19 @@ class ActorDecision(BaseModel):
     requested_concession: ConcessionType | None = None
     confidence: float = Field(ge=0.0, le=1.0)
     reasoning: str = Field(default="", max_length=600)
+    #: ADR 005 secc. 2/deliverable 4: como responderia el actor a un
+    #: `COUNTER` del presidente sobre SU propio pedido de este mes (mismo
+    #: turno: el LLM ya sabe que concesion pidio, asi que puede anticipar su
+    #: respuesta a una contraoferta sin una segunda llamada). `None` (no
+    #: declarado) dice "sin preferencia": `engine/negotiation.py` cae a la
+    #: formula de aceptacion por reglas (ADR 005 secc. 2), igual que para
+    #: cualquier `RuleBasedActor` -- ver Notas de implementacion (alcance
+    #: minimo: no hay una segunda ronda de prompts al LLM todavia).
+    negotiation_reply: Literal["accept", "counter", "walk_away"] | None = None
+    #: Concesion alternativa si `negotiation_reply == "counter"` (ADR 005
+    #: secc. 2: "COUNTER(concession'')"). `None` = mantiene la misma
+    #: `requested_concession`.
+    counter_concession: ConcessionType | None = None
 
 
 #: `position` -> `stance` de `PUBLIC_STATEMENT` (`support|oppose|neutral`,

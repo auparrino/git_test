@@ -24,6 +24,12 @@ from republica.engine.consequences import (
     load_consequences,
     resolve_pending_requests,
 )
+from republica.engine.negotiation import (
+    Agreement,
+    NegotiationRecord,
+    check_actor_compliance,
+    run_month_negotiations,
+)
 from republica.engine.perception import PolicyProposal, build_perception, build_provinces_table
 from republica.engine.permissions import (
     Allowed,
@@ -41,7 +47,11 @@ from republica.world.events import ShockAggregate
 
 #: Tipos de accion que generan un pedido pendiente para el mes siguiente
 #: (ADR 003 secc. 6/secc. 7: "GRANT_CONCESSION a pedidos del mes anterior").
-REQUEST_ACTION_TYPES = (ActionType.REQUEST_FUNDS, ActionType.NEGOTIATE)
+#: `REQUEST_FUNDS` sigue este camino siempre (ADR 005 no lo toca: solo
+#: reemplaza el `NEGOTIATE` simple de Fase 3 por el protocolo de
+#: `engine/negotiation.py`, ver `run_actor_turn`); `NEGOTIATE` solo cae aca
+#: cuando `features.negotiation = False` (agregado dinamicamente mas abajo).
+REQUEST_ACTION_TYPES = (ActionType.REQUEST_FUNDS,)
 
 _ZERO_AUX = Aux(
     r_real=0.0,
@@ -127,6 +137,22 @@ class ActorEngine:
     #: 004 secc. 6); vacio si todos los actores son por reglas (default:
     #: `RuleBasedActor` no produce trazas, no llama a ningun backend).
     last_traces: list[DecisionTrace] = field(default_factory=list)
+    #: Estado de negociacion (ADR 005 secc. 2), vacio/no usado con
+    #: `features.negotiation = False`: todos los `Agreement` alguna vez
+    #: formados (`vigente`/`honored`/`broken_*`, ver `engine/negotiation.py`)
+    #: y el enfriamiento de 6 meses por actor tras un `broken_by_actor`.
+    agreements: list[Agreement] = field(default_factory=list)
+    no_renegotiate_until: dict[str, int] = field(default_factory=dict)
+    #: `random.Random` propio del subsistema de Congreso (ADR 005 secc. 1.2:
+    #: el ruido del `rule_score`), sembrado igual que `actor_rngs` pero con
+    #: un id sintetico ("congress") para no compartir secuencia con ningun
+    #: actor real.
+    congress_rng: random.Random = field(default_factory=lambda: random.Random(0))
+    #: Eventos `agreement_broken:*:actor` de este mes (`check_actor_compliance`,
+    #: ADR 005 secc. 2): efecto de lado leido por `engine/simulation.py`
+    #: (mismo patron que `last_score`/`last_trace`) para sumarlos a
+    #: `MonthRecord.events`.
+    last_compliance_events: list[str] = field(default_factory=list)
 
 
 def build_actor_engine(
@@ -175,6 +201,7 @@ def build_actor_engine(
         consequence_coeffs=load_consequences(),
         concessions=load_concessions(),
         run_id=make_run_id(seed, country.config_hash),
+        congress_rng=make_actor_rng(seed, "congress"),
     )
 
 
@@ -192,13 +219,28 @@ def run_actor_turn(
     grant_actions: list[Action],
     *,
     date: str = "",
-) -> tuple[list[ActionRecord], dict[str, float]]:
-    """Pasos 3-6 de ADR 003 secc. 7. `grant_actions` son las
-    `GRANT_CONCESSION` ya decididas por el presidente (regla o humano) para
-    los pedidos del mes anterior (`engine.pending_requests`); se autorizan y
-    aplican junto con el resto. Devuelve los `ActionRecord` del mes (tambien
-    guardados en `engine.last_records`) y los `pending_terms`
-    (`shock_*`/`policy_*`) para el mes siguiente.
+    negotiation_enabled: bool = False,
+    congress_enabled: bool = False,
+) -> tuple[list[ActionRecord], dict[str, float], list[NegotiationRecord]]:
+    """Pasos 3-5 de ADR 003 secc. 7 (percepciones/decide/authorize/
+    consequences), mas la negociacion de ADR 005 secc. 2 (paso 4 de su orden
+    de turno, secc. 5): `grant_actions` son las `GRANT_CONCESSION` ya
+    decididas por el presidente (regla o humano) para los pedidos del mes
+    anterior (`engine.pending_requests`); se autorizan y aplican junto con
+    el resto. Devuelve los `ActionRecord` del mes (tambien guardados en
+    `engine.last_records`), los `pending_terms` (`shock_*`/`policy_*`) para
+    el mes siguiente, y los `NegotiationRecord` de este mes (vacio si
+    `negotiation_enabled=False`).
+
+    `negotiation_enabled`/`congress_enabled` (ADR 005, default `False` a
+    nivel de funcion para no romper llamadores existentes que no los piden:
+    ver `engine/simulation.py`, que los resuelve desde `country.features`):
+    con `negotiation_enabled=False`, `NEGOTIATE` sigue el camino simple de
+    Fase 3 (queda en `engine.pending_requests`, `RuleBasedPresident.
+    decide_grants` lo resuelve el mes que viene). `congress_enabled` solo
+    afecta si una concesion otorgada por negociacion requiere ley (ADR 005
+    secc. 1.1): sin Congreso, se ejecuta directo (sin votacion), igual que
+    Fase 3.
 
     `date` (hallazgo #12 de REVIEW_001, keyword-only con default `""` para
     no romper llamadores/tests que arman un `ActorEngine` suelto sin fecha
@@ -334,11 +376,35 @@ def run_actor_turn(
     for den in denied:
         records.append(_make_record(den, {}))
 
-    engine.pending_requests = [a.action for a in allowed if a.action.type in REQUEST_ACTION_TYPES]
+    request_types = (
+        REQUEST_ACTION_TYPES
+        if negotiation_enabled
+        else (*REQUEST_ACTION_TYPES, ActionType.NEGOTIATE)
+    )
+    engine.pending_requests = [a.action for a in allowed if a.action.type in request_types]
     # `engine.last_aux` se actualiza desde `advance_month` con el `Aux` real
     # de este mes (recien se conoce despues de `step_economy`), para que el
     # mes que viene las percepciones lo vean (ver Notas de implementacion).
     engine.last_records = records
+
+    # Negociacion (ADR 005 secc. 2, paso 4 del orden de turno secc. 5):
+    # corre sobre los `NEGOTIATE` autorizados este mes (con
+    # `negotiation_enabled=False`, ya quedaron en `engine.pending_requests`
+    # arriba, camino de Fase 3). El cumplimiento de un actor
+    # (`broken_by_actor`) se chequea aca tambien, con los `records` de este
+    # mismo mes ya completos (necesita saber si el actor voto en contra
+    # igual pese a tener un acuerdo vigente).
+    negotiation_records: list[NegotiationRecord] = []
+    if negotiation_enabled:
+        negotiate_requests = [a.action for a in allowed if a.action.type is ActionType.NEGOTIATE]
+        negotiation_records, negotiation_pending = run_month_negotiations(
+            engine, negotiate_requests, country, month, congress_enabled
+        )
+        for term, value in negotiation_pending.items():
+            pending_terms[term] = pending_terms.get(term, 0.0) + value
+        engine.last_compliance_events = check_actor_compliance(engine, records, month)
+    else:
+        engine.last_compliance_events = []
 
     # Completa cada `DecisionTrace` (ADR 004 secc. 6) con lo que solo se supo
     # despues de `authorize_all`/`apply_consequences`: cada actor con un
@@ -360,4 +426,4 @@ def run_actor_turn(
                     trace.actions_denied.append(rec_dict)
     engine.last_traces = traces
 
-    return records, pending_terms
+    return records, pending_terms, negotiation_records
