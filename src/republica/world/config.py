@@ -147,6 +147,7 @@ class Coefficients(BaseModel):
     e_w: float
     e_u: float
     e_pi: float
+    e_pi_low: float
     e_g: float
     e_t: float
     e_rev: float

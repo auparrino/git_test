@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from republica.world.config import Coefficients
 from republica.world.events import ShockAggregate
-from republica.world.state import WorldState, pos
+from republica.world.state import WorldState, clamp, pos
 
 
 def step_politics(
@@ -28,7 +28,8 @@ def step_politics(
         prev.government_approval
         + coeff.e_w * delta_wage_pct
         - coeff.e_u * delta_unemployment
-        - coeff.e_pi * (new.inflation - coeff.pi_ref)
+        - coeff.e_pi * pos(new.inflation - coeff.pi_ref)
+        + coeff.e_pi_low * (coeff.pi_ref - clamp(new.inflation, 0.0, coeff.pi_ref))
         + coeff.e_g * demand_gap
         - coeff.e_t * pos(new.social_tension - coeff.tension_threshold) / 10.0
         + coeff.e_rev * (coeff.approval_reversion - prev.government_approval)

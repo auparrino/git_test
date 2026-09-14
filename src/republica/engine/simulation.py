@@ -97,7 +97,7 @@ class Simulation:
     records: list[MonthRecord] = field(default_factory=list)
 
 
-def _new_simulation(
+def new_simulation(
     seed: int,
     policy_rule: PolicyRule | None,
     forced_shocks: dict[int, list[str]] | None,
@@ -105,6 +105,8 @@ def _new_simulation(
     shocks_enabled: bool,
     exogenous_noise: bool,
 ) -> Simulation:
+    """Construye una `Simulation` nueva sin correrla (uso interactivo, Fase 2:
+    ver `engine/game.py`, que llama `advance_month` mes a mes)."""
     country = country or load_country()
     catalog = ShockCatalog(build_catalog(country.shocks))
     return Simulation(
@@ -229,9 +231,7 @@ def run(
     exogenous_noise: bool = True,
 ) -> History:
     """Corre `months` meses (o hasta un fin de partida temprano) y devuelve la `History`."""
-    sim = _new_simulation(
-        seed, policy_rule, forced_shocks, country, shocks_enabled, exogenous_noise
-    )
+    sim = new_simulation(seed, policy_rule, forced_shocks, country, shocks_enabled, exogenous_noise)
     sim.country = sim.country.model_copy(update={"months": months})
     for _ in range(months):
         advance_month(sim)

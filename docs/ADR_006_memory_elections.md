@@ -23,10 +23,13 @@ El motor genera `MemoryEvent` para cada actor **afectado** (no todos ven todo):
 
 ```python
 class MemoryEvent(BaseModel):
-    turn: int; actor: str; about: str | None; kind: str
-    summary: str            # una frase, en español, con nombres propios
-    importance: float       # [0, 1]
-    sentiment: float        # [−1, 1]
+    turn: int
+    actor: str
+    about: str | None
+    kind: str
+    summary: str  # una frase, en español, con nombres propios
+    importance: float  # [0, 1]
+    sentiment: float  # [−1, 1]
 ```
 
 ### 1.2 Almacenamiento y recuperación

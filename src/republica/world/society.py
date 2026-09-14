@@ -26,6 +26,7 @@ def step_society(
         prev.consumer_confidence
         + coeff.s_adj * (cc_target - prev.consumer_confidence)
         + shocks.field_bumps.get("consumer_confidence", 0.0)
+        + shocks.term("shock_cc")
     )
 
     # 5.2 desigualdad (lenta)

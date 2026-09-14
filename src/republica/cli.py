@@ -14,6 +14,10 @@ from rich.table import Table
 
 from republica import __version__
 from republica.engine import narrate as narrate_mod
+from republica.engine.advisor import advise
+from republica.engine.dilemmas import compute_aux_vars, render_text
+from republica.engine.game import MONTHLY_CAPS, Game
+from republica.engine.narrate import EVENT_LABELS, annualized_inflation
 from republica.engine.policy import ConstantPolicy, PassivePolicy, PolicyRule, TaylorPolicy
 from republica.engine.simulation import History
 from republica.engine.simulation import run as run_simulation
@@ -171,6 +175,232 @@ def batch(
         p10, p50, p90 = _percentiles(values)
         metrics.add_row(label, f"{p10:.1f}", f"{p50:.1f}", f"{p90:.1f}")
     console.print(metrics)
+
+
+MESES_ES = (
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
+    "diciembre",
+)
+
+INSTRUMENT_LABELS = (
+    ("interest_rate_target", "Tasa de interes"),
+    ("tax_rate", "Impuestos (% PIB)"),
+    ("primary_spending", "Gasto primario (% PIB)"),
+    ("provincial_transfers", "Transferencias a provincias (% PIB)"),
+    ("fx_intervention", "Intervencion cambiaria (0-1)"),
+)
+
+
+def _month_label(country, month_index: int) -> str:
+    total = (country.start["month"] - 1) + (month_index - 1)
+    year = country.start["year"] + total // 12
+    month = total % 12
+    return f"{MESES_ES[month].upper()} {year}"
+
+
+def _play_arrow(delta: float) -> str:
+    if delta > 1e-9:
+        return "[green]▲[/green]"
+    if delta < -1e-9:
+        return "[red]▼[/red]"
+    return "→"
+
+
+def _render_dashboard(console: Console, game: Game, prev_state: dict | None) -> None:
+    state = game.sim.state.model_dump()
+    month = game.sim.month + 1
+
+    def d(key: str) -> float:
+        return state[key] - prev_state[key] if prev_state else 0.0
+
+    ann = annualized_inflation(state["inflation"])
+    console.rule(
+        f"[bold]{game.country.name.upper()} · {_month_label(game.country, month)} · "
+        f"mes {month}/{game.country.months}[/bold]"
+    )
+    console.print(
+        f"Inflacion {state['inflation']:.1f} % m/m ({ann:.0f} % anual) "
+        f"{_play_arrow(d('inflation'))}"
+    )
+    console.print(
+        f"Desempleo {state['unemployment']:.1f} % {_play_arrow(d('unemployment'))}   "
+        f"Reservas USD {state['reserves']:.0f} M {_play_arrow(d('reserves'))}"
+    )
+    console.print(
+        f"Aprobacion {state['government_approval']:.0f} {_play_arrow(d('government_approval'))}   "
+        f"Estabilidad {state['political_stability']:.0f} {_play_arrow(d('political_stability'))}"
+    )
+    console.print(
+        f"PIB (anual) {state['gdp_growth']:.1f} % {_play_arrow(d('gdp_growth'))}   "
+        f"Salario real {state['real_wage']:.1f} {_play_arrow(d('real_wage'))}"
+    )
+    console.print(
+        f"Deficit {-state['fiscal_balance']:.1f} % PIB   Deuda {state['public_debt']:.0f} % PIB"
+    )
+
+    if game.sim.active_shocks:
+        parts = []
+        for shock_id, astate in game.sim.active_shocks.items():
+            shock_def = game.sim.catalog.by_id[shock_id]
+            parts.append(f"⚠ {shock_def.name} (mes {astate.months_active} de {shock_def.duration})")
+        console.print("  ".join(parts))
+
+    if game.sim.records:
+        last_events = game.sim.records[-1].events
+        if last_events:
+            labels = [EVENT_LABELS.get(e.split(":")[0], e) for e in last_events]
+            console.print("● " + "  ".join(labels))
+
+    aux = compute_aux_vars(game.sim.state, month, game.country.months)
+    for adv in advise(game.sim.state, aux, game.policy, game.country):
+        console.print(f"[cyan]{adv.source}:[/cyan] {adv.text}")
+
+    for dilemma in game.pending_dilemmas:
+        console.print(f"[bold yellow]DILEMA: {dilemma.title}[/bold yellow]")
+        console.print(f"  {render_text(dilemma, game.sim.state, aux, month)}")
+        for opt in dilemma.options:
+            console.print(f"   {opt.key}) {opt.label}")
+
+
+def _collect_choices(game: Game, auto: bool) -> dict[str, str]:
+    choices: dict[str, str] = {}
+    for dilemma in game.pending_dilemmas:
+        keys = [o.key for o in dilemma.options]
+        if auto:
+            choices[dilemma.id] = keys[0]
+            console.print(f"[dim]--auto: {dilemma.id} -> {keys[0]}[/dim]")
+            continue
+        answer = typer.prompt(f"  {dilemma.title} [{'/'.join(keys)}]", default=keys[0])
+        answer = answer.strip().upper()
+        choices[dilemma.id] = answer if answer in keys else keys[0]
+    return choices
+
+
+def _prompt_instruments(game: Game) -> dict[str, float]:
+    edits: dict[str, float] = {}
+    for field_name, label in INSTRUMENT_LABELS:
+        current = getattr(game.policy, field_name)
+        cap = MONTHLY_CAPS.get(field_name)
+        cap_txt = f"cambio maximo +-{cap:g}" if cap is not None else "sin limite mensual"
+        raw = typer.prompt(f"{label} (actual {current:.2f}, {cap_txt})", default=f"{current:.2f}")
+        try:
+            value = float(raw)
+        except ValueError:
+            console.print(f"[red]Valor invalido para {label}, se mantiene {current:.2f}.[/red]")
+            continue
+        if abs(value - current) > 1e-9:
+            edits[field_name] = value
+    return edits
+
+
+def _menu(game: Game, save_path: Path, auto: bool) -> tuple[dict[str, float], bool]:
+    """Devuelve `(instrument_edits, quit)`. Cualquier respuesta que no sea
+    exactamente I/S/Q se toma como Enter (seguir)."""
+    if auto:
+        return {}, False
+    edits: dict[str, float] = {}
+    while True:
+        action = typer.prompt(
+            "[I] instrumentos  [S] guardar  [Q] salir  (Enter = continuar)", default=""
+        )
+        action = action.strip().upper()
+        if action == "I":
+            edits.update(_prompt_instruments(game))
+        elif action == "S":
+            game.save(save_path)
+            console.print(f"[green]Partida guardada en {save_path}[/green]")
+        elif action == "Q":
+            return edits, True
+        else:
+            return edits, False
+
+
+def _render_final(console: Console, game: Game) -> None:
+    console.rule("[bold]Fin de la partida[/bold]")
+    outcome = game.sim.outcome or "survived"
+    last = (
+        game.sim.records[-1].state if game.sim.records else game.country.initial_state.model_dump()
+    )
+    console.print(f"Resultado: [bold]{outcome}[/bold]")
+    console.print(f"Aprobacion final: {last['government_approval']:.1f}")
+    console.print(f"Inflacion anualizada final: {annualized_inflation(last['inflation']):.1f} %")
+    console.print(f"Desempleo final: {last['unemployment']:.1f} %")
+    console.print(f"Reservas finales: USD {last['reserves']:.0f} M")
+
+    impact = game.counterfactual_impact()
+    console.print(
+        "Impacto total vs. no hacer nada (Banco Central pasivo, misma semilla): "
+        f"{impact['approval_diff_final']:+.1f} pts de aprobacion"
+    )
+    if impact["top_decisions"]:
+        table = Table(title="Decisiones de mayor impacto (aprobacion a +3 meses vs. contrafactico)")
+        table.add_column("Mes", justify="right")
+        table.add_column("Dilema")
+        table.add_column("Opcion")
+        table.add_column("Delta aprobacion", justify="right")
+        for dec in impact["top_decisions"]:
+            table.add_row(
+                str(dec["month"]),
+                dec["dilemma_id"],
+                dec["option"],
+                f"{dec['approval_delta_3m']:+.1f}",
+            )
+        console.print(table)
+    else:
+        console.print("[dim]No hubo decisiones suficientes para medir impacto.[/dim]")
+
+
+@app.command()
+def play(
+    seed: Annotated[int, typer.Option(help="Semilla del generador aleatorio.")] = 7,
+    months: Annotated[int, typer.Option(help="Cantidad de meses a jugar.")] = 48,
+    load: Annotated[
+        Path | None, typer.Option("--load", help="Cargar una partida guardada.")
+    ] = None,
+    auto: Annotated[
+        bool,
+        typer.Option("--auto", help="Elige la primera opcion de cada dilema sin preguntar."),
+    ] = False,
+) -> None:
+    """Modo juego: sos el presidente (SPEC_v0.2_play.md)."""
+    if load is not None:
+        game = Game.load(load)
+        console.print(f"[green]Partida cargada desde {load}[/green]")
+    else:
+        game = Game.new(seed=seed, months=months)
+
+    save_path = Path(f"simulations/game_{game.seed}.json")
+    prev_state = game.sim.records[-1].state if game.sim.records else None
+
+    while game.sim.outcome is None and game.sim.month < game.country.months:
+        _render_dashboard(console, game, prev_state)
+        choices = _collect_choices(game, auto)
+        edits, quit_now = _menu(game, save_path, auto)
+        if quit_now:
+            game.save(save_path)
+            console.print(f"[yellow]Partida guardada en {save_path}. Hasta la proxima.[/yellow]")
+            return
+        record = game.step(choices, edits)
+        if game.clip_report:
+            for instrument, (requested, applied) in game.clip_report.items():
+                console.print(
+                    f"[dim]{instrument}: pedido {requested:+.1f}, aplicado {applied:+.1f} "
+                    "(tope mensual)[/dim]"
+                )
+        prev_state = record.state
+
+    game.save(save_path)
+    _render_final(console, game)
 
 
 if __name__ == "__main__":

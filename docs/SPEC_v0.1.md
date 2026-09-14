@@ -30,7 +30,7 @@ para poder ajustarlos sin tocar código.
 |---|---|---|---|---|---|
 | Economía | `gdp` | índice | 100.0 | [30, 400] | Nivel de actividad. Enero 2027 = 100. |
 | | `gdp_growth` | % anual | 1.5 | [−30, 30] | Crecimiento anualizado suavizado. |
-| | `inflation` | % mensual | 2.0 | [−2, 60] | Inflación m/m (2.0 ≈ 27 % anual). |
+| | `inflation` | % mensual | 2.0 | [−1, 60] | Inflación m/m (2.0 ≈ 27 % anual). |
 | | `unemployment` | % | 8.0 | [2, 40] | Desempleo. |
 | | `real_wage` | índice | 100.0 | [30, 200] | Salario real. |
 | | `interest_rate` | % anual | 30.0 | [0, 300] | Tasa de política. |
@@ -207,7 +207,7 @@ public_debt' = public_debt
 reserves' = reserves
           + k_tb   · (commodity_price − 100)            # k_tb   = 20   (USD M por punto)
           + k_w    · (world_demand − 100)               # k_w    = 10
-          + k_k    · r_gap                              # k_k    = 15   (carry)
+          + k_k    · clamp(r_gap, r_gap_min, r_gap_max)   # k_k = 15 (carry, saturado)
           − k_conf · pos(50 − institutional_confidence) # k_conf = 10
           − intervention_usd
           + shock_reserves
@@ -270,7 +270,8 @@ crime_perception' = crime + cr_adj·(crime_target − crime)   # cr_adj = 0.1
 approval' = approval
           + e_w  · Δreal_wage_pct                    # e_w  = 1.5   (Δ% del índice)
           − e_u  · Δunemployment                     # e_u  = 2.0
-          − e_pi · (inflation' − 2.0)                # e_pi = 0.8
+          − e_pi · pos(inflation' − 2.0)           # e_pi = 0.8 (castigo por inflación alta)
+          + e_pi_low · (2.0 − clamp(inflation', 0, 2)) # e_pi_low = 0.3 (premio acotado por desinflación; la deflación no premia)
           + e_g  · demand_gap                        # e_g  = 3.0
           − e_t  · pos(social_tension' − 50) / 10    # e_t  = 1.0
           + e_rev· (45 − approval)                   # e_rev = 0.03 (reversión lenta)

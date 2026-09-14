@@ -98,3 +98,57 @@ las decisiones desde el mes 0 (determinismo), lo que también sirve de test.
 - Un dilema con `cooldown 6` no reaparece antes de 6 meses; `once` aparece una vez.
 - `--load` reproduce exactamente el mismo estado que la partida original.
 - Los `policy_delta` respetan los rangos máximos por mes.
+
+## Notas de implementación (Fase 2)
+
+Ambigüedades y desviaciones resueltas al implementar `engine/dilemmas.py`, `engine/advisor.py`,
+`engine/game.py` y `republica play`:
+
+1. **`shock_cc` (nuevo término de motor).** El efecto `consumer_confidence` de una opción necesita
+   viajar por el mismo mecanismo `pending`/`shock_*` que todos los demás (para aplicarse recién el
+   mes siguiente, igual que `shock_pi`/`shock_conf` en `check_forced_devaluation`). El motor v0.1 solo
+   soportaba un bump *directo* de `consumer_confidence` vía `ShockAggregate.field_bumps` (para shocks
+   del catálogo, que se aplican el mismo mes que se sortean), sin un término acumulable equivalente.
+   Se agregó `shock_cc` en `world/society.py` (`consumer_confidence_new`, sumado igual que los demás
+   `shocks.term(...)`), en el mismo estilo que el resto de la sección 5.1. El resto de las claves de
+   `effects` (`approval`, `tension`, `protest`, `institutional_confidence`, `reserves`, `gdp`, `fx`,
+   `stability`, `inequality`, `fiscal`) se mapean 1:1 a términos `shock_*` que ya existían.
+2. **`new_simulation` pública.** Se renombró `simulation._new_simulation` a `simulation.new_simulation`
+   (sigue siendo la misma función; solo se le sacó el guion bajo) para que `engine/game.py::Game.new`
+   la reuse sin duplicar la construcción de `Simulation`, en vez de reimplementarla.
+3. **`instrument_edits` en el save.** El esquema de guardado del spec (`{seed, month, policy, flags,
+   cooldowns, history_path, decisions}`) no tiene dónde registrar los ajustes manuales de instrumentos
+   (`[I]`). Sin registrarlos, `--load` no podría reproducir una partida donde el jugador tocó un
+   instrumento a mano: la política final quedaría guardada, pero no el camino mes a mes que hace falta
+   para "re-ejecutar las decisiones desde el mes 0". Se agregó `instrument_edits: [{month, edits}]` al
+   JSON de guardado, además de (no en lugar de) `decisions`.
+4. **Historial JSONL del save.** "El historial se sigue escribiendo al JSONL de siempre": `Game.save`
+   escribe el historial completo al lado del save, con el mismo nombre pero extensión `.jsonl`
+   (`simulations/game_7.json` + `simulations/game_7.jsonl`), reusando `History.to_jsonl()` tal cual
+   (mismo formato que `republica run`/`narrate`).
+5. **Cooldown/`once` con un solo diccionario.** `evaluate_triggers` no recibe un parámetro aparte para
+   "ya apareció una vez": reusa `cooldowns` guardando `math.inf` como mes de última aparición cuando
+   `once` es verdadero, en vez de un mes finito. Como `month - inf` es `-inf`, la condición de cooldown
+   nunca se vuelve a cumplir. Esto también implica que el cooldown/`once` se consume solo para los
+   dilemas efectivamente mostrados (los 2 de mayor prioridad), no para los que dispararon pero no
+   entraron en el tope: esos siguen disponibles el mes que viene.
+6. **Topes de cambio mensual, combinados por instrumento.** La sección 1, paso 3 dice que cada ajuste
+   tiene un rango de cambio máximo por mes, sin aclarar qué pasa si un dilema y una edición manual
+   tocan el mismo instrumento el mismo mes. `Game.step` aplica primero todos los `policy_delta`/
+   `policy_set` de los dilemas elegidos y después la edición manual, y recién al final recorta el
+   cambio *neto* contra el valor con el que arrancó el mes (por instrumento, sumando todas las fuentes)
+   — no cada fuente por separado. `fx_intervention` no tiene tope mensual ("intervención libre"), pero
+   sí se recorta a su rango absoluto [0, 1], igual que el resto de los instrumentos a sus rangos de
+   `policy_ranges` (`world/config.py`), algo que el spec no pide explícitamente pero que evita partidas
+   con impuestos o tasas fuera de todo rango razonable.
+7. **`months_left`.** Se define como `country.months - month + 1` (`month` = el mes que se está por
+   jugar, 1-based), es decir, incluye el mes actual.
+8. **8 indicadores del tablero.** El mockup de la sección 1 muestra 9 valores pero solo 7 con flecha
+   (inflación, desempleo, reservas, aprobación, estabilidad, PIB, salario real); déficit y deuda se
+   muestran sin flecha, como contexto. `republica play` sigue el mockup literal en vez de forzar
+   exactamente 8 indicadores con flecha.
+9. **Elecciones/ediciones que no aplican, se ignoran.** Si `choices`/`instrument_edits` en `Game.step`
+   traen un id de dilema que no está entre los disparados ese mes, o no cambian nada, se ignoran en vez
+   de levantar una excepción — mantiene `Game.load` tolerante y el menú de la CLI simple (una
+   respuesta que no es exactamente A/B/C usa la primera opción; una que no es I/S/Q se toma como
+   Enter/continuar).

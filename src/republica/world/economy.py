@@ -166,7 +166,7 @@ def step_economy(
         state.reserves
         + coeff.k_tb * (exo_new.commodity_price - 100.0)
         + coeff.k_w * (exo_new.world_demand - 100.0)
-        + coeff.k_k * r_gap
+        + coeff.k_k * clamp(r_gap, coeff.r_gap_min, coeff.r_gap_max)
         - coeff.k_conf * pos(coeff.conf_neutral - state.institutional_confidence)
         - intervention_usd
         + shocks.term("shock_reserves")

@@ -141,3 +141,19 @@ Queda documentada una **trampa de inflación crónica**: en ~19 % de las corrida
 secuencia de shocks agota las reservas, hunde la confianza institucional y deja la inflación en
 5–14 % mensual con aprobación en 0 sin llegar al umbral de hiperinflación. Es un estado coherente
 (el BC pasivo no desinfla) y es el que el jugador tiene que evitar o revertir con Taylor y ajuste.
+
+## Tercera ronda (tras la primera partida automática de Fase 2)
+
+`play --auto` (siempre la opción A: ajuste fiscal, retenciones, tasa nominal fija en 30) terminaba
+con deflación de −2 % mensual, desempleo 17 % y **aprobación 78**. Incoherente. Causa: §5.6 premiaba
+linealmente la inflación por debajo de 2 % (`−e_pi·(π − 2)` con π = −2 da +3.2 puntos por mes), lo que
+tapaba el castigo por desempleo.
+
+Cambios:
+1. **Aprobación (forma de fórmula):** castigo `−e_pi·pos(π − 2)` y premio acotado
+   `+e_pi_low·(2 − clamp(π, 0, 2))` con `e_pi_low = 0.3`. Bajar la inflación de 2 a 0 vale +0.6/mes;
+   la deflación no suma nada.
+2. **Carry de reservas saturado:** `k_k · clamp(r_gap, −10, 30)` (antes sin saturar: con tasa real
+   de 54 % entraban USD 750 M/mes).
+3. **Piso de inflación mensual:** −1.0 (antes −2.0). Deflaciones del 22 % anual sostenidas no son
+   un estado que queramos representar en v0.1.
