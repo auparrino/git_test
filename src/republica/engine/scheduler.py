@@ -9,8 +9,11 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, field
 
+from republica.actors.llm_based import LLMActor
 from republica.actors.rule_based import RuleBasedActor, make_actor_rng
 from republica.actors.sheet import ActorSheet, load_actors
+from republica.ai.brains import DEFAULT_BRAIN, build_decision_actor
+from republica.ai.tracing import DecisionTrace, make_run_id
 from republica.engine.actions import Action, ActionType
 from republica.engine.consequences import (
     ConsequenceContext,
@@ -86,42 +89,74 @@ class ActionRecord:
         }
 
 
+#: Un actor "de decision" implementa `decide(perception, rng) ->
+#: list[Action]` (ADR 003 secc. 6 / ADR 004 secc. 1): o bien por reglas, o
+#: bien respaldado por un LLM (real u otro `FakeBackend`, ADR 004).
+DecisionActor = RuleBasedActor | LLMActor
+
+
 @dataclass
 class ActorEngine:
     """Estado persistente del subsistema de actores: construido una vez por
     partida/corrida y reusado mes a mes (los `random.Random` por actor y las
-    `Relationships` mutan con el tiempo; el resto es config cacheada)."""
+    `Relationships` mutan con el tiempo; el resto es config cacheada).
+
+    `decision_actors` (ADR 004 secc. 7, deliverable 6: "cada actor obtiene
+    el cerebro de la tabla") reemplaza al antiguo `rule_actors`: cada valor
+    es un `RuleBasedActor` o un `LLMActor` segun `brains.yaml`/`--brain`,
+    pero ambos comparten la misma interfaz `decide(perception, rng)` asi que
+    `run_actor_turn` no distingue el tipo."""
 
     actors: dict[str, ActorSheet]
-    rule_actors: dict[str, RuleBasedActor]
+    decision_actors: dict[str, DecisionActor]
     actor_rngs: dict[str, random.Random]
     relationships: Relationships
     governance: Governance
     permissions: dict
     consequence_coeffs: dict
     concessions: dict
+    run_id: str = ""
     cooldowns: dict[tuple[str, ActionType], int] = field(default_factory=dict)
     pending_requests: list[Action] = field(default_factory=list)
     last_aux: Aux = field(default_factory=lambda: _ZERO_AUX)
     last_records: list[ActionRecord] = field(default_factory=list)
+    #: `DecisionTrace` de los `LLMActor` que decidieron el ultimo mes (ADR
+    #: 004 secc. 6); vacio si todos los actores son por reglas (default:
+    #: `RuleBasedActor` no produce trazas, no llama a ningun backend).
+    last_traces: list[DecisionTrace] = field(default_factory=list)
 
 
 def build_actor_engine(
-    seed: int, country: Country, actors: dict[str, ActorSheet] | None = None
+    seed: int,
+    country: Country,
+    actors: dict[str, ActorSheet] | None = None,
+    *,
+    brain_map: dict[str, str] | None = None,
+    default_brain: str = DEFAULT_BRAIN,
+    llm_temperature: float = 0.4,
+    llm_cache_dir: str | None = None,
 ) -> ActorEngine:
     """Arma un `ActorEngine` nuevo: carga las 29 fichas (o las que se pasen,
-    para tests), un `RuleBasedActor` y un RNG propio por actor (ADR 003
-    secc. 7: `random.Random(hash(seed, actor_id))`, ver
+    para tests), un actor de decision por rol no-`president` y un RNG propio
+    por actor (ADR 003 secc. 7: `random.Random(hash(seed, actor_id))`, ver
     `rule_based.make_actor_rng`), y siembra `Relationships` desde las
-    fichas."""
+    fichas.
+
+    `brain_map`/`default_brain` (ADR 004 secc. 7, default `"rules"` para
+    todos -- cero LLM, comportamiento identico a antes de ADR 004): que
+    cerebro usa cada actor. `llm_temperature`/`llm_cache_dir` solo importan
+    para actores cuyo cerebro no sea `"rules"` (`ai/brains.py::
+    build_decision_actor`)."""
     actors = actors if actors is not None else load_actors()
-    rule_actors = {
-        actor_id: RuleBasedActor(
+    brain_map = brain_map or {}
+    decision_actors: dict[str, DecisionActor] = {
+        actor_id: build_decision_actor(
+            brain_map.get(actor_id, default_brain),
             sheet,
-            country.parties,
-            country.taylor,
-            country.structure.r_neutral,
-            country.policy_ranges["interest_rate_target"],
+            country,
+            seed=seed,
+            temperature=llm_temperature,
+            cache_dir=llm_cache_dir,
         )
         for actor_id, sheet in actors.items()
         if sheet.role != "president"
@@ -129,13 +164,14 @@ def build_actor_engine(
     actor_rngs = {actor_id: make_actor_rng(seed, actor_id) for actor_id in actors}
     return ActorEngine(
         actors=actors,
-        rule_actors=rule_actors,
+        decision_actors=decision_actors,
         actor_rngs=actor_rngs,
         relationships=Relationships.from_actors(actors),
         governance=load_governance(),
         permissions=load_permissions(),
         consequence_coeffs=load_consequences(),
         concessions=load_concessions(),
+        run_id=make_run_id(seed, country.config_hash),
     )
 
 
@@ -163,6 +199,7 @@ def run_actor_turn(
 
     all_actions: list[Action] = list(grant_actions)
     scores: dict[str, dict[str, float]] = {}
+    traces: list[DecisionTrace] = []
 
     for actor_id, sheet in engine.actors.items():
         if sheet.role == "president":
@@ -180,10 +217,15 @@ def run_actor_turn(
             country.parties,
             policy=policy,
         )
-        rule_actor = engine.rule_actors[actor_id]
-        actions = rule_actor.decide(perception, engine.actor_rngs[actor_id])
-        if rule_actor.last_score is not None:
-            scores[actor_id] = rule_actor.last_score.as_dict()
+        decision_actor = engine.decision_actors[actor_id]
+        actions = decision_actor.decide(perception, engine.actor_rngs[actor_id])
+        last_score = getattr(decision_actor, "last_score", None)
+        if last_score is not None:
+            scores[actor_id] = last_score.as_dict()
+        last_trace = getattr(decision_actor, "last_trace", None)
+        if last_trace is not None:
+            last_trace.run_id = engine.run_id
+            traces.append(last_trace)
         all_actions.extend(actions)
 
     auth_ctx = AuthContext(
@@ -250,5 +292,25 @@ def run_actor_turn(
     # de este mes (recien se conoce despues de `step_economy`), para que el
     # mes que viene las percepciones lo vean (ver Notas de implementacion).
     engine.last_records = records
+
+    # Completa cada `DecisionTrace` (ADR 004 secc. 6) con lo que solo se supo
+    # despues de `authorize_all`/`apply_consequences`: cada actor con un
+    # `LLMActor` decide una sola vez por mes, asi que todos los
+    # `ActionRecord` de ese `actor_id` este mes vienen de esa unica llamada
+    # (ver `ai/tracing.py::DecisionTrace`).
+    if traces:
+        records_by_actor: dict[str, list[ActionRecord]] = {}
+        for rec in records:
+            records_by_actor.setdefault(rec.actor, []).append(rec)
+        for trace in traces:
+            for rec in records_by_actor.get(trace.actor_id, []):
+                rec_dict = rec.to_dict()
+                if rec.authorized:
+                    trace.actions_authorized.append(rec_dict)
+                    if rec.consequences:
+                        trace.consequences[rec.type] = rec.consequences
+                else:
+                    trace.actions_denied.append(rec_dict)
+    engine.last_traces = traces
 
     return records, pending_terms

@@ -1,0 +1,19 @@
+# Configuracion de cerebros de actor (ADR 004 secc. 7). `default` es el
+# cerebro de todo actor que no figure en `actors:`; en v0.4 el default es
+# "rules" (cero LLM, cero costo, cero dependencia de red): asi se comporta
+# `republica run`/`republica play` si no se pasa `--brain`/`--brains`.
+#
+# Specs validos: "rules" | "fake:rules" | "fake:malformed" |
+# "fake:unauthorized" | "llm:ollama:<modelo>" (ver `ai/brains.py`).
+default: rules
+
+# Ejemplo de mapeo por actor (comentado: en este entorno no hay Ollama para
+# correrlo). Para probarlo sin red, cambiar los valores a "fake:rules".
+actors: {}
+#   minister_economy: llm:ollama:qwen3:8b
+#   gov_norte: llm:ollama:qwen3:8b
+#   central_bank: llm:ollama:qwen3:8b
+
+llm:
+  temperature: 0.4
+  cache: simulations/cache/

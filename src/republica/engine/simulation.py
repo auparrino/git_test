@@ -13,6 +13,8 @@ from republica.actors.president_rules import (
     compute_policy_proposal,
 )
 from republica.actors.sheet import ActorSheet
+from republica.ai.brains import DEFAULT_BRAIN
+from republica.ai.tracing import DecisionTrace
 from republica.engine.actions import Action
 from republica.engine.policy import ConstantPolicy, PolicyRule
 from republica.engine.scheduler import ActionRecord, ActorEngine, build_actor_engine, run_actor_turn
@@ -74,17 +76,28 @@ class History:
     seed: int
     config_hash: str
     action_records: list[Any] = field(default_factory=list)
+    #: `DecisionTrace` de los actores IA (ADR 004 secc. 6), vacio si ningun
+    #: actor usa un cerebro `llm:*`/`fake:*` (`RuleBasedActor` no traza
+    #: nada): con `action_records` vacio Y `trace_records` vacio,
+    #: `to_jsonl()` sigue produciendo el mismo texto que antes de ADR 004,
+    #: igual que ya garantizaba ADR 003 secc. 11 punto 6 para `action_records`.
+    trace_records: list[DecisionTrace] = field(default_factory=list)
 
     def to_jsonl(self) -> str:
         by_month: dict[int, list[Any]] = {}
         for rec in self.action_records:
             by_month.setdefault(rec.month, []).append(rec)
+        traces_by_month: dict[int, list[DecisionTrace]] = {}
+        for trace in self.trace_records:
+            traces_by_month.setdefault(trace.month, []).append(trace)
 
         lines = []
         for r in self.records:
             lines.append(json.dumps(r.to_dict(), ensure_ascii=False))
             for action_rec in by_month.get(r.month_index, []):
                 lines.append(json.dumps(action_rec.to_dict(), ensure_ascii=False))
+            for trace in traces_by_month.get(r.month_index, []):
+                lines.append(json.dumps(trace.to_dict(), ensure_ascii=False))
         lines.append(
             json.dumps(
                 {"outcome": self.outcome, "seed": self.seed, "config_hash": self.config_hash},
@@ -100,6 +113,7 @@ class History:
             "seed": self.seed,
             "config_hash": self.config_hash,
             "action_records": [a.to_dict() for a in self.action_records],
+            "trace_records": [t.to_dict() for t in self.trace_records],
         }
 
 
@@ -135,6 +149,10 @@ class Simulation:
     pending_policy_delta: dict[str, float] = field(default_factory=dict)
     pending_grant_override: list[Action] | None = None
     action_records: list[ActionRecord] = field(default_factory=list)
+    #: `DecisionTrace` de los `LLMActor` (ADR 004 secc. 6), acumuladas mes a
+    #: mes igual que `action_records`; vacio con el `default_brain`
+    #: `"rules"` (comportamiento identico a antes de ADR 004).
+    trace_records: list[DecisionTrace] = field(default_factory=list)
 
 
 def new_simulation(
@@ -147,6 +165,10 @@ def new_simulation(
     actors_enabled: bool = False,
     actors: dict[str, ActorSheet] | None = None,
     rule_based_president: bool = False,
+    brain_map: dict[str, str] | None = None,
+    default_brain: str = DEFAULT_BRAIN,
+    llm_temperature: float = 0.4,
+    llm_cache_dir: str | None = None,
 ) -> Simulation:
     """Construye una `Simulation` nueva sin correrla (uso interactivo, Fase 2:
     ver `engine/game.py`, que llama `advance_month` mes a mes).
@@ -156,11 +178,28 @@ def new_simulation(
     o `actors` para tests) que corre `engine/scheduler.py::run_actor_turn`
     cada mes. `rule_based_president=True` (uso de `run`, no de `play`) hace
     que el presidente tambien sea por reglas: envuelve `policy_rule` en un
-    `RuleBasedPresident` que ademas concede pedidos pendientes."""
+    `RuleBasedPresident` que ademas concede pedidos pendientes.
+
+    `brain_map`/`default_brain`/`llm_temperature`/`llm_cache_dir` (ADR 004
+    secc. 7) solo importan si `actors_enabled`: que cerebro usa cada actor
+    (default `"rules"` para todos, comportamiento identico a antes de ADR
+    004) y los parametros de los cerebros LLM."""
     country = country or load_country()
     catalog = ShockCatalog(build_catalog(country.shocks))
     resolved_policy_rule = policy_rule or ConstantPolicy(country.default_policy)
-    actor_engine = build_actor_engine(seed, country, actors) if actors_enabled else None
+    actor_engine = (
+        build_actor_engine(
+            seed,
+            country,
+            actors,
+            brain_map=brain_map,
+            default_brain=default_brain,
+            llm_temperature=llm_temperature,
+            llm_cache_dir=llm_cache_dir,
+        )
+        if actors_enabled
+        else None
+    )
     president_rule = (
         RuleBasedPresident(policy_rule=resolved_policy_rule)
         if actors_enabled and rule_based_president
@@ -268,6 +307,7 @@ def advance_month(sim: Simulation) -> MonthRecord:
             grants,
         )
         sim.action_records.extend(action_records)
+        sim.trace_records.extend(sim.actor_engine.last_traces)
         # `actor_pending` (shock_*/policy_*) se guarda tal cual en
         # `sim.pending_terms`: el mismo split policy_/shock_* de arriba lo
         # procesa el mes que viene, al principio de `advance_month` (misma
@@ -353,6 +393,10 @@ def run(
     exogenous_noise: bool = True,
     actors_enabled: bool = False,
     actors: dict[str, ActorSheet] | None = None,
+    brain_map: dict[str, str] | None = None,
+    default_brain: str = DEFAULT_BRAIN,
+    llm_temperature: float = 0.4,
+    llm_cache_dir: str | None = None,
 ) -> History:
     """Corre `months` meses (o hasta un fin de partida temprano) y devuelve
     la `History`.
@@ -363,7 +407,11 @@ def run(
     proposito para no romper ningun llamador existente (los 46 tests de
     Fase 1/2 corren `run()`/`Game.new()` sin pedir actores); es
     `republica run` (la CLI) la que activa `features.actors` por defecto y
-    ofrece `--no-actors` para apagarlo (ver Notas de implementacion)."""
+    ofrece `--no-actors` para apagarlo (ver Notas de implementacion).
+
+    `brain_map`/`default_brain`/`llm_temperature`/`llm_cache_dir` (ADR 004
+    secc. 7): idem `new_simulation`, default `"rules"` para todos (cero LLM,
+    corrida identica a antes de ADR 004)."""
     sim = new_simulation(
         seed,
         policy_rule,
@@ -374,6 +422,10 @@ def run(
         actors_enabled=actors_enabled,
         actors=actors,
         rule_based_president=actors_enabled,
+        brain_map=brain_map,
+        default_brain=default_brain,
+        llm_temperature=llm_temperature,
+        llm_cache_dir=llm_cache_dir,
     )
     sim.country = sim.country.model_copy(update={"months": months})
     for _ in range(months):
@@ -386,4 +438,5 @@ def run(
         seed=seed,
         config_hash=sim.country.config_hash,
         action_records=sim.action_records,
+        trace_records=sim.trace_records,
     )

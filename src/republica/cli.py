@@ -14,6 +14,7 @@ from rich.table import Table
 
 from republica import __version__
 from republica.actors.sheet import load_actors
+from republica.ai.brains import BrainsConfig, load_brains_config
 from republica.engine import narrate as narrate_mod
 from republica.engine.advisor import advise
 from republica.engine.dilemmas import compute_aux_vars, render_text
@@ -88,6 +89,18 @@ def _build_policy_rule(name: str, country) -> PolicyRule:
     raise typer.BadParameter(f"politica desconocida: {name!r} (usar constant|passive|taylor)")
 
 
+def _resolve_brains(brain: str | None, brains: Path | None) -> BrainsConfig:
+    """`--brain`/`--brains` (ADR 004 secc. 7/8, deliverable 6) -> `BrainsConfig`.
+
+    `--brains path.yaml` carga el mapeo por actor; `--brain X` (si tambien
+    se pasa) pisa el `default` de ese archivo. Sin ninguno de los dos:
+    `BrainsConfig()` (default `"rules"` para todos, ver `ai/brains.py`)."""
+    cfg = load_brains_config(brains) if brains is not None else BrainsConfig()
+    if brain is not None:
+        cfg.default = brain
+    return cfg
+
+
 @app.command()
 def run(
     seed: Annotated[int, typer.Option(help="Semilla del generador aleatorio.")],
@@ -107,6 +120,19 @@ def run(
             help="Actores por reglas (ADR 003). Default: `features.actors` de country.json.",
         ),
     ] = None,
+    brain: Annotated[
+        str | None,
+        typer.Option(
+            help="Cerebro para todo actor sin entrada en --brains (ADR 004): "
+            "rules|fake:rules|fake:malformed|fake:unauthorized|llm:ollama:<modelo>.",
+        ),
+    ] = None,
+    brains: Annotated[
+        Path | None,
+        typer.Option(
+            help="YAML con cerebro por actor (ADR 004 secc. 7, formato de data/brains.yaml)."
+        ),
+    ] = None,
 ) -> None:
     """Corre una simulacion de `months` meses y la guarda en `out` (JSONL)."""
     country = load_country()
@@ -117,6 +143,7 @@ def run(
         forced_shocks.setdefault(month, []).append(shock_id)
 
     actors_enabled = actors if actors is not None else country.features.get("actors", True)
+    brains_cfg = _resolve_brains(brain, brains)
     history = run_simulation(
         seed=seed,
         months=months,
@@ -124,6 +151,10 @@ def run(
         forced_shocks=forced_shocks or None,
         country=country,
         actors_enabled=actors_enabled,
+        brain_map=brains_cfg.actors,
+        default_brain=brains_cfg.default,
+        llm_temperature=brains_cfg.temperature,
+        llm_cache_dir=brains_cfg.cache_dir,
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(history.to_jsonl(), encoding="utf-8")
@@ -453,13 +484,32 @@ def play(
             "y pedidos de gobernadores/sindicatos como dilema Conceder/Rechazar.",
         ),
     ] = True,
+    brain: Annotated[
+        str | None,
+        typer.Option(
+            help="Cerebro para todo actor sin entrada en --brains (ADR 004), solo con --actors.",
+        ),
+    ] = None,
+    brains: Annotated[
+        Path | None,
+        typer.Option(help="YAML con cerebro por actor (ADR 004 secc. 7), solo con --actors."),
+    ] = None,
 ) -> None:
     """Modo juego: sos el presidente (SPEC_v0.2_play.md)."""
     if load is not None:
         game = Game.load(load)
         console.print(f"[green]Partida cargada desde {load}[/green]")
     else:
-        game = Game.new(seed=seed, months=months, actors_enabled=actors)
+        brains_cfg = _resolve_brains(brain, brains)
+        game = Game.new(
+            seed=seed,
+            months=months,
+            actors_enabled=actors,
+            brain_map=brains_cfg.actors,
+            default_brain=brains_cfg.default,
+            llm_temperature=brains_cfg.temperature,
+            llm_cache_dir=brains_cfg.cache_dir,
+        )
 
     save_path = Path(f"simulations/game_{game.seed}.json")
     prev_state = game.sim.records[-1].state if game.sim.records else None
@@ -484,6 +534,173 @@ def play(
 
     game.save(save_path)
     _render_final(console, game)
+
+
+#: Denegaciones cuya `reason` viene del chequeo 1 de `authorize()`
+#: (`engine/permissions.py::authorize`, "el rol X no tiene permitido Y"):
+#: eso es especificamente un `authority_violation` (ADR 004 secc. 8,
+#: metrica de Fase 7), a diferencia de un `invalid_params`/cooldown/
+#: presupuesto (que tambien deniegan pero no son "el modelo pidio algo
+#: fuera de su rol").
+_AUTHORITY_VIOLATION_MARKER = "no tiene permitido"
+
+
+@app.command("bench-parse")
+def bench_parse(
+    brain: Annotated[
+        str,
+        typer.Option(
+            help="Cerebro a medir: fake:rules|fake:malformed|fake:unauthorized|"
+            "llm:ollama:<modelo>.",
+        ),
+    ],
+    n: Annotated[int, typer.Option("--n", help="Cantidad de meses/percepciones a generar.")] = 50,
+    role: Annotated[str, typer.Option(help="Rol del actor a testear (ej. governor).")] = "governor",
+    seed: Annotated[int, typer.Option(help="Semilla del generador aleatorio.")] = 7,
+) -> None:
+    """`bench-parse` (ADR 004 secc. 8): renderiza `n` percepciones reales
+    (un actor de `role`, dentro de una corrida por reglas -- todos los demas
+    actores quedan en `"rules"`, solo el elegido usa `brain`) y mide
+    `parse_rate`, `authority_violation_rate`, latencia p50/p90 y tokens.
+    Umbral de Fase 4 (ADR 004 secc. 8): `parse_rate >= 0.95`."""
+    actors = load_actors()
+    candidates = sorted((a for a in actors.values() if a.role == role), key=lambda a: a.id)
+    if not candidates:
+        raise typer.BadParameter(f"no hay actores con rol {role!r}")
+    target = candidates[0]
+
+    history = run_simulation(
+        seed=seed,
+        months=n,
+        actors_enabled=True,
+        actors=actors,
+        brain_map={target.id: brain},
+    )
+    traces = [t for t in history.trace_records if t.actor_id == target.id]
+    if not traces:
+        console.print(
+            f"[red]brain={brain!r} no genero trazas (¿es 'rules'? bench-parse necesita un "
+            "cerebro fake:*/llm:*).[/red]"
+        )
+        raise typer.Exit(code=1)
+
+    parse_rate = sum(1 for t in traces if t.parse_error is None) / len(traces)
+    total_actions = sum(len(t.actions_emitted) for t in traces) or 1
+    violations = sum(
+        1
+        for t in traces
+        for d in t.actions_denied
+        if _AUTHORITY_VIOLATION_MARKER in (d.get("denied_reason") or "")
+    )
+    violation_rate = violations / total_actions
+    latencies = [t.latency_ms for t in traces]
+    p10, p50, p90 = _percentiles(latencies)
+    prompt_tokens = [t.tokens.get("prompt", 0) for t in traces]
+    completion_tokens = [t.tokens.get("completion", 0) for t in traces]
+
+    console.print(
+        f"[bold]bench-parse[/bold] brain={brain} role={role} actor={target.id} "
+        f"n={len(traces)} (seed={seed})"
+    )
+    table = Table(title="Metricas de parseo (ADR 004 secc. 8)")
+    table.add_column("Metrica")
+    table.add_column("Valor", justify="right")
+    table.add_row("parse_rate", f"{parse_rate:.2f}")
+    table.add_row("authority_violation_rate", f"{violation_rate:.2f}")
+    table.add_row("latencia p50 (ms)", f"{p50:.1f}")
+    table.add_row("latencia p90 (ms)", f"{p90:.1f}")
+    table.add_row("tokens prompt (media)", f"{statistics.mean(prompt_tokens):.0f}")
+    table.add_row("tokens completion (media)", f"{statistics.mean(completion_tokens):.0f}")
+    console.print(table)
+
+    if parse_rate >= 0.95:
+        console.print("[green]OK[/green] parse_rate por encima del umbral de Fase 4 (0.95).")
+    else:
+        console.print("[yellow]AVISO[/yellow] parse_rate por debajo del umbral de Fase 4 (0.95).")
+
+
+_POSITION_ACTION_TYPES = {
+    "SUPPORT_POLICY": "support",
+    "OPPOSE_POLICY": "oppose",
+    "NEGOTIATE": "negotiate",
+}
+
+
+def _actor_month_summary(action_records: list, actor_id: str) -> dict[int, dict]:
+    """Resumen mes a mes de `action_records` para un actor (usado por
+    `compare`): posicion/intensidad se leen de su accion `SUPPORT_POLICY`/
+    `OPPOSE_POLICY`/`NEGOTIATE` del mes (si la hubo), el resto de sus
+    acciones (menos `NO_ACTION`) quedan en `actions`, marcadas con `*` si se
+    denegaron. Funciona igual para una corrida por reglas o por LLM: ambas
+    pasan por el mismo `to_actions`/`authorize()`."""
+    by_month: dict[int, list[dict]] = {}
+    for rec in action_records:
+        d = rec.to_dict()
+        if d["actor"] != actor_id:
+            continue
+        by_month.setdefault(d["month"], []).append(d)
+
+    summary: dict[int, dict] = {}
+    for month, recs in by_month.items():
+        position = "neutral"
+        intensity: float | None = None
+        others: list[str] = []
+        for d in recs:
+            if d["type"] in _POSITION_ACTION_TYPES:
+                position = _POSITION_ACTION_TYPES[d["type"]]
+                intensity = d["params"].get("intensity")
+            elif d["type"] != "NO_ACTION":
+                mark = "" if d["authorized"] else "*"
+                others.append(f"{d['type']}{mark}")
+        summary[month] = {"position": position, "intensity": intensity, "actions": others}
+    return summary
+
+
+@app.command()
+def compare(
+    seed: Annotated[int, typer.Option(help="Semilla del generador aleatorio.")] = 7,
+    a: Annotated[str, typer.Option("--a", help="Cerebro default de la corrida A.")] = "rules",
+    b: Annotated[str, typer.Option("--b", help="Cerebro default de la corrida B.")] = "fake:rules",
+    actor: Annotated[str, typer.Option(help="Actor a comparar (ej. gov_norte).")] = "gov_norte",
+    months: Annotated[int, typer.Option(help="Cantidad de meses a simular.")] = 48,
+) -> None:
+    """`compare` (ADR 004 secc. 8): corre dos simulaciones completas (`--a`/
+    `--b` como `default_brain` de cada una) y muestra, mes a mes, la
+    posicion/intensidad/acciones de `--actor` lado a lado."""
+    actors = load_actors()
+    if actor not in actors:
+        raise typer.BadParameter(f"actor desconocido: {actor!r}")
+
+    history_a = run_simulation(
+        seed=seed, months=months, actors_enabled=True, actors=actors, default_brain=a
+    )
+    history_b = run_simulation(
+        seed=seed, months=months, actors_enabled=True, actors=actors, default_brain=b
+    )
+    summary_a = _actor_month_summary(history_a.action_records, actor)
+    summary_b = _actor_month_summary(history_b.action_records, actor)
+
+    table = Table(title=f"{actor}: {a} vs {b} (seed={seed})")
+    table.add_column("Mes", justify="right")
+    table.add_column(f"Posicion ({a})")
+    table.add_column(f"Intensidad ({a})", justify="right")
+    table.add_column(f"Acciones ({a})")
+    table.add_column(f"Posicion ({b})")
+    table.add_column(f"Intensidad ({b})", justify="right")
+    table.add_column(f"Acciones ({b})")
+    for month in range(1, months + 1):
+        ra = summary_a.get(month, {"position": "-", "intensity": None, "actions": []})
+        rb = summary_b.get(month, {"position": "-", "intensity": None, "actions": []})
+        table.add_row(
+            str(month),
+            ra["position"],
+            f"{ra['intensity']:.2f}" if ra["intensity"] is not None else "-",
+            ", ".join(ra["actions"]) or "-",
+            rb["position"],
+            f"{rb['intensity']:.2f}" if rb["intensity"] is not None else "-",
+            ", ".join(rb["actions"]) or "-",
+        )
+    console.print(table)
 
 
 if __name__ == "__main__":

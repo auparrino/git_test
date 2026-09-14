@@ -108,6 +108,10 @@ class Game:
         country: Country | None = None,
         shocks_enabled: bool = True,
         actors_enabled: bool = False,
+        brain_map: dict[str, str] | None = None,
+        default_brain: str = "rules",
+        llm_temperature: float = 0.4,
+        llm_cache_dir: str | None = None,
     ) -> Game:
         """Arranca una partida nueva en el mes 0 (antes de jugar el mes 1).
 
@@ -116,11 +120,25 @@ class Game:
         presidente es el jugador humano: `sim.president_rule` queda `None`,
         ver `engine/simulation.py::advance_month`). Default apagado para no
         romper `tests/test_play_cli.py` (que verifica exactamente 49 lineas
-        de JSONL sin flags nuevos): ver Notas de implementacion."""
+        de JSONL sin flags nuevos): ver Notas de implementacion.
+
+        `brain_map`/`default_brain`/`llm_temperature`/`llm_cache_dir` (ADR
+        004 secc. 7): idem `engine.simulation.new_simulation`, default
+        `"rules"` para todos."""
         base_country = (country or load_country()).model_copy(update={"months": months})
         rule = _MutablePolicyRule(base_country.default_policy.model_copy())
         sim = new_simulation(
-            seed, rule, None, base_country, shocks_enabled, True, actors_enabled=actors_enabled
+            seed,
+            rule,
+            None,
+            base_country,
+            shocks_enabled,
+            True,
+            actors_enabled=actors_enabled,
+            brain_map=brain_map,
+            default_brain=default_brain,
+            llm_temperature=llm_temperature,
+            llm_cache_dir=llm_cache_dir,
         )
         game = cls(
             country=base_country,
