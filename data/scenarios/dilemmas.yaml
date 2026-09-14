@@ -1,0 +1,238 @@
+# Dilemas del modo juego (SPEC_v0.2_play.md §2). Variables disponibles en text: cualquier variable
+# de estado, inflation_annual, deficit, months_left, month_name.
+- id: cb_recommends_hike
+  title: El Banco Central recomienda subir la tasa
+  text: >
+    La inflación anualizada llegó a {inflation_annual:.0f} %. El presidente del Banco Central sostiene
+    que las expectativas se están desanclando y pide una suba de al menos 5 puntos.
+  trigger: {all: [{var: inflation_annual, gt: 35}], cooldown: 6, priority: 8}
+  options:
+    - {key: A, label: Subir la tasa 5 puntos, policy_delta: {interest_rate_target: 5}}
+    - {key: B, label: Mantener la tasa}
+    - key: C
+      label: Bajar 3 puntos para sostener la actividad
+      policy_delta: {interest_rate_target: -3}
+      effects: {institutional_confidence: -1}
+
+- id: public_wage_claim
+  title: Reclamo salarial de los estatales
+  text: >
+    Los gremios estatales piden una recomposición del 10 % tras la inflación acumulada. Amenazan con
+    un paro de 48 horas.
+  trigger: {all: [{var: real_wage, lt: 98}], cooldown: 8, priority: 6}
+  options:
+    - key: A
+      label: Conceder 10 % (gasto +0.8 % PIB)
+      policy_delta: {primary_spending: 0.8}
+      effects: {approval: 2, protest: -5}
+    - key: B
+      label: Ofrecer 4 % y negociar
+      policy_delta: {primary_spending: 0.3}
+      effects: {protest: 3}
+    - key: C
+      label: Rechazar
+      effects: {protest: 10, tension: 3, approval: -2}
+
+- id: general_strike_response
+  title: Huelga general
+  text: >
+    La central obrera convocó a una huelga general contra la política económica. Adhesión estimada:
+    alta en el transporte y el sector público.
+  trigger: {all: [{var: "shock_active:general_strike", eq: true}], cooldown: 3, priority: 9}
+  options:
+    - key: A
+      label: Convocar a una mesa de diálogo
+      effects: {protest: -8, tension: -2}
+      flags: {dialogue_table: true}
+    - key: B
+      label: Descontar el día y no negociar
+      effects: {protest: 6, tension: 4, approval: -1, institutional_confidence: 1}
+    - key: C
+      label: Anunciar un bono de emergencia
+      policy_delta: {primary_spending: 0.5}
+      effects: {protest: -12, approval: 2}
+
+- id: governors_request_funds
+  title: Los gobernadores piden fondos de emergencia
+  text: >
+    Las provincias afectadas por el desastre reclaman un fondo de asistencia de 0.6 % del PIB.
+    Tres gobernadores amenazan con retirar apoyo legislativo.
+  trigger: {any: [{var: "shock_active:drought", eq: true}, {var: "shock_active:flood", eq: true}], cooldown: 6, priority: 7}
+  options:
+    - key: A
+      label: Crear el fondo (0.6 % PIB por 3 meses)
+      effects: {fiscal: -0.6, months: 3, approval: 1}
+      flags: {helped_provinces: true}
+    - key: B
+      label: Fondo reducido (0.3 % PIB) a cambio de apoyo en el Congreso
+      effects: {fiscal: -0.3, months: 3}
+    - key: C
+      label: Rechazar; que las provincias reasignen su presupuesto
+      effects: {approval: -2, tension: 2}
+      flags: {refused_provinces: true}
+
+- id: devaluation_pressure
+  title: Presión para devaluar
+  text: >
+    Las reservas cayeron a USD {reserves:,.0f} M. El mercado espera una devaluación y el Banco Central
+    pierde USD 300 M por semana defendiendo la paridad.
+  trigger: {all: [{var: reserves, lt: 4000}], cooldown: 5, priority: 9}
+  options:
+    - key: A
+      label: Dejar flotar (sin intervención)
+      policy_set: {fx_intervention: 0.0}
+      effects: {institutional_confidence: -2}
+    - key: B
+      label: Defender la paridad con reservas
+      policy_set: {fx_intervention: 1.0}
+    - key: C
+      label: Devaluación controlada del 15 % y luego intervenir
+      policy_set: {fx_intervention: 0.7}
+      effects: {fx: 15, approval: -3, consumer_confidence: -4}
+
+- id: external_credit
+  title: Oferta de crédito externo
+  text: >
+    Un organismo internacional ofrece un desembolso de USD 4.000 M a cambio de una meta de déficit
+    primario cero en 12 meses.
+  trigger: {all: [{var: reserves, lt: 3000}], cooldown: 12, priority: 8}
+  options:
+    - key: A
+      label: Aceptar (reservas +4.000 M, gasto −2 pp PIB)
+      policy_delta: {primary_spending: -2.0}
+      effects: {reserves: 4000, approval: -3, protest: 5}
+      flags: {imf_program: true}
+    - key: B
+      label: Rechazar
+      effects: {institutional_confidence: -1}
+
+- id: scandal_response
+  title: Escándalo de corrupción en el gabinete
+  text: >
+    Una investigación periodística vincula a un ministro con sobreprecios en obra pública.
+    La oposición pide su renuncia.
+  trigger: {all: [{var: "shock_active:corruption_scandal", eq: true}], cooldown: 3, priority: 9}
+  options:
+    - key: A
+      label: Pedir la renuncia del ministro
+      effects: {institutional_confidence: 3, approval: 1, stability: -2}
+    - key: B
+      label: Respaldar al ministro y esperar a la Justicia
+      effects: {institutional_confidence: -3, approval: -2}
+    - key: C
+      label: Anunciar una auditoría independiente
+      effects: {institutional_confidence: 1}
+
+- id: annual_budget
+  title: Presupuesto anual
+  text: >
+    Hay que enviar el presupuesto al Congreso. El déficit proyectado es de {deficit:.1f} % del PIB.
+  trigger: {any: [{var: month, eq: 10}, {var: month, eq: 22}, {var: month, eq: 34}], once: false, cooldown: 11, priority: 10}
+  options:
+    - key: A
+      label: Presupuesto de ajuste (gasto −1.5 pp PIB)
+      policy_delta: {primary_spending: -1.5}
+      effects: {approval: -2, protest: 4}
+    - key: B
+      label: Presupuesto neutro
+    - key: C
+      label: Presupuesto expansivo (gasto +1.5 pp PIB)
+      policy_delta: {primary_spending: 1.5}
+      effects: {approval: 2, consumer_confidence: 2}
+
+- id: protest_wave_response
+  title: Ola de protestas
+  text: >
+    Manifestaciones masivas en la Capital y tres provincias. Hay cortes de ruta y un muerto en
+    enfrentamientos con la policía.
+  trigger: {all: [{var: "shock_active:protest_wave", eq: true}], cooldown: 3, priority: 9}
+  options:
+    - key: A
+      label: Recibir a los organizadores y anunciar medidas sociales
+      policy_delta: {primary_spending: 0.4}
+      effects: {protest: -10, tension: -3}
+    - key: B
+      label: Garantizar el orden con fuerzas federales
+      effects: {protest: -5, tension: 5, institutional_confidence: -2, approval: -1}
+    - key: C
+      label: No responder
+      effects: {protest: 5, stability: -3}
+
+- id: commodity_boom_taxes
+  title: Boom de commodities
+  text: >
+    Los precios de exportación subieron con fuerza. El Ministerio propone retenciones extraordinarias;
+    el campo y tres gobernadores se oponen.
+  trigger: {all: [{var: "shock_active:commodity_boom", eq: true}], cooldown: 12, priority: 6}
+  options:
+    - key: A
+      label: Retenciones extraordinarias (ingresos +1 pp PIB)
+      policy_delta: {tax_rate: 1.0}
+      effects: {tension: 2, approval: -1}
+      flags: {export_taxes: true}
+    - key: B
+      label: No tocar impuestos
+    - key: C
+      label: Retenciones y coparticiparlas a las provincias
+      policy_delta: {tax_rate: 1.0, provincial_transfers: 0.7}
+      effects: {approval: 1}
+
+- id: banking_crisis_bailout
+  title: Crisis bancaria
+  text: >
+    Dos bancos medianos enfrentan corridas de depósitos. El Banco Central pide autorización para un
+    rescate de 1.5 % del PIB.
+  trigger: {all: [{var: "shock_active:banking_crisis", eq: true}], cooldown: 6, priority: 10}
+  options:
+    - key: A
+      label: Rescatar (1.5 % PIB por 2 meses)
+      effects: {fiscal: -1.5, months: 2, institutional_confidence: 2, consumer_confidence: 3}
+    - key: B
+      label: Dejar caer a los bancos
+      effects: {consumer_confidence: -8, tension: 4, gdp: -0.4, institutional_confidence: -3}
+
+- id: tax_reform
+  title: Reforma impositiva
+  text: >
+    El equipo económico presenta una reforma que sube impuestos a los sectores de mayor ingreso y
+    baja cargas a las pymes. El resultado neto es positivo para el fisco.
+  trigger: {all: [{var: month, gte: 6}], once: true, priority: 5}
+  options:
+    - key: A
+      label: Enviar la reforma completa (+1.2 pp PIB)
+      policy_delta: {tax_rate: 1.2}
+      effects: {tension: 1, inequality: -0.5}
+    - key: B
+      label: Enviar una versión reducida (+0.5 pp PIB)
+      policy_delta: {tax_rate: 0.5}
+    - key: C
+      label: No enviar
+
+- id: public_works
+  title: Plan de obra pública
+  text: >
+    Con la aprobación en {government_approval:.0f} %, el jefe de Gabinete propone un plan de obra
+    pública en las provincias aliadas.
+  trigger: {all: [{var: government_approval, lt: 40}], cooldown: 9, priority: 4}
+  options:
+    - key: A
+      label: Lanzar el plan (gasto +1 pp PIB, transferencias +0.5)
+      policy_delta: {primary_spending: 1.0, provincial_transfers: 0.5}
+      effects: {approval: 2, consumer_confidence: 2}
+    - key: B
+      label: No hay margen fiscal
+
+- id: preelectoral_year
+  title: Empieza el último año
+  text: >
+    Faltan 12 meses para la elección. Los asesores proponen una expansión del consumo antes de los
+    comicios; el Banco Central advierte por la inflación.
+  trigger: {all: [{var: month, eq: 36}], once: true, priority: 10}
+  options:
+    - key: A
+      label: Expansión preelectoral (gasto +2 pp PIB, tasa −5)
+      policy_delta: {primary_spending: 2.0, interest_rate_target: -5}
+      effects: {approval: 3, consumer_confidence: 4}
+    - key: B
+      label: Mantener el rumbo
+      effects: {institutional_confidence: 1}
