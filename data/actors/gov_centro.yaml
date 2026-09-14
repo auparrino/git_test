@@ -1,0 +1,31 @@
+id: gov_centro
+name: Javier Cortés
+role: governor
+province: centro
+party: frente_federal
+ideology:
+  economic: -0.4
+  social: 0.3
+  federalism: 0.5
+  institutionalism: 0.55
+personality:
+  ambition: 0.55
+  risk_tolerance: 0.45
+  loyalty: 0.8
+  pragmatism: 0.65
+interests:
+- industrial_protection
+- employment
+- provincial_transfers
+influence:
+  public: 0.35
+  congress: 0.3
+  streets: 0.3
+  markets: 0.15
+relationships:
+  president: 70
+  union_cgt: 65
+  biz_industry: 55
+  party_frente_federal: 75
+bio: Gobernador peronista ortodoxo de provincia industrial, fuerte con sindicatos.
+  Defiende la protección de la manufactura y empleo local.

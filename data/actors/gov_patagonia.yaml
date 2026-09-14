@@ -1,0 +1,31 @@
+id: gov_patagonia
+name: Alejandra Ríos
+role: governor
+province: patagonia
+party: movimiento_libertad
+ideology:
+  economic: 0.85
+  social: -0.2
+  federalism: 0.6
+  institutionalism: 0.3
+personality:
+  ambition: 0.8
+  risk_tolerance: 0.8
+  loyalty: 0.3
+  pragmatism: 0.5
+interests:
+- low_taxes
+- provincial_transfers
+- reelection
+influence:
+  public: 0.35
+  congress: 0.15
+  streets: 0.1
+  markets: 0.4
+relationships:
+  president: 20
+  biz_industry: 70
+  union_cgt: 25
+  party_movimiento_libertad: 85
+bio: Gobernadora libertaria de Patagonia energética, antiestatalista pero tácticamente
+  federal. Amenaza con confrontación si no logra sus objetivos fiscales.

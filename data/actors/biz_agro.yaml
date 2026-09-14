@@ -1,0 +1,32 @@
+id: biz_agro
+name: Consejo Agroindustrial de Aurora
+role: business
+sector: agro
+ideology:
+  economic: 0.6
+  social: -0.05
+  federalism: 0.3
+  institutionalism: 0.5
+personality:
+  ambition: 0.75
+  risk_tolerance: 0.6
+  loyalty: 0.4
+  pragmatism: 0.85
+interests:
+- agricultural_exports
+- low_taxes
+- price_stability
+influence:
+  public: 0.3
+  congress: 0.35
+  streets: 0.05
+  markets: 0.7
+relationships:
+  central_bank: 65
+  gov_norte: 75
+  gov_litoral: 60
+  gov_pampa: 70
+  party_union_republicana: 60
+  party_movimiento_libertad: 70
+bio: Cámara de agropecuarios exportadores, pro-mercado y devaluación. Hostil a impuestos
+  a exportaciones, liderada por oligarquía rural.

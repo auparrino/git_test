@@ -1,0 +1,31 @@
+id: union_public
+name: Unión de Trabajadores Públicos
+role: union
+ideology:
+  economic: -0.8
+  social: 0.6
+  federalism: 0.5
+  institutionalism: 0.4
+personality:
+  ambition: 0.65
+  risk_tolerance: 0.75
+  loyalty: 0.5
+  pragmatism: 0.45
+interests:
+- public_employment
+- real_wages
+- social_programs
+influence:
+  public: 0.35
+  congress: 0.2
+  streets: 0.6
+  markets: 0.0
+relationships:
+  president: 30
+  minister_economy: 25
+  gov_costa: 75
+  union_cgt: 65
+  party_partido_social: 80
+  bloc_public_employees: 85
+bio: Sindicato de empleados públicos, corporativo y conflictivo. Base fuerte en provincias
+  dependientes, aversión ideológica a ajuste fiscal.

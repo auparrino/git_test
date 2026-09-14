@@ -1,0 +1,31 @@
+id: gov_cuyo
+name: Miguel Saavedra
+role: governor
+province: cuyo
+party: union_republicana
+ideology:
+  economic: 0.45
+  social: 0.0
+  federalism: 0.55
+  institutionalism: 0.6
+personality:
+  ambition: 0.7
+  risk_tolerance: 0.55
+  loyalty: 0.5
+  pragmatism: 0.75
+interests:
+- provincial_transfers
+- low_taxes
+- reelection
+influence:
+  public: 0.3
+  congress: 0.25
+  streets: 0.15
+  markets: 0.35
+relationships:
+  president: 45
+  biz_industry: 65
+  central_bank: 50
+  party_union_republicana: 75
+bio: Gobernador de provincia minera, pragmático de derecha pero federalista. Presiona
+  por transferencias mientras busca mantener buenas relaciones con Capital.

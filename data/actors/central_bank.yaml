@@ -1,0 +1,28 @@
+id: central_bank
+name: Banco Central de Aurora
+role: central_bank
+ideology:
+  economic: 0.2
+  social: 0.0
+  federalism: -0.3
+  institutionalism: 0.95
+personality:
+  ambition: 0.2
+  risk_tolerance: 0.3
+  loyalty: 0.6
+  pragmatism: 0.9
+interests:
+- price_stability
+- fiscal_balance
+- financial_stability
+influence:
+  public: 0.3
+  congress: 0.4
+  streets: 0.0
+  markets: 0.8
+relationships:
+  president: 70
+  minister_economy: 75
+  biz_finance: 70
+bio: Instituto técnico de línea hawkish en inflación, celoso de su autonomía. Opera
+  según reglas pero bajo presión política permanente.

@@ -1,0 +1,30 @@
+id: party_movimiento_libertad
+name: Movimiento Libertad
+role: party
+party: party_movimiento_libertad
+ideology:
+  economic: 0.9
+  social: -0.2
+  federalism: 0.3
+  institutionalism: 0.2
+personality:
+  ambition: 0.85
+  risk_tolerance: 0.8
+  loyalty: 0.35
+  pragmatism: 0.4
+interests:
+- low_taxes
+- fiscal_balance
+- party_unity
+influence:
+  public: 0.35
+  congress: 0.15
+  streets: 0.1
+  markets: 0.7
+relationships:
+  gov_patagonia: 85
+  biz_finance: 80
+  biz_industry: 75
+  central_bank: 65
+bio: Libertarios anti-Estado emergentes, populismo de mercado. Activos en redes pero
+  electoralmente débiles, influencia creciente en finanzas y provincias energéticas.

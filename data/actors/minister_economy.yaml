@@ -1,0 +1,29 @@
+id: minister_economy
+name: Dr. Roberto Santillana
+role: economy_minister
+ideology:
+  economic: -0.2
+  social: 0.1
+  federalism: -0.2
+  institutionalism: 0.8
+personality:
+  ambition: 0.6
+  risk_tolerance: 0.4
+  loyalty: 0.9
+  pragmatism: 0.8
+interests:
+- fiscal_balance
+- price_stability
+- employment
+influence:
+  public: 0.5
+  congress: 0.6
+  streets: 0.1
+  markets: 0.6
+relationships:
+  president: 80
+  central_bank: 75
+  biz_finance: 65
+  union_cgt: 40
+bio: Economista ortodoxo leal al presidente, busca mantener la brújula fiscal pero
+  debe navegar tensiones entre federalismo provincial y estabilidad.

@@ -1,0 +1,30 @@
+id: party_partido_social
+name: Partido Social
+role: party
+party: party_partido_social
+ideology:
+  economic: -0.8
+  social: 0.6
+  federalism: 0.5
+  institutionalism: 0.5
+personality:
+  ambition: 0.7
+  risk_tolerance: 0.65
+  loyalty: 0.65
+  pragmatism: 0.55
+interests:
+- social_programs
+- employment
+- party_unity
+influence:
+  public: 0.4
+  congress: 0.2
+  streets: 0.4
+  markets: 0.05
+relationships:
+  gov_costa: 85
+  union_cgt: 75
+  union_public: 70
+  bloc_urban_workers: 80
+bio: Izquierda progresista de raíz sindical y territorial, oposición antisistema.
+  Voz de barrios pobres y provincias dependientes, confrontacional pero marginal electoralmente.

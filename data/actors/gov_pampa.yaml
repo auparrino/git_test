@@ -1,0 +1,31 @@
+id: gov_pampa
+name: Claudio Navarro
+role: governor
+province: pampa
+party: frente_federal
+ideology:
+  economic: -0.25
+  social: 0.15
+  federalism: 0.35
+  institutionalism: 0.5
+personality:
+  ambition: 0.5
+  risk_tolerance: 0.4
+  loyalty: 0.75
+  pragmatism: 0.7
+interests:
+- agricultural_exports
+- employment
+- real_wages
+influence:
+  public: 0.3
+  congress: 0.2
+  streets: 0.2
+  markets: 0.2
+relationships:
+  president: 75
+  union_cgt: 50
+  biz_agro: 70
+  party_frente_federal: 80
+bio: Gobernador pampeano moderado, menos dependiente que otras provincias agrarias.
+  Busca consenso entre productores y trabajadores rurales.

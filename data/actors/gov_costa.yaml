@@ -1,0 +1,32 @@
+id: gov_costa
+name: Fernando Acevedo
+role: governor
+province: costa
+party: partido_social
+ideology:
+  economic: -0.75
+  social: 0.6
+  federalism: 0.75
+  institutionalism: 0.4
+personality:
+  ambition: 0.7
+  risk_tolerance: 0.6
+  loyalty: 0.6
+  pragmatism: 0.55
+interests:
+- provincial_transfers
+- social_programs
+- employment
+influence:
+  public: 0.4
+  congress: 0.15
+  streets: 0.35
+  markets: 0.05
+relationships:
+  president: 40
+  union_cgt: 80
+  union_public: 75
+  party_partido_social: 85
+  bloc_urban_workers: 75
+bio: Gobernador de izquierda progresista muy dependiente de transferencias. Fuerte
+  base sindical y de bloques urbanos, a menudo en conflicto con el gobierno central.

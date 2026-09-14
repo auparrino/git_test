@@ -1,0 +1,30 @@
+id: party_union_republicana
+name: Unión Republicana
+role: party
+party: party_union_republicana
+ideology:
+  economic: 0.5
+  social: 0.1
+  federalism: -0.1
+  institutionalism: 0.65
+personality:
+  ambition: 0.8
+  risk_tolerance: 0.5
+  loyalty: 0.4
+  pragmatism: 0.85
+interests:
+- fiscal_balance
+- low_taxes
+- party_unity
+influence:
+  public: 0.45
+  congress: 0.4
+  streets: 0.1
+  markets: 0.5
+relationships:
+  gov_capital: 85
+  gov_cuyo: 75
+  biz_finance: 70
+  central_bank: 60
+bio: Partido radical de derecha urbana y pro-mercado, oposición moderada. Representa
+  capital y provincias ricas, hostil a izquierda y nacionalismo provincial.

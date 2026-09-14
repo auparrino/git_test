@@ -1,0 +1,29 @@
+id: bloc_middle_class
+name: Bloque de Clase Media
+role: social_bloc
+ideology:
+  economic: 0.3
+  social: 0.3
+  federalism: 0.0
+  institutionalism: 0.6
+personality:
+  ambition: 0.5
+  risk_tolerance: 0.3
+  loyalty: 0.5
+  pragmatism: 0.8
+interests:
+- price_stability
+- employment
+- low_taxes
+influence:
+  public: 0.35
+  congress: 0.0
+  streets: 0.2
+  markets: 0.15
+relationships:
+  media_nacional: 75
+  gov_capital: 65
+  biz_industry: 50
+  central_bank: 55
+bio: Profesionales, pequeños empresarios y empleados, urbanos. Buscan estabilidad,
+  temen inflación y violencia, audiencia de medios centroizquierdistas.

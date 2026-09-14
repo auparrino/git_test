@@ -1,0 +1,30 @@
+id: media_mercado
+name: Mercado Financiero
+role: media
+ideology:
+  economic: 0.7
+  social: -0.1
+  federalism: 0.1
+  institutionalism: 0.6
+personality:
+  ambition: 0.85
+  risk_tolerance: 0.6
+  loyalty: 0.4
+  pragmatism: 0.9
+interests:
+- audience
+- fiscal_balance
+- financial_stability
+influence:
+  public: 0.4
+  congress: 0.25
+  streets: 0.05
+  markets: 0.75
+relationships:
+  central_bank: 75
+  biz_finance: 85
+  party_movimiento_libertad: 70
+  party_union_republicana: 75
+  president: 30
+bio: Publicación de mercado y negocios, influyente en finanzas. Crítica feroz a gasto
+  público y sindicalismo, audiencia de ejecutivos.

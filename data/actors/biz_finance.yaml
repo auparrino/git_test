@@ -1,0 +1,32 @@
+id: biz_finance
+name: Asociación de Instituciones Financieras
+role: business
+sector: finance
+ideology:
+  economic: 0.8
+  social: -0.1
+  federalism: -0.2
+  institutionalism: 0.75
+personality:
+  ambition: 0.8
+  risk_tolerance: 0.4
+  loyalty: 0.6
+  pragmatism: 0.9
+interests:
+- fiscal_balance
+- price_stability
+- financial_stability
+influence:
+  public: 0.2
+  congress: 0.25
+  streets: 0.0
+  markets: 0.85
+relationships:
+  central_bank: 85
+  president: 60
+  minister_economy: 70
+  gov_capital: 75
+  party_union_republicana: 80
+  party_movimiento_libertad: 75
+bio: Bancos y financieras, ortodoxos en política monetaria. Aliados del Banco Central,
+  hostiles a deuda pública y competencia estatal.

@@ -1,0 +1,29 @@
+id: bloc_rural
+name: Bloque Rural
+role: social_bloc
+ideology:
+  economic: -0.2
+  social: 0.1
+  federalism: 0.6
+  institutionalism: 0.3
+personality:
+  ambition: 0.5
+  risk_tolerance: 0.4
+  loyalty: 0.6
+  pragmatism: 0.7
+interests:
+- agricultural_exports
+- provincial_transfers
+- employment
+influence:
+  public: 0.25
+  congress: 0.0
+  streets: 0.3
+  markets: 0.1
+relationships:
+  biz_agro: 65
+  gov_norte: 70
+  gov_litoral: 65
+  gov_pampa: 70
+bio: Pequeños productores agropecuarios y peones rurales, dispersos. Intereses locales
+  y federales, débil poder político pero base electoral importante.

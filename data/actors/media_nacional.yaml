@@ -1,0 +1,29 @@
+id: media_nacional
+name: Aurora Nacional
+role: media
+ideology:
+  economic: 0.1
+  social: 0.2
+  federalism: -0.1
+  institutionalism: 0.7
+personality:
+  ambition: 0.7
+  risk_tolerance: 0.5
+  loyalty: 0.3
+  pragmatism: 0.8
+interests:
+- audience
+- price_stability
+- law_and_order
+influence:
+  public: 0.75
+  congress: 0.2
+  streets: 0.1
+  markets: 0.3
+relationships:
+  president: 55
+  central_bank: 60
+  gov_capital: 70
+  biz_finance: 65
+bio: Diario centroizquierdista de buen tono, establishment. Cubre política institucional
+  y economía con cierto liberalismo, audiencia urbana educada.

@@ -1,0 +1,29 @@
+id: bloc_informal
+name: Bloque Informal y Precarizado
+role: social_bloc
+ideology:
+  economic: -0.6
+  social: 0.4
+  federalism: 0.2
+  institutionalism: 0.2
+personality:
+  ambition: 0.7
+  risk_tolerance: 0.8
+  loyalty: 0.4
+  pragmatism: 0.4
+interests:
+- employment
+- social_programs
+- real_wages
+influence:
+  public: 0.35
+  congress: 0.0
+  streets: 0.65
+  markets: 0.0
+relationships:
+  union_cgt: 60
+  party_partido_social: 75
+  media_popular: 70
+  gov_costa: 70
+bio: Trabajadores informales, changarines y miserables urbanos. Alto desempleo y precariedad,
+  base de movilización callejera y vote castigo.

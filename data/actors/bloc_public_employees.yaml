@@ -1,0 +1,29 @@
+id: bloc_public_employees
+name: Bloque de Empleados Públicos
+role: social_bloc
+ideology:
+  economic: -0.8
+  social: 0.4
+  federalism: 0.4
+  institutionalism: 0.35
+personality:
+  ambition: 0.55
+  risk_tolerance: 0.6
+  loyalty: 0.65
+  pragmatism: 0.5
+interests:
+- public_employment
+- real_wages
+- social_programs
+influence:
+  public: 0.3
+  congress: 0.0
+  streets: 0.55
+  markets: 0.0
+relationships:
+  union_public: 90
+  party_partido_social: 75
+  gov_costa: 75
+  party_frente_federal: 55
+bio: Docentes, sanitarios y funcionarios provinciales, fuerte en provincias dependientes.
+  Corporativos, celosos del empleo estatal, antagonismo con Capital.

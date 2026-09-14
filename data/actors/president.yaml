@@ -1,0 +1,30 @@
+id: president
+name: Martín Oyarzábal
+role: president
+party: frente_federal
+ideology:
+  economic: -0.3
+  social: 0.2
+  federalism: 0.0
+  institutionalism: 0.6
+personality:
+  ambition: 0.9
+  risk_tolerance: 0.5
+  loyalty: 0.8
+  pragmatism: 0.7
+interests:
+- fiscal_balance
+- reelection
+- employment
+influence:
+  public: 0.8
+  congress: 0.7
+  streets: 0.2
+  markets: 0.3
+relationships:
+  minister_economy: 80
+  central_bank: 70
+  union_cgt: 45
+  biz_finance: 50
+bio: Presidente desde hace dos años, centroizquierdista moderado que busca estabilidad
+  fiscal y mantener su coalición. Pragmático pero con límites ideológicos claros.

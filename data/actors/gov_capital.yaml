@@ -1,0 +1,32 @@
+id: gov_capital
+name: Gabriela Rodríguez
+role: governor
+province: capital
+party: union_republicana
+ideology:
+  economic: 0.55
+  social: 0.05
+  federalism: -0.3
+  institutionalism: 0.7
+personality:
+  ambition: 0.9
+  risk_tolerance: 0.7
+  loyalty: 0.4
+  pragmatism: 0.85
+interests:
+- fiscal_balance
+- low_taxes
+- reelection
+influence:
+  public: 0.6
+  congress: 0.4
+  streets: 0.1
+  markets: 0.5
+relationships:
+  president: 35
+  minister_economy: 60
+  union_public: 25
+  party_union_republicana: 80
+  biz_finance: 75
+bio: Gobernadora urbana de derecha republicana, independiente del gobierno. Apuesta
+  por mercado y eficiencia fiscal, conflictiva con sindicatos estatales.

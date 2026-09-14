@@ -1,0 +1,29 @@
+id: party_alianza_provincial
+name: Alianza Provincial
+role: party
+party: party_alianza_provincial
+ideology:
+  economic: 0.0
+  social: 0.0
+  federalism: 0.85
+  institutionalism: 0.4
+personality:
+  ambition: 0.65
+  risk_tolerance: 0.5
+  loyalty: 0.6
+  pragmatism: 0.9
+interests:
+- provincial_transfers
+- reelection
+- party_unity
+influence:
+  public: 0.25
+  congress: 0.15
+  streets: 0.2
+  markets: 0.1
+relationships:
+  gov_norte: 85
+  party_frente_federal: 50
+  party_union_republicana: 45
+bio: Partido tercerista local de Norte, aliado flexible del gobierno. Pragmático por
+  pura supervivencia provincial, sin ideología coherente.

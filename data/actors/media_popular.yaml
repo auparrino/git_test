@@ -1,0 +1,30 @@
+id: media_popular
+name: Voz Popular
+role: media
+ideology:
+  economic: -0.6
+  social: 0.5
+  federalism: 0.3
+  institutionalism: 0.35
+personality:
+  ambition: 0.8
+  risk_tolerance: 0.7
+  loyalty: 0.5
+  pragmatism: 0.5
+interests:
+- audience
+- employment
+- social_programs
+influence:
+  public: 0.6
+  congress: 0.1
+  streets: 0.3
+  markets: 0.05
+relationships:
+  president: 35
+  union_cgt: 70
+  union_public: 75
+  party_partido_social: 80
+  gov_costa: 70
+bio: Diario sensacionalista de izquierda, tabloides y TV. Audiencia de barrios pobres,
+  crítico al gobierno y finanzas, aliado de sindicatos.

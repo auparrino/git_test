@@ -1,0 +1,31 @@
+id: gov_norte
+name: Elena Ferreyra
+role: governor
+province: norte
+party: alianza_provincial
+ideology:
+  economic: -0.1
+  social: 0.05
+  federalism: 0.85
+  institutionalism: 0.4
+personality:
+  ambition: 0.8
+  risk_tolerance: 0.6
+  loyalty: 0.5
+  pragmatism: 0.6
+interests:
+- provincial_transfers
+- agricultural_exports
+- reelection
+influence:
+  public: 0.4
+  congress: 0.2
+  streets: 0.25
+  markets: 0.1
+relationships:
+  president: 50
+  union_cgt: 55
+  biz_agro: 75
+  party_alianza_provincial: 80
+bio: Gobernadora tercerista que maneja el equilibrio entre dependencia de transferencias
+  y autonomía provincial. Fuerte con el sector agropecuario, tensa con el presidente.

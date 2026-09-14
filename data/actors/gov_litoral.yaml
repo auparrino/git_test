@@ -1,0 +1,31 @@
+id: gov_litoral
+name: Carlos Mendoza
+role: governor
+province: litoral
+party: frente_federal
+ideology:
+  economic: -0.35
+  social: 0.25
+  federalism: 0.6
+  institutionalism: 0.5
+personality:
+  ambition: 0.65
+  risk_tolerance: 0.4
+  loyalty: 0.7
+  pragmatism: 0.7
+interests:
+- provincial_transfers
+- agricultural_exports
+- real_wages
+influence:
+  public: 0.35
+  congress: 0.25
+  streets: 0.2
+  markets: 0.05
+relationships:
+  president: 65
+  union_cgt: 70
+  biz_agro: 60
+  party_frente_federal: 75
+bio: Gobernador copartidario del presidente pero defensor de los intereses litoraleños.
+  Mediador entre el agro y los trabajadores organizados.

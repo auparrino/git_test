@@ -1,0 +1,31 @@
+id: party_frente_federal
+name: Frente Federal
+role: party
+party: party_frente_federal
+ideology:
+  economic: -0.3
+  social: 0.2
+  federalism: 0.4
+  institutionalism: 0.6
+personality:
+  ambition: 0.75
+  risk_tolerance: 0.45
+  loyalty: 0.7
+  pragmatism: 0.8
+interests:
+- fiscal_balance
+- employment
+- party_unity
+influence:
+  public: 0.5
+  congress: 0.5
+  streets: 0.25
+  markets: 0.2
+relationships:
+  president: 85
+  union_cgt: 60
+  gov_litoral: 75
+  gov_centro: 80
+  gov_pampa: 80
+bio: Partido peronista histórico del gobierno, heterogéneo entre alas moderadas y
+  progresistas. Busca mantener la coalición mientras gestiona presiones provinciales.

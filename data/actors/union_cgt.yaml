@@ -1,0 +1,32 @@
+id: union_cgt
+name: Confederación General del Trabajo de Aurora
+role: union
+ideology:
+  economic: -0.7
+  social: 0.5
+  federalism: 0.2
+  institutionalism: 0.5
+personality:
+  ambition: 0.6
+  risk_tolerance: 0.7
+  loyalty: 0.65
+  pragmatism: 0.6
+interests:
+- real_wages
+- employment
+- social_programs
+influence:
+  public: 0.4
+  congress: 0.3
+  streets: 0.65
+  markets: 0.05
+relationships:
+  president: 45
+  gov_litoral: 70
+  gov_centro: 65
+  gov_costa: 80
+  party_frente_federal: 60
+  party_partido_social: 75
+  union_public: 65
+bio: Confederación sindical general peronista-progresista, negociadora pero con alto
+  poder de movilización. Base urbana, presión permanente por salarios.
