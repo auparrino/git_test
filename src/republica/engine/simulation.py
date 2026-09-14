@@ -12,6 +12,7 @@ from republica.actors.president_rules import (
     apply_pending_policy_delta,
     compute_policy_proposal,
 )
+from republica.actors.rule_based import economic_policy_direction, load_signatures
 from republica.actors.sheet import ActorSheet
 from republica.ai.brains import DEFAULT_BRAIN
 from republica.ai.tracing import DecisionTrace
@@ -25,6 +26,15 @@ from republica.engine.negotiation import (
 )
 from republica.engine.policy import ConstantPolicy, PolicyRule
 from republica.engine.scheduler import ActionRecord, ActorEngine, build_actor_engine, run_actor_turn
+from republica.world.cohorts import (
+    Cohort,
+    CohortState,
+    cohort_by_bloc_actor,
+    init_cohort_state,
+    load_cohorts,
+    step_cohorts,
+    weighted_perceived_inflation,
+)
 from republica.world.config import Country, load_country
 from republica.world.economy import finalize_exogenous, step_economy, step_exogenous
 from republica.world.events import (
@@ -36,10 +46,24 @@ from republica.world.events import (
     check_forced_devaluation,
     check_termination,
 )
+from republica.world.perception import (
+    AUDIENCE_MAX,
+    AUDIENCE_MIN,
+    MediaAction,
+    PerceptionRecord,
+    compute_bias,
+    drift_audience,
+    load_media_consumption,
+    step_perception,
+    sync_to_real,
+)
+from republica.world.perception import (
+    perception_gap as compute_perception_gap,
+)
 from republica.world.politics import step_politics
 from republica.world.provinces import compute_provinces
 from republica.world.society import step_society
-from republica.world.state import Exogenous, Policy, WorldState, clamp_state
+from republica.world.state import Exogenous, Policy, WorldState, clamp, clamp_state
 
 OUTCOMES = ("survived", "collapse", "hyperinflation")
 
@@ -60,9 +84,21 @@ class MonthRecord:
     events: list[str]
     provinces: list[dict]
     overflow: dict[str, float]
+    #: Estado de cada cohorte al cierre del mes (ADR 005 secc. 3, deliverable
+    #: 1): `{cohort_id: {approval_c, sentiment_c, perceived_inflation_c,
+    #: perceived_unemployment_c}}` (`world/cohorts.py::CohortState.to_dict`).
+    #: Vacio con `features.cohorts = False` -- y, por `to_dict()` (abajo),
+    #: NI SIQUIERA aparece como clave en ese caso: mismo patron que
+    #: `action_records`/`vote_records` (ADR 003/005), para que el JSONL siga
+    #: siendo byte a byte identico al de antes de este commit con la
+    #: feature apagada (ver Notas de implementacion).
+    cohorts: dict[str, dict[str, float]] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        if not d["cohorts"]:
+            del d["cohorts"]
+        return d
 
 
 @dataclass
@@ -95,6 +131,11 @@ class History:
     #: ambos vacios, `to_jsonl()` produce el mismo texto que antes de ADR 005).
     vote_records: list[VoteRecord] = field(default_factory=list)
     negotiation_records: list[NegotiationRecord] = field(default_factory=list)
+    #: `PerceptionRecord` (ADR 005 secc. 4, `kind: "perception"`), vacio con
+    #: `features.cohorts` apagado (mismo patron que `vote_records`/
+    #: `negotiation_records`: con todos los sidecars vacios, `to_jsonl()`
+    #: produce el mismo texto que antes de este commit).
+    perception_records: list[PerceptionRecord] = field(default_factory=list)
 
     def to_jsonl(self) -> str:
         by_month: dict[int, list[Any]] = {}
@@ -109,6 +150,9 @@ class History:
         votes_by_month: dict[int, list[VoteRecord]] = {}
         for v in self.vote_records:
             votes_by_month.setdefault(v.month, []).append(v)
+        perceptions_by_month: dict[int, list[PerceptionRecord]] = {}
+        for p in self.perception_records:
+            perceptions_by_month.setdefault(p.month, []).append(p)
 
         lines = []
         for r in self.records:
@@ -121,6 +165,8 @@ class History:
                 lines.append(json.dumps(neg.to_dict(), ensure_ascii=False))
             for v in votes_by_month.get(r.month_index, []):
                 lines.append(json.dumps(v.to_dict(), ensure_ascii=False))
+            for p in perceptions_by_month.get(r.month_index, []):
+                lines.append(json.dumps(p.to_dict(), ensure_ascii=False))
         lines.append(
             json.dumps(
                 {"outcome": self.outcome, "seed": self.seed, "config_hash": self.config_hash},
@@ -139,6 +185,7 @@ class History:
             "trace_records": [t.to_dict() for t in self.trace_records],
             "vote_records": [v.to_dict() for v in self.vote_records],
             "negotiation_records": [n.to_dict() for n in self.negotiation_records],
+            "perception_records": [p.to_dict() for p in self.perception_records],
         }
 
 
@@ -208,6 +255,25 @@ class Simulation:
     #: `Simulation` (ver `new_simulation`), no se releen mes a mes.
     congress_enabled: bool = False
     negotiation_enabled: bool = False
+    #: ADR 005 secc. 3/4 (default `False`, mismo criterio que arriba):
+    #: `cohorts_enabled` es independiente de `actors_enabled` (a diferencia
+    #: de `congress`/`negotiation`) -- es una extension de las formulas de
+    #: `world/`, no del subsistema de actores institucionales; corre igual
+    #: sin actores (ver Notas de implementacion, homogeneidad con v0.1).
+    #: `media_enabled` solo tiene efecto si `cohorts_enabled` Y
+    #: `actors_enabled` tambien lo estan (sin cohortes no hay donde sesgar
+    #: percepcion; sin actores no hay `PUBLISH_STORY` que emitir).
+    cohorts_enabled: bool = False
+    media_enabled: bool = False
+    cohorts: list[Cohort] = field(default_factory=list)
+    cohort_state: dict[str, CohortState] = field(default_factory=dict)
+    #: `{cohort_id: {outlet_id: share}}` (`data/media_consumption.csv`).
+    media_consumption: dict[str, dict[str, float]] = field(default_factory=dict)
+    #: `influence.public` de cada medio, mutable (ADR 005 secc. 4.5: "no en
+    #: la ficha" -- la ficha estatica sigue sirviendo para el resto de los
+    #: mecanismos de ADR 003, p.ej. el `scale_by` de `PUBLIC_STATEMENT`).
+    outlet_influence: dict[str, float] = field(default_factory=dict)
+    perception_records: list[PerceptionRecord] = field(default_factory=list)
 
 
 def new_simulation(
@@ -226,6 +292,10 @@ def new_simulation(
     llm_cache_dir: str | None = None,
     congress_enabled: bool = False,
     negotiation_enabled: bool = False,
+    cohorts_enabled: bool = False,
+    media_enabled: bool = False,
+    cohorts: list[Cohort] | None = None,
+    media_consumption: dict[str, dict[str, float]] | None = None,
 ) -> Simulation:
     """Construye una `Simulation` nueva sin correrla (uso interactivo, Fase 2:
     ver `engine/game.py`, que llama `advance_month` mes a mes).
@@ -245,7 +315,17 @@ def new_simulation(
     `congress_enabled`/`negotiation_enabled` (ADR 005, default `False` a
     nivel de funcion, mismo criterio que `actors_enabled`: quien resuelve
     `country.features` es la CLI, no esta funcion) solo tienen efecto si
-    `actors_enabled` tambien lo esta."""
+    `actors_enabled` tambien lo esta.
+
+    `cohorts_enabled` (ADR 005 secc. 3, default `False` a nivel de funcion):
+    a diferencia de `congress_enabled`/`negotiation_enabled`, NO se apaga
+    automaticamente si `actors_enabled=False` (ver Notas de implementacion:
+    es una extension de `world/`, corre sobre `cohorts`/`Policy`/`WorldState`
+    solos). `cohorts`/`media_consumption` (`None` = cargar de `data/`, para
+    tests que quieren una tabla homogenea sin tocar el disco) solo se leen
+    si `cohorts_enabled`. `media_enabled` (ADR 005 secc. 4) se resuelve
+    contra `cohorts_enabled AND actors_enabled` (sin cohortes no hay donde
+    sesgar percepcion; sin actores no hay `PUBLISH_STORY`)."""
     country = country or load_country()
     catalog = ShockCatalog(build_catalog(country.shocks))
     resolved_policy_rule = policy_rule or ConstantPolicy(country.default_policy)
@@ -267,6 +347,24 @@ def new_simulation(
         if actors_enabled and rule_based_president
         else None
     )
+    resolved_cohorts = (
+        (cohorts if cohorts is not None else load_cohorts()) if cohorts_enabled else []
+    )
+    resolved_media_enabled = media_enabled and cohorts_enabled and actors_enabled
+    resolved_consumption = (
+        (media_consumption if media_consumption is not None else load_media_consumption())
+        if cohorts_enabled
+        else {}
+    )
+    outlet_influence = (
+        {
+            aid: clamp(sheet.influence.public, AUDIENCE_MIN, AUDIENCE_MAX)
+            for aid, sheet in actor_engine.actors.items()
+            if sheet.role == "media"
+        }
+        if actor_engine is not None
+        else {}
+    )
     return Simulation(
         country=country,
         catalog=catalog,
@@ -284,6 +382,14 @@ def new_simulation(
         last_effective_policy=country.default_policy.model_copy(),
         congress_enabled=congress_enabled and actors_enabled,
         negotiation_enabled=negotiation_enabled and actors_enabled,
+        cohorts_enabled=cohorts_enabled,
+        media_enabled=resolved_media_enabled,
+        cohorts=resolved_cohorts,
+        cohort_state=init_cohort_state(resolved_cohorts, country.initial_state)
+        if cohorts_enabled
+        else {},
+        media_consumption=resolved_consumption,
+        outlet_influence=outlet_influence,
     )
 
 
@@ -351,6 +457,12 @@ def advance_month(sim: Simulation) -> MonthRecord:
     # Se calcula siempre (no solo con actores) porque `derive_congress_support`
     # (mas abajo) tambien la necesita.
     months_to_election = max(country.months - month + 1, 0)
+    #: `ActionRecord` de este mes (vacio sin actores), para el sesgo de
+    #: medios (ADR 005 secc. 4, mas abajo, pasos 8-9): se extrae de aca en
+    #: vez de cambiar la firma de `run_actor_turn` para devolver los
+    #: `PUBLISH_STORY` sueltos (ya vienen en el `ActionRecord`, con
+    #: `authorized`/`params` incluidos).
+    month_action_records: list[ActionRecord] = []
     if sim.actors_enabled:
         assert sim.actor_engine is not None
         # `policy` (lo que efectivamente rige este mes) le suma a
@@ -419,6 +531,23 @@ def advance_month(sim: Simulation) -> MonthRecord:
         # con la opcion "Contraoferta 50%" agregada, ver `engine/game.py` y
         # Notas de implementacion).
         negotiation_enabled = sim.negotiation_enabled and sim.president_rule is not None
+        # ADR 005 secc. 3, ultimo parrafo: `private_indicators`/`interest_impact`
+        # de un `social_bloc` usan la percepcion/aprobacion de SU cohorte, tal
+        # como esta al *inicio* de este mes (`sim.cohort_state` todavia no lo
+        # actualizaron medios/cohortes de este mismo mes: eso corre recien en
+        # los pasos 8-9, despues de la economia).
+        bloc_cohort_views = (
+            {
+                actor_id: {
+                    "perceived_inflation": cs.perceived_inflation,
+                    "perceived_unemployment": cs.perceived_unemployment,
+                    "approval": cs.approval,
+                }
+                for actor_id, cs in cohort_by_bloc_actor(sim.cohorts, sim.cohort_state).items()
+            }
+            if sim.cohorts_enabled
+            else None
+        )
         action_records, actor_pending, negotiation_records = run_actor_turn(
             sim.actor_engine,
             country,
@@ -434,7 +563,10 @@ def advance_month(sim: Simulation) -> MonthRecord:
             date=date,
             negotiation_enabled=negotiation_enabled,
             congress_enabled=sim.congress_enabled,
+            bloc_cohort_views=bloc_cohort_views,
+            media_perception_active=sim.media_enabled,
         )
+        month_action_records = action_records
         sim.action_records.extend(action_records)
         sim.trace_records.extend(sim.actor_engine.last_traces)
         sim.negotiation_records.extend(negotiation_records)
@@ -489,6 +621,13 @@ def advance_month(sim: Simulation) -> MonthRecord:
                 sim.pending_terms[name] = sim.pending_terms.get(name, 0.0) + value
             agreement_events.extend(exec_events)
 
+    # ADR 005 secc. 3: `policy_direction`/`Δprovincial_transfers`/`Δtax_rate`
+    # de `world/cohorts.py::step_cohorts` (mas abajo) comparan la `Policy`
+    # efectiva de este mes contra la del mes PASADO -- se guarda antes de
+    # pisar `sim.last_effective_policy` con la de este mes (misma logica que
+    # el `base = sim.last_effective_policy or country.default_policy` de
+    # arriba, para el primer mes).
+    prev_effective_policy = sim.last_effective_policy or country.default_policy
     sim.last_effective_policy = policy.model_copy()
 
     # 4. economia (4.1 -> 4.8)
@@ -502,13 +641,109 @@ def advance_month(sim: Simulation) -> MonthRecord:
         # decidieron con el snapshot `t`: ver Notas de implementacion).
         sim.actor_engine.last_aux = aux
 
+    # 8. medios -> percepcion por cohorte (ADR 005 secc. 4/5): corre ANTES
+    # de la sociedad/politica de este mes (secc. 5, pasos 8-9: "sociedad y
+    # politica restantes" van despues de cohortes) porque `step_society`
+    # necesita `perceived_inflation_c` ya en `t+1` para `consumer_confidence`
+    # (secc. 3) y `step_cohorts` necesita lo mismo para `approval_c`.
+    if sim.cohorts_enabled:
+        media_actions: list[MediaAction] = []
+        if sim.media_enabled:
+            for ar in month_action_records:
+                if ar.type != "PUBLISH_STORY" or not ar.authorized:
+                    continue
+                influence = sim.outlet_influence.get(ar.actor)
+                if influence is None:
+                    continue
+                media_actions.append(
+                    MediaAction(
+                        outlet_id=ar.actor,
+                        frame=ar.params.get("frame", "neutral"),
+                        target_bloc=ar.params.get("target_bloc", "all"),
+                        influence_public=influence,
+                    )
+                )
+            bias = compute_bias(sim.cohorts, media_actions, sim.media_consumption)
+            sim.cohort_state = step_perception(
+                sim.cohorts, sim.cohort_state, bias, econ_state.inflation, econ_state.unemployment
+            )
+        else:
+            # `features.media = False` (con `features.cohorts = True`):
+            # `perceived_* = real` cada mes, sin el retraso de q=0.4/0.3 de
+            # `step_perception` (ver `world/perception.py::sync_to_real`).
+            sim.cohort_state = sync_to_real(
+                sim.cohorts, sim.cohort_state, econ_state.inflation, econ_state.unemployment
+            )
+        gap = compute_perception_gap(sim.cohorts, sim.cohort_state, econ_state.inflation)
+        if sim.media_enabled and media_actions:
+            frame_by_outlet = {ma.outlet_id: ma.frame for ma in media_actions}
+            for outlet_id, frame in frame_by_outlet.items():
+                current = sim.outlet_influence.get(outlet_id)
+                if current is None:
+                    continue
+                sim.outlet_influence[outlet_id] = drift_audience(
+                    frame, current, sim.cohorts, sim.cohort_state
+                )
+        sim.perception_records.append(
+            PerceptionRecord(
+                month=month,
+                real_inflation=econ_state.inflation,
+                real_unemployment=econ_state.unemployment,
+                perception_gap=gap,
+                cohorts={
+                    c.id: {
+                        "perceived_inflation": round(sim.cohort_state[c.id].perceived_inflation, 3),
+                        "perceived_unemployment": round(
+                            sim.cohort_state[c.id].perceived_unemployment, 3
+                        ),
+                        "sentiment": round(sim.cohort_state[c.id].sentiment, 3),
+                    }
+                    for c in sim.cohorts
+                },
+                outlet_influence=dict(sim.outlet_influence),
+            )
+        )
+
     # 5. sociedad (5.1 -> 5.5)
-    soc_state = step_society(sim.state, econ_state, policy, agg, coeff)
+    perceived_inflation_agg = (
+        weighted_perceived_inflation(sim.cohorts, sim.cohort_state) if sim.cohorts_enabled else None
+    )
+    soc_state = step_society(
+        sim.state, econ_state, policy, agg, coeff, perceived_inflation_agg=perceived_inflation_agg
+    )
+
+    # 9. cohortes -> approval agregada (ADR 005 secc. 3), antes del resto de
+    # la politica (secc. 5, paso 9: "cohortes -> approval agregada; sociedad
+    # y politica restantes").
+    cohort_approval: float | None = None
+    if sim.cohorts_enabled:
+        policy_delta_for_direction = compute_policy_proposal(policy, prev_effective_policy).delta
+        policy_direction = economic_policy_direction(policy_delta_for_direction, load_signatures())
+        sim.cohort_state, cohort_approval = step_cohorts(
+            sim.cohorts,
+            sim.cohort_state,
+            sim.state,
+            soc_state,
+            policy,
+            prev_effective_policy,
+            aux.demand_gap,
+            policy_direction,
+            coeff,
+            shock_approval=agg.term("shock_approval"),
+        )
 
     # 6. politica (5.6 -> 5.9)
     full_state = step_politics(
         sim.state, soc_state, aux.demand_gap, country.coalition_seats, agg, coeff
     )
+    if cohort_approval is not None:
+        # `government_approval` pasa a ser la agregada por cohorte (secc. 3):
+        # mismo patron que `congress_support` derivado un poco mas abajo --
+        # `step_politics` corre igual (su `political_stability`/
+        # `institutional_confidence` de ESTE mes usan el `approval_new` de
+        # v0.1, no el de cohortes: simplificacion documentada en Notas de
+        # implementacion), y se pisa solo el campo publicado.
+        full_state = full_state.model_copy(update={"government_approval": cohort_approval})
 
     # 6.bis Congreso: `congress_support` derivado (ADR 005 secc. 1.3), en vez
     # de la formula de v0.1 (`step_politics` arriba, sin tocar: sigue siendo
@@ -566,6 +801,9 @@ def advance_month(sim: Simulation) -> MonthRecord:
         events=events,
         provinces=[asdict(p) for p in provinces],
         overflow=overflow,
+        cohorts={c.id: sim.cohort_state[c.id].to_dict() for c in sim.cohorts}
+        if sim.cohorts_enabled
+        else {},
     )
     sim.records.append(record)
 
@@ -591,6 +829,10 @@ def run(
     llm_cache_dir: str | None = None,
     congress_enabled: bool = False,
     negotiation_enabled: bool = False,
+    cohorts_enabled: bool = False,
+    media_enabled: bool = False,
+    cohorts: list[Cohort] | None = None,
+    media_consumption: dict[str, dict[str, float]] | None = None,
 ) -> History:
     """Corre `months` meses (o hasta un fin de partida temprano) y devuelve
     la `History`.
@@ -610,7 +852,10 @@ def run(
     `congress_enabled`/`negotiation_enabled` (ADR 005): default `False` a
     nivel de funcion, mismo criterio que `actors_enabled` de arriba;
     `republica run` los activa por defecto via `country.features`
-    (`--no-congress`/`--no-negotiation` los apagan)."""
+    (`--no-congress`/`--no-negotiation` los apagan).
+
+    `cohorts_enabled`/`media_enabled`/`cohorts`/`media_consumption` (ADR
+    005 secc. 3/4): idem `new_simulation`."""
     sim = new_simulation(
         seed,
         policy_rule,
@@ -627,6 +872,10 @@ def run(
         llm_cache_dir=llm_cache_dir,
         congress_enabled=congress_enabled,
         negotiation_enabled=negotiation_enabled,
+        cohorts_enabled=cohorts_enabled,
+        media_enabled=media_enabled,
+        cohorts=cohorts,
+        media_consumption=media_consumption,
     )
     sim.country = sim.country.model_copy(update={"months": months})
     for _ in range(months):
@@ -642,4 +891,5 @@ def run(
         trace_records=sim.trace_records,
         vote_records=sim.vote_records,
         negotiation_records=sim.negotiation_records,
+        perception_records=sim.perception_records,
     )

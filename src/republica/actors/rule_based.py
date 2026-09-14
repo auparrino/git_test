@@ -145,6 +145,27 @@ def ideological_fit(
     return max(-100.0, min(100.0, 100.0 * proj * scale))
 
 
+def economic_policy_direction(
+    delta: dict[str, float], signatures: dict[str, dict[str, float]]
+) -> float:
+    """`policy_direction ∈ [-1, 1]` (ADR 005 secc. 3): componente economico
+    de la firma de `delta` (mismo calculo de `dn`/`sig["economic"]` que
+    `ideological_fit`, sin proyectar sobre la ideologia de ningun actor en
+    particular -- es "la" direccion economica del mes, no cuanto le gusta a
+    alguien), acotado a `[-1, 1]`."""
+    if not delta:
+        return 0.0
+    scales = signatures.get("scales", {})
+    total = 0.0
+    for instrument, d in delta.items():
+        sig = signatures.get(instrument)
+        if sig is None or instrument == "scales" or d == 0.0:
+            continue
+        dn = d / float(scales.get(instrument, 5.0))
+        total += dn * sig["economic"]
+    return clamp(total, -1.0, 1.0)
+
+
 def _impact_provincial_transfers(delta, ind, dependence, in_gov, cfg):  # noqa: ANN001, ARG001
     return cfg["coef"] * delta.get("provincial_transfers", 0.0) * dependence
 

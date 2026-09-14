@@ -56,25 +56,30 @@ class Loaded:
     #: `--no-negotiation` (o sin actores).
     votes_by_month: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
     negotiations_by_month: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
+    #: `PerceptionRecord` (ADR 005 secc. 4, `kind: "perception"`), agrupados
+    #: por mes. Vacio con `--no-cohorts` (o sin actores).
+    perceptions_by_month: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
 
 
 def load_jsonl(path: str | Path) -> Loaded:
     """Lee un archivo JSONL producido por `republica run` (un `MonthRecord`
-    por mes, `ActionRecord`/`VoteRecord`/`NegotiationRecord` intercalados si
-    hay actores, mas una linea final de resumen). Las lineas con
-    `"kind": "action"`/`"vote"`/`"negotiation"` no son `MonthRecord`: se
-    separan cada una en su propio `dict` por mes y no entran en `records`
-    (ver Notas de implementacion de ADR 003: asi `render()` no cambia para
-    corridas sin actores)."""
+    por mes, `ActionRecord`/`VoteRecord`/`NegotiationRecord`/`PerceptionRecord`
+    intercalados si hay actores/cohortes, mas una linea final de resumen).
+    Las lineas con `"kind": "action"`/`"vote"`/`"negotiation"`/`"perception"`
+    no son `MonthRecord`: se separan cada una en su propio `dict` por mes y
+    no entran en `records` (ver Notas de implementacion de ADR 003: asi
+    `render()` no cambia para corridas sin actores)."""
     lines = Path(path).read_text(encoding="utf-8").splitlines()
     if not lines:
         raise ValueError(f"{path} esta vacio")
     parsed = [json.loads(line) for line in lines[:-1]]
     summary = json.loads(lines[-1])
-    records = [r for r in parsed if r.get("kind") not in ("action", "vote", "negotiation")]
+    sidecar_kinds = ("action", "vote", "negotiation", "perception")
+    records = [r for r in parsed if r.get("kind") not in sidecar_kinds]
     actions_by_month: dict[int, list[dict[str, Any]]] = {}
     votes_by_month: dict[int, list[dict[str, Any]]] = {}
     negotiations_by_month: dict[int, list[dict[str, Any]]] = {}
+    perceptions_by_month: dict[int, list[dict[str, Any]]] = {}
     for r in parsed:
         kind = r.get("kind")
         if kind == "action":
@@ -83,12 +88,15 @@ def load_jsonl(path: str | Path) -> Loaded:
             votes_by_month.setdefault(r["month"], []).append(r)
         elif kind == "negotiation":
             negotiations_by_month.setdefault(r["month"], []).append(r)
+        elif kind == "perception":
+            perceptions_by_month.setdefault(r["month"], []).append(r)
     return Loaded(
         records=records,
         summary=summary,
         actions_by_month=actions_by_month,
         votes_by_month=votes_by_month,
         negotiations_by_month=negotiations_by_month,
+        perceptions_by_month=perceptions_by_month,
     )
 
 

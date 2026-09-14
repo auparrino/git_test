@@ -115,6 +115,8 @@ class Game:
         llm_cache_dir: str | None = None,
         congress_enabled: bool = True,
         negotiation_enabled: bool = True,
+        cohorts_enabled: bool = True,
+        media_enabled: bool = True,
     ) -> Game:
         """Arranca una partida nueva en el mes 0 (antes de jugar el mes 1).
 
@@ -138,7 +140,15 @@ class Game:
         `sim.president_rule` (presidente por reglas, nunca el caso en
         `play`): con un humano, `negotiation_enabled=True` solo habilita la
         opcion "Contraoferta 50 %" del dilema generado (ver
-        `set_grant_decisions`), no cambia el resto del comportamiento."""
+        `set_grant_decisions`), no cambia el resto del comportamiento.
+
+        `cohorts_enabled`/`media_enabled` (ADR 005 secc. 3/4): idem
+        `congress_enabled`/`negotiation_enabled`, default `True` (`cli.py::
+        play` expone `--cohorts/--no-cohorts` y `--media/--no-media`).
+        `cohorts_enabled` corre igual sin `actors_enabled` (ver Notas de
+        implementacion de `engine/simulation.py::new_simulation`); `media_
+        enabled` solo tiene efecto si tambien hay actores (sin actores no
+        hay `PUBLISH_STORY` que jugar en `play`)."""
         base_country = (country or load_country()).model_copy(update={"months": months})
         rule = _MutablePolicyRule(base_country.default_policy.model_copy())
         sim = new_simulation(
@@ -155,6 +165,8 @@ class Game:
             llm_cache_dir=llm_cache_dir,
             congress_enabled=congress_enabled,
             negotiation_enabled=negotiation_enabled,
+            cohorts_enabled=cohorts_enabled,
+            media_enabled=media_enabled,
         )
         game = cls(
             country=base_country,

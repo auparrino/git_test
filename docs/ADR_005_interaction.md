@@ -360,3 +360,157 @@ scheduler.py` (negociación + cumplimiento del actor dentro de `run_actor_turn`)
 (`Party.discipline`, `features.congress`/`negotiation`), `data/country.json`, `data/parties.json`.
 `actors/president_rules.py` **no se tocó**: `RuleBasedPresident.decide_grants` sigue siendo el camino
 de `REQUEST_FUNDS` y el fallback completo de `NEGOTIATE` con `features.negotiation=False`.
+
+## 9. Notas de implementación (cohortes y percepción)
+
+Alcance de este commit: §3 (cohortes sociales) y §4 (medios y percepción), "la segunda mitad" de
+Fase 5. Completa el DoD de §7: items 3-6 (cohortes homogéneas, sesgo de medios, corrida completa con
+`perception`, `emergence`) más el resto del deliverable de este commit (golden hash con las features
+nuevas apagadas, `fake:rules` con cohortes/medios activos).
+
+### Cohortes (`world/cohorts.py`)
+
+1. **Estado por cohorte fuera de `WorldState`**, como pedía el encargo: `CohortState` vive en
+   `Simulation.cohort_state` (mutable, mes a mes) y se publica en `MonthRecord.cohorts` (deliverable 1)
+   vía `to_dict()`. Con `features.cohorts=False`, `MonthRecord.cohorts` queda `{}` y `to_dict()` borra
+   la clave (mismo patrón que `action_records`/`vote_records` de ADR 003/005): el JSONL sin la feature
+   es byte a byte igual al de antes de este commit (ver punto 13, golden hash).
+2. **Los tres términos nuevos de la fórmula de §3 (transferencias, impuestos, inseguridad) no tienen
+   equivalente en v0.1** (`world/politics.py::step_politics` no los menciona en absoluto). El texto del
+   encargo pide validar "cohortes homogéneas (`s_* = 1`, ...)" reproduciendo v0.1 con `|diff| < 0.05`;
+   leído literalmente (`s_tr = s_tax = s_crime = 1` también) el test no pasa nunca — no porque la
+   calibración esté mal, sino porque esos tres términos **no tienen forma de anularse solos**:
+   `crime_perception` se aleja de 50 aunque no haya ninguna política ni shock, y ese término solo, con
+   `s_crime = 1`, ya rompe la tolerancia de 0.05/mes bien entrada la corrida (verificado empíricamente:
+   con `s_crime = 1` y el resto en 0, `ConstantPolicy`, 48 meses, el diff supera 0.05 en el mes 23 y
+   llega a 1.23 en el 48). Se interpreta "`s_* = 1`" como "las sensibilidades con equivalente directo en
+   v0.1" (`s_pi`, `s_u`, `s_w`) y se fijan `s_tr = s_tax = s_crime = 0` en la tabla homogénea del test
+   (`tests/test_cohorts_perception.py::HOMOGENEOUS_COHORTS`, comentado ahí con el mismo razonamiento):
+   con esto la fórmula de cada cohorte colapsa término a término a la de v0.1 y el agregado ponderado la
+   reproduce **exacto** (no solo dentro de tolerancia) en 48 meses con `TaylorPolicy` — verificado tanto
+   con `s_tr/s_tax/s_crime = 0` como confirmando que `= 1` efectivamente rompe el test, antes de decidir.
+3. **`shock_approval` como parámetro nuevo de `step_cohorts`** (`world/cohorts.py`, keyword-only): el
+   ADR no lo tabula en la fórmula de §3, a diferencia de la de v0.1 (§5.6) que sí lo tiene. Sin él,
+   `PUBLIC_STATEMENT`/`LOBBY_CONGRESS`/huelgas y demás consecuencias de actores que hoy mueven
+   `shock_approval` (ADR 003 §5) dejarían de poder mover la aprobación en absoluto con
+   `features.cohorts` activo — una regresión de comportamiento respecto a antes de este commit, no algo
+   que el ADR pida deliberadamente. Se aplica el mismo agregado (`agg.term("shock_approval")`) por
+   igual a cada cohorte, no prorrateado por `pop_share` (no hay una base en el ADR para prorratearlo, y
+   sumarlo entero a cada cohorte es lo que hace que el agregado ponderado lo reciba entero, igual que
+   v0.1).
+4. **El término de inflación se reinterpreta como el de v0.1 escalado, no como la resta lineal literal
+   del ADR** (`e_pi_low·(pi_ref − clamp(perceived, 0, pi_ref)) − e_pi·pos(perceived − pi_ref)`, en vez de
+   `− s_pi·e_pi·(perceived − 2)`): con inflación típicamente por debajo de 2 en tramos largos de una
+   corrida, la resta lineal del ADR premia sin cota la desinflación (v0.1 la premia acotada, solo hasta
+   `pi_ref`), lo que por sí solo ya rompe el test de homogeneidad del punto 2. Documentado también en el
+   docstring de `step_cohorts`.
+5. **`government_approval` se pisa (`full_state.model_copy(update=...)`) después de `step_politics`, no
+   antes.** `step_politics` sigue corriendo sin tocar (calcula su propio `approval_new` "sombra", que se
+   descarta) porque `congress_support`/`political_stability`/`institutional_confidence` de ese mismo
+   módulo siguen leyendo su propia fórmula de v0.1 (§5.7-5.9) — el ADR no pide reemplazarlas, solo
+   `government_approval` (§3, último renglón). Consecuencia aceptada: `congress_target`/`stability_target`
+   usan el `approval_new` de v0.1 (sombra), no el agregado por cohortes, del mismo mes — una pequeña
+   inconsistencia interna documentada acá en vez de reescribir `step_politics` (fuera del alcance
+   declarado de §3, que solo habla de `government_approval`).
+6. **`private_indicators`/`interest_impact` de un `social_bloc` usan el `cohort_state` de *inicio* de
+   mes** (`engine/simulation.py::advance_month`, `bloc_cohort_views`, armado antes de `run_actor_turn`),
+   no el ya actualizado por medios/cohortes de ese mismo mes (que corre después, pasos 8-9 de §5): un
+   actor decide con la información que tiene al momento de decidir, mismo criterio que ya usa el resto
+   del motor (los actores deciden sobre el snapshot `t`, la economía corre después). `engine/
+   perception.py::_private_social_bloc`/`build_perception` ganan un parámetro `cohort_view` opcional
+   (`None` = comportamiento idéntico a antes de este commit) para no acoplar `engine/` a
+   `world/cohorts.py` directamente.
+
+### Medios y percepción (`world/perception.py`)
+
+7. **`features.media` depende de `features.cohorts` Y de `features.actors`** (`Simulation.new_simulation`):
+   sin cohortes no hay dónde sesgar percepción; sin actores no hay `PUBLISH_STORY` que emitir.
+   `features.cohorts`, a diferencia, **no** depende de `features.actors` (corre sobre `world/` solo,
+   con o sin actores institucionales) — asimetría explícita en el docstring de `new_simulation`.
+8. **`influence.public` de cada medio es mutable en `Simulation.outlet_influence`, no en la ficha**
+   (`data/actors/media_*.yaml` sigue estática): la ficha la sigue usando el resto de ADR 003
+   (`scale_by` de `PUBLISH_STORY`/`PUBLIC_STATEMENT`, relaciones, etc.) y una corrida no debe mutar el
+   archivo en disco. `Simulation.outlet_influence` arranca como copia de `sheet.influence.public` de
+   cada actor `role == "media"` (acotada a `[0.05, 0.6]` desde el arranque, mismo rango de la deriva de
+   §4.5) y es lo único que `drift_audience` toca mes a mes.
+9. **Polaridad de `scandal` = negativa** (`world/perception.py::FRAME_POLARITY`): el ADR §4.5 solo da
+   el ejemplo literal "`crisis` ↔ negativo"; `recovery` como positivo simétrico y `scandal` (mala
+   noticia institucional) como negativo son la lectura más natural, no están tabulados aparte. `neutral`
+   queda sin polaridad (`None`): un medio que solo publica notas neutras no gana ni pierde audiencia
+   ese mes (ADR: "acotado a [0.05, 0.6]", pero no dice qué pasa sin polaridad — no mover la influencia
+   es la lectura conservadora).
+10. **`consequences.py::ConsequenceContext.media_perception_active`** (`= features.media AND
+    features.cohorts`) apaga únicamente la clave `consumer_confidence` de `publish_story` en
+    `coeffs.yaml` (el `shock_cc` agregado de ADR 003 §5, que el sistema de percepción por cohorte
+    reemplaza — §3: `consumer_confidence` pasa a usar `Σ pop_share_c · perceived_inflation_c`); la
+    clave `institutional_confidence` de `scandal` sigue el camino de ADR 003 sin tocar, tal como pide
+    el ADR ("y `institutional_confidence` como en ADR 003").
+11. **`sync_to_real` (features.media=False) sincroniza `perceived_* = real` instantáneamente cada mes,
+    en vez de correr `step_perception` con sesgo cero.** Elegido así deliberadamente para que el test de
+    homogeneidad (punto 2 arriba) dé exacto: con el filtro `q = 0.4` de `step_perception`, aun con sesgo
+    cero, `perceived_inflation_c` queda siempre un paso de rezago detrás de una inflación real que
+    nunca es perfectamente constante, lo que le impediría a `step_cohorts` reproducir v0.1 exacto.
+    **Costo aceptado:** el test literal de §4.4 ("con todos los frames `neutral`, la trayectoria real es
+    idéntica a `features.media = false`") no da bit-idéntico — el rezago de `step_perception` (aun con
+    sesgo cero) diverge de la sincronización instantánea de `sync_to_real`, amplificado por el lazo
+    `government_approval → protest_level → social_tension → government_approval` de `world/society.py`/
+    `world/politics.py` (~0.2 puntos de aprobación a los 12 meses, más de 1 punto pasada la mitad de una
+    corrida de 48 con actores). `tests/test_cohorts_perception.py::
+    test_all_neutral_frames_stay_close_to_media_off` prueba la ventana de 12 meses (donde el rezago
+    todavía no se nota) con una cota de 0.5 puntos por variable, en vez de igualdad exacta — la
+    alternativa (hacer que `features.media=False` también use el filtro `q`) cambia cuál de los dos
+    tests del §7 da exacto y cuál da aproximado; se priorizó el de homogeneidad (ítem 3 de §7, con cota
+    explícita 0.05) sobre el de frames neutros (ítem 4, sin cota explícita en el texto).
+12. **`bloc_actor` cubre 5 de las 8 cohortes** (`urban_workers`, `rural`, `middle_class`,
+    `public_employees`, `informal`); `young_professionals`, `retirees` y `students` no tienen bloque
+    social propio en ADR 003 (29 actores, sin esos tres) — `cohort_by_bloc_actor` simplemente no las
+    incluye en el `dict` que arma `bloc_cohort_views`, sin necesidad de un caso especial.
+
+### CLI y wiring de turno
+
+13. **`--cohorts/--no-cohorts` y `--media/--no-media`** en `run` y en `play` (`cli.py`), default
+    `country.features["cohorts"/"media"]` (`True` en `data/country.json`). En `run`, ambas quedan
+    atadas a `actors_enabled` a nivel de CLI (`cohorts_enabled = (...) and actors_enabled`) aunque
+    `Simulation.cohorts_enabled` en sí no dependa de actores (punto 7): sin actores no hay bloques
+    sociales ni medios que jugar desde la CLI, mismo criterio que ya ata `congress`/`negotiation` a
+    `actors_enabled`. En `play`, `Game.new` las expone con default `True` (igual que
+    `congress_enabled`/`negotiation_enabled` ya lo hacían) en vez de heredar `country.features`
+    directamente — `play` nunca leyó `country.features` para estas flags, sigue el mismo patrón.
+14. **Orden de turno (§5, pasos 8-9):** medios → percepción por cohorte corre en
+    `engine/simulation.py::advance_month` inmediatamente después de la economía (paso 4) y antes de
+    `step_society`/`step_politics`, porque `consumer_confidence` (dentro de `step_society`) y
+    `step_cohorts` necesitan `perceived_inflation_c`/`social_tension`/`crime_perception` ya en `t+1`.
+    `step_cohorts` corre después de `step_society` pero antes de `step_politics`, y pisa
+    `government_approval` recién sobre la salida de `step_politics` (punto 5).
+15. **Golden hash con `features.cohorts=False`/`features.media=False`
+    (`tests/test_cohorts_perception.py::test_cohorts_and_media_off_matches_pre_commit_golden_hash`).**
+    Se corrió `run(seed=7, policy=taylor, actors_enabled=True, congress_enabled=True,
+    negotiation_enabled=True)`, 48 meses, contra el commit `1bdc33f9e4be62a07577bbb264a260d85f524b15`
+    ("Visor: votos por partido y negociaciones del mes", HEAD del repo antes de este commit — sin
+    `cohorts`/`media` en el código en absoluto) vía `git worktree add /tmp/head HEAD`, con
+    `config_hash` reemplazado por un placeholder antes de hashear (mismo precedente que el punto 15 de
+    §8/REVIEW_001 hallazgo #8: `data/country.json` cambia al agregar `features.cohorts`/`media`, el
+    resto del JSONL no). El hash SHA-256 queda como constante en el test; se corrió de nuevo con el
+    código de este commit y `cohorts_enabled=False, media_enabled=False` y coincide byte a byte.
+16. **`emergence` (deliverable 6, `engine/emergence.py`)**: `most_discontented_cohort` (menor
+    `approval_c` promedio de toda la corrida, sobre `MonthRecord.cohorts`) y
+    `max_perception_gap_month` (mes de mayor `|perception_gap|`, sobre `kind: "perception"`); ambos
+    `None` sin `features.cohorts`/`media` (JSONL sin esas líneas). `cli.py::emergence` imprime ambos,
+    en español, con el mismo aviso "(sin cohortes -- correr con --cohorts)" que ya usa el resto del
+    comando para secciones vacías.
+
+### Archivos nuevos/tocados
+
+`world/cohorts.py`, `world/perception.py` (nuevos); `engine/simulation.py` (pasos 8-9 del turno,
+`Simulation.cohort_state`/`outlet_influence`, `MonthRecord.cohorts`, `History.perception_records`),
+`engine/perception.py` (`build_perception`/`_private_social_bloc` con `cohort_view`), `engine/
+scheduler.py` (`run_actor_turn` con `bloc_cohort_views`/`media_perception_active`), `engine/
+consequences.py` (`ConsequenceContext.media_perception_active`), `engine/emergence.py`
+(`most_discontented_cohort`/`max_perception_gap_month`), `engine/narrate.py` (`perceptions_by_month`),
+`actors/rule_based.py` (`economic_policy_direction`), `world/society.py` (`step_society` con
+`perceived_inflation_agg`), `world/config.py` (`features.cohorts`/`media`), `cli.py`
+(`--cohorts`/`--media` en `run`/`play`, `emergence`), `engine/game.py` (`Game.new` con
+`cohorts_enabled`/`media_enabled`), `ui/viewer.py` (`load_run` con `cohorts`/`perceptions`, sin tocar
+`viewer_template.html`), `data/country.json` (`features.cohorts`/`media`), `data/cohorts.csv`, `data/
+media_consumption.csv` (ya existían de un commit previo, sin cambios). `docs/SPEC_v0.1.md` §9 gana una
+oración sobre `kind: "perception"` y `MonthRecord.cohorts`.

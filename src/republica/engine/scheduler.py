@@ -221,6 +221,8 @@ def run_actor_turn(
     date: str = "",
     negotiation_enabled: bool = False,
     congress_enabled: bool = False,
+    bloc_cohort_views: dict[str, dict[str, float]] | None = None,
+    media_perception_active: bool = False,
 ) -> tuple[list[ActionRecord], dict[str, float], list[NegotiationRecord]]:
     """Pasos 3-5 de ADR 003 secc. 7 (percepciones/decide/authorize/
     consequences), mas la negociacion de ADR 005 secc. 2 (paso 4 de su orden
@@ -244,7 +246,16 @@ def run_actor_turn(
 
     `date` (hallazgo #12 de REVIEW_001, keyword-only con default `""` para
     no romper llamadores/tests que arman un `ActorEngine` suelto sin fecha
-    a mano): la fecha `AAAA-MM` de este mes, para `Perception.date`."""
+    a mano): la fecha `AAAA-MM` de este mes, para `Perception.date`.
+
+    `bloc_cohort_views`/`media_perception_active` (ADR 005 secc. 3/4,
+    default `None`/`False` = sin cohortes: comportamiento identico a antes
+    de ADR 005): `bloc_cohort_views` es `{actor_id: cohort_view}` (ver
+    `engine/perception.py::build_perception`) para los `social_bloc` con
+    cohorte propia -- se arma con el `cohort_state` de *inicio* de mes (ADR
+    005 secc. 5 paso 3, antes de que este mismo mes lo actualice medios/
+    cohortes en los pasos 8-9). `media_perception_active` pasa a
+    `ConsequenceContext` (ver `engine/consequences.py`)."""
     provinces_table = build_provinces_table(state, policy, country.provinces, agg)
     parties_by_id = {p.id: p for p in country.parties}
 
@@ -255,6 +266,9 @@ def run_actor_turn(
     for actor_id, sheet in engine.actors.items():
         if sheet.role == "president":
             continue
+        cohort_view = (
+            (bloc_cohort_views or {}).get(actor_id) if sheet.role == "social_bloc" else None
+        )
         perception = build_perception(
             sheet,
             state,
@@ -270,6 +284,7 @@ def run_actor_turn(
             date=date,
             relationships=engine.relationships,
             agg=agg,
+            cohort_view=cohort_view,
         )
         decision_actor = engine.decision_actors[actor_id]
         actions = decision_actor.decide(perception, engine.actor_rngs[actor_id])
@@ -298,6 +313,7 @@ def run_actor_turn(
         parties_by_id=parties_by_id,
         coeffs=engine.consequence_coeffs,
         concessions=engine.concessions,
+        media_perception_active=media_perception_active,
     )
     # Una sola pasada (hallazgo #9 de REVIEW_001): antes se llamaba
     # `apply_consequences` una vez para todas las `allowed` (el agregado

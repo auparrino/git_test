@@ -249,14 +249,30 @@ def _private_media(state: WorldState, recent_events: list[str]) -> dict[str, flo
     }
 
 
-def _private_social_bloc(state: WorldState) -> dict[str, float]:
-    return {
+def _private_social_bloc(
+    state: WorldState, cohort_view: dict[str, float] | None
+) -> dict[str, float]:
+    """`private_indicators` de un `social_bloc` (ADR 003 secc. 5). Con
+    `cohort_view` (ADR 005 secc. 3, ultimo parrafo: bloque social <-> su
+    cohorte via `bloc_actor`): `unemployment`/`inflation` pasan a ser los
+    percibidos por su cohorte (`world/perception.py`) en vez de los reales,
+    y se agrega `approval_c` (tambien como `government_approval`, para que
+    `interest_impact`/`_impact_reelection` -- que leen esa clave del
+    `indicators` fusionado, ver `compute_score` -- usen la aprobacion de la
+    cohorte y no la agregada: "su `interest_impact` usa `approval_c`")."""
+    values = {
         "real_wage": state.real_wage,
         "unemployment": state.unemployment,
         "poverty": state.poverty,
         "inflation": state.inflation,
         "crime_perception": state.crime_perception,
     }
+    if cohort_view is not None:
+        values["unemployment"] = cohort_view["perceived_unemployment"]
+        values["inflation"] = cohort_view["perceived_inflation"]
+        values["approval_c"] = cohort_view["approval"]
+        values["government_approval"] = cohort_view["approval"]
+    return values
 
 
 def build_perception(
@@ -275,6 +291,7 @@ def build_perception(
     date: str = "",
     relationships: Relationships | None = None,
     agg: ShockAggregate | None = None,
+    cohort_view: dict[str, float] | None = None,
 ) -> Perception:
     """Arma la `Perception` de `actor` para este mes (ADR 003 secc. 3,
     visibilidad por rol en ADR 004 secc. 5).
@@ -294,7 +311,13 @@ def build_perception(
 
     `agg` (hallazgo #12): el `ShockAggregate` de este mes, para que una
     `business` pueda ver si su propio `sector` esta afectado (ver
-    `_private_business`); `None` (default) cae a un agregado vacio."""
+    `_private_business`); `None` (default) cae a un agregado vacio.
+
+    `cohort_view` (ADR 005 secc. 3, keyword-only, default `None` = sin
+    cohortes: comportamiento identico a antes de ADR 005): la `CohortState`
+    de la cohorte de este actor, ya resuelta a un `dict` plano por el
+    llamador (`engine/scheduler.py`) para no acoplar este modulo a
+    `world/cohorts.py`. Solo se usa si `actor.role == "social_bloc"`."""
     parties_by_id = {p.id: p for p in parties}
     public = _public_indicators(state)
     agg = agg if agg is not None else ShockAggregate()
@@ -315,7 +338,7 @@ def build_perception(
     elif actor.role == "media":
         private = _private_media(state, recent_events)
     else:  # social_bloc
-        private = _private_social_bloc(state)
+        private = _private_social_bloc(state, cohort_view)
 
     relationships_view = (
         relationships.view_of(actor.id) if relationships is not None else dict(actor.relationships)

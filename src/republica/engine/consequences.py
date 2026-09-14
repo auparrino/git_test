@@ -68,6 +68,18 @@ class ConsequenceContext:
     parties_by_id: dict[str, Party]
     coeffs: dict[str, Any] = field(default_factory=load_consequences)
     concessions: dict[str, Any] = field(default_factory=load_concessions)
+    #: `features.media AND features.cohorts` (ADR 005 secc. 4, default
+    #: `False` = comportamiento de ADR 003 sin tocar): con el sistema de
+    #: percepcion por cohorte activo, `consumer_confidence` ya no reacciona
+    #: al `frame` de un `PUBLISH_STORY` via el mecanismo agregado de ADR 003
+    #: secc. 5 (`shock_cc` de `crisis`/`recovery`) -- lo reemplaza
+    #: `Σ pop_share_c · perceived_inflation_c` (`world/cohorts.py`,
+    #: `world/society.py::step_society`). El efecto de `scandal` sobre
+    #: `institutional_confidence`/`approval` sigue este mismo camino sin
+    #: cambios (ADR 005 secc. 4.3: "y institutional_confidence como en ADR
+    #: 003"), asi que solo se apaga la clave `consumer_confidence` de
+    #: `publish_story`, no el bloque entero.
+    media_perception_active: bool = False
 
 
 RelationshipDelta = tuple[str, str, float]
@@ -221,7 +233,7 @@ def apply_consequences(
         elif t is ActionType.PUBLISH_STORY:
             cfg = coeffs["publish_story"].get(p["frame"]) or {}
             scale = getattr(infl, cfg.get("scale_by", "public"))
-            if "consumer_confidence" in cfg:
+            if "consumer_confidence" in cfg and not ctx.media_perception_active:
                 add("shock_cc", cfg["consumer_confidence"] * scale)
             if "institutional_confidence" in cfg:
                 add("shock_conf", cfg["institutional_confidence"] * scale)

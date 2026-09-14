@@ -51,6 +51,7 @@ def load_run(path: Path) -> dict[str, Any]:
     actions: dict[int, list[dict[str, Any]]] = {}
     votes: dict[int, list[dict[str, Any]]] = {}
     negotiations: dict[int, list[dict[str, Any]]] = {}
+    perceptions: dict[int, list[dict[str, Any]]] = {}
     summary: dict[str, Any] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -68,6 +69,8 @@ def load_run(path: Path) -> dict[str, Any]:
             votes.setdefault(int(rec.get("month", 0)), []).append(rec)
         elif kind == "negotiation":
             negotiations.setdefault(int(rec.get("month", 0)), []).append(rec)
+        elif kind == "perception":
+            perceptions.setdefault(int(rec.get("month", 0)), []).append(rec)
     out_months = []
     for rec in months:
         idx = int(rec["month_index"])
@@ -107,6 +110,8 @@ def load_run(path: Path) -> dict[str, Any]:
                 ),
                 "votes": votes.get(month_no, []),
                 "negotiations": negotiations.get(month_no, []),
+                "cohorts": rec.get("cohorts") or {},
+                "perceptions": perceptions.get(month_no, []),
             }
         )
     return {

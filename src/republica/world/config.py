@@ -251,7 +251,21 @@ class Country(BaseModel):
     #: existen sin actores). `--no-congress`/`--no-negotiation` los apagan
     #: (CLI); con ambos apagados el motor reproduce exactamente el
     #: comportamiento de Fase 3/4 (bytes identicos, ver test de aceptacion).
-    features: dict[str, bool] = {"actors": True, "congress": True, "negotiation": True}
+    #: `features.cohorts`/`features.media` (ADR 005 secc. 3/4, Notas de
+    #: implementacion "cohortes y percepcion"): default `True`.
+    #: `cohorts`, a diferencia de `congress`/`negotiation`, NO depende de
+    #: `actors` (corre sobre `world/` solo); `media` depende de `cohorts` Y
+    #: de `actors` (sin cohortes no hay donde sesgar percepcion; sin
+    #: actores no hay `PUBLISH_STORY`). `--no-cohorts`/`--no-media` los
+    #: apagan (CLI); con los cuatro apagados el JSONL sigue siendo byte a
+    #: byte identico al de antes de este commit.
+    features: dict[str, bool] = {
+        "actors": True,
+        "congress": True,
+        "negotiation": True,
+        "cohorts": True,
+        "media": True,
+    }
 
 
 def _load_provinces(path: Path) -> list[Province]:
@@ -361,5 +375,14 @@ def load_country(data_dir: Path | str | None = None) -> Country:
         coalition_seats=_coalition_seats(parties),
         shocks=shocks,
         config_hash=config_hash,
-        features=raw.get("features", {"actors": True, "congress": True, "negotiation": True}),
+        features=raw.get(
+            "features",
+            {
+                "actors": True,
+                "congress": True,
+                "negotiation": True,
+                "cohorts": True,
+                "media": True,
+            },
+        ),
     )

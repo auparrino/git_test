@@ -8,18 +8,32 @@ from republica.world.state import Policy, WorldState, pos
 
 
 def step_society(
-    prev: WorldState, new: WorldState, policy: Policy, shocks: ShockAggregate, coeff: Coefficients
+    prev: WorldState,
+    new: WorldState,
+    policy: Policy,
+    shocks: ShockAggregate,
+    coeff: Coefficients,
+    perceived_inflation_agg: float | None = None,
 ) -> WorldState:
     """`prev` es el snapshot `t`; `new` ya tiene el bloque economico en `t+1`
     (salida de `step_economy`). Devuelve `new` con consumer_confidence,
     inequality, social_tension, protest_level y crime_perception actualizados.
+
+    `perceived_inflation_agg` (ADR 005 secc. 3, default `None` = comportamiento
+    de v0.1 sin tocar): con `features.cohorts`, `engine/simulation.py` pasa
+    `Σ pop_share_c · perceived_inflation_c` (`world/cohorts.py::
+    weighted_perceived_inflation`) para que `consumer_confidence` use la
+    inflacion percibida en vez de la real en el termino `s_pi`.
     """
     # 5.1 confianza del consumidor
+    inflation_for_cc = (
+        perceived_inflation_agg if perceived_inflation_agg is not None else new.inflation
+    )
     cc_target = (
         coeff.cc_base
         + coeff.s_g * (new.gdp_growth - coeff.growth_ref)
         - coeff.s_u * (new.unemployment - coeff.u_ref)
-        - coeff.s_pi * pos(new.inflation - coeff.pi_ref)
+        - coeff.s_pi * pos(inflation_for_cc - coeff.pi_ref)
         + coeff.s_w * (new.real_wage - coeff.wage_ref)
     )
     consumer_confidence_new = (

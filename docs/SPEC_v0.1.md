@@ -435,7 +435,7 @@ CLI (`typer`):
 - `republica narrate simulations/run_7.jsonl` — narración mes a mes (sección 10).
 - `republica batch --seeds 1000 --summary` — corre N semillas y muestra distribución de outcomes y percentiles de inflación anual, desempleo, aprobación final.
 
-Formato JSONL: una línea por mes con `MonthRecord` serializado + una línea final `{"outcome": ..., "seed": ..., "config_hash": ...}`.
+Formato JSONL: una línea por mes con `MonthRecord` serializado + una línea final `{"outcome": ..., "seed": ..., "config_hash": ...}`. Con `features.congress`/`negotiation`/`cohorts`/`media` (ADR 005) se intercalan líneas sueltas `kind: "action"|"vote"|"negotiation"|"perception"` entre un mes y el siguiente, y `MonthRecord` gana un campo `cohorts` (`{cohort_id: {approval_c, sentiment_c, perceived_inflation_c, perceived_unemployment_c}}`, ADR 005 §3) — ninguno aparece con las features apagadas (JSONL byte a byte igual al de v0.1).
 
 ---
 

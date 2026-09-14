@@ -135,6 +135,22 @@ def run(
             help="Negociacion (ADR 005 secc. 2). Default: `features.negotiation` de country.json.",
         ),
     ] = None,
+    cohorts: Annotated[
+        bool | None,
+        typer.Option(
+            "--cohorts/--no-cohorts",
+            help="Cohortes sociales (ADR 005 secc. 3). Default: `features.cohorts` de "
+            "country.json.",
+        ),
+    ] = None,
+    media: Annotated[
+        bool | None,
+        typer.Option(
+            "--media/--no-media",
+            help="Medios y percepcion (ADR 005 secc. 4). Default: `features.media` de "
+            "country.json.",
+        ),
+    ] = None,
     brain: Annotated[
         str | None,
         typer.Option(
@@ -162,6 +178,18 @@ def run(
     negotiation_enabled = (
         negotiation if negotiation is not None else country.features.get("negotiation", True)
     )
+    # `republica run --no-actors` no debe dejar NINGUNA linea `kind: ...` en
+    # el JSONL (test de aceptacion de ADR 003, deliverable 9): cohortes es
+    # independiente de `actors_enabled` a nivel de `Simulation`/`run()` (ver
+    # Notas de implementacion), pero la CLI las ata igual que
+    # congress/negotiation -- sin actores no hay bloques sociales ni medios
+    # que jugar, asi que no tiene sentido prenderlas solas desde `run`.
+    cohorts_enabled = (
+        cohorts if cohorts is not None else country.features.get("cohorts", True)
+    ) and actors_enabled
+    media_enabled = (
+        media if media is not None else country.features.get("media", True)
+    ) and actors_enabled
     brains_cfg = _resolve_brains(brain, brains)
     history = run_simulation(
         seed=seed,
@@ -176,13 +204,16 @@ def run(
         llm_cache_dir=brains_cfg.cache_dir,
         congress_enabled=congress_enabled,
         negotiation_enabled=negotiation_enabled,
+        cohorts_enabled=cohorts_enabled,
+        media_enabled=media_enabled,
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(history.to_jsonl(), encoding="utf-8")
     console.print(
         f"[green]OK[/green] seed={seed} months={len(history.records)} "
         f"outcome={history.outcome} actors={actors_enabled} "
-        f"congress={congress_enabled} negotiation={negotiation_enabled} -> {out}"
+        f"congress={congress_enabled} negotiation={negotiation_enabled} "
+        f"cohorts={cohorts_enabled} media={media_enabled} -> {out}"
     )
 
 
@@ -256,6 +287,20 @@ def emergence(
         console.print("  [dim](ninguno)[/dim]")
     for m in report.media_line_changes:
         console.print(f"  • {m['outlet']}: {m['line_changes']} cambios de linea")
+
+    console.print("[bold]Cohorte mas descontenta[/bold]:")
+    if report.most_discontented_cohort is None:
+        console.print("  [dim](sin cohortes -- correr con --cohorts)[/dim]")
+    else:
+        c = report.most_discontented_cohort
+        console.print(f"  • {c['cohort']} — aprobacion promedio {c['avg_approval_c']:.1f}")
+
+    console.print("[bold]Mes con mayor brecha de percepcion[/bold]:")
+    if report.max_perception_gap_month is None:
+        console.print("  [dim](sin percepcion -- correr con --cohorts --media)[/dim]")
+    else:
+        g = report.max_perception_gap_month
+        console.print(f"  • mes {g['month']} — perception_gap {g['perception_gap']:+.2f}")
 
 
 def _percentiles(values: list[float]) -> tuple[float, float, float]:
@@ -598,6 +643,20 @@ def play(
         Path | None,
         typer.Option(help="YAML con cerebro por actor (ADR 004 secc. 7), solo con --actors."),
     ] = None,
+    cohorts: Annotated[
+        bool,
+        typer.Option(
+            "--cohorts/--no-cohorts",
+            help="Cohortes sociales (ADR 005 secc. 3).",
+        ),
+    ] = True,
+    media: Annotated[
+        bool,
+        typer.Option(
+            "--media/--no-media",
+            help="Medios y percepcion (ADR 005 secc. 4), solo con --actors.",
+        ),
+    ] = True,
 ) -> None:
     """Modo juego: sos el presidente (SPEC_v0.2_play.md)."""
     if load is not None:
@@ -613,6 +672,8 @@ def play(
             default_brain=brains_cfg.default,
             llm_temperature=brains_cfg.temperature,
             llm_cache_dir=brains_cfg.cache_dir,
+            cohorts_enabled=cohorts,
+            media_enabled=media,
         )
 
     save_path = Path(f"simulations/game_{game.seed}.json")
