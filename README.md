@@ -8,7 +8,29 @@ Objetivo final: un sistema computacional para explorar y evaluar instituciones p
 
 ## Estado
 
-Fase de planificación. El plan de construcción por fases, con criterios de "listo" y el modelo a usar en cada etapa, está en [`docs/PLAN.md`](docs/PLAN.md).
+| Hito | Qué hay | Estado |
+|---|---|---|
+| v0.1 | Mundo determinista de 48 meses: 20 variables, 12 shocks, tres reglas de política, `run`/`narrate`/`batch`, 24 tests de aceptación | ✅ |
+| v0.2 | Modo juego: `play` con tablero, 14 dilemas disparados por estado, consejero por reglas, guardado, contrafáctico | ✅ |
+| v0.3 | 29 actores con fichas (ideología ≠ intereses ≠ personalidad), catálogo cerrado de acciones, permisos por rol, consecuencias | 🔨 |
+| v0.3 | Capa de IA: esquemas JSON, prompts por rol, cliente Ollama, backend falso para CI | diseño listo (ADR 004) |
+| v0.5 | Congreso, negociación, cohortes, medios y percepción; memoria y elecciones | diseño listo (ADR 005, 006) |
+| v0.8 | Evals, trazas, gobernanza; experimentos en lote con DuckDB | diseño listo (ADR 007, 008) |
+
+Plan completo, criterios de "listo" y modelo a usar en cada etapa: [`docs/PLAN.md`](docs/PLAN.md).
+Checklist operativa: [`docs/PASO_A_PASO.md`](docs/PASO_A_PASO.md). Especificación del mundo:
+[`docs/SPEC_v0.1.md`](docs/SPEC_v0.1.md). Calibración y sus razones: [`docs/CALIBRATION_LOG.md`](docs/CALIBRATION_LOG.md).
+
+## Probarlo
+
+```bash
+uv sync --group dev
+uv run republica run --seed 7 --out simulations/run_7.jsonl   # simula 48 meses
+uv run republica narrate simulations/run_7.jsonl               # la historia, mes a mes
+uv run republica batch --seeds 300 --policy passive            # distribución de outcomes
+uv run republica play --seed 7                                 # vos sos el presidente
+uv run pytest -q
+```
 
 Orden de construcción:
 
