@@ -202,6 +202,10 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
       <h3>Congreso</h3>
       <div id="votes"></div>
     </div>
+    <div class="section" id="nego-section" hidden>
+      <h3>Negociaciones</h3>
+      <ul class="feed" id="negos"></ul>
+    </div>
     <div class="section">
       <h3>Reacciones de los actores</h3>
       <ul class="feed" id="feed"></ul>
@@ -365,11 +369,28 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
     const cs = $("congress-section"); const vb = $("votes"); vb.innerHTML = "";
     if (m.votes && m.votes.length) {
       cs.hidden = false;
+      const POLICY_LBL = { interest_rate_target: "tasa", tax_rate: "impuestos", primary_spending: "gasto", provincial_transfers: "transferencias", fx_intervention: "intervención" };
       m.votes.forEach(v => {
-        const yes = Number(v.yes ?? v.total_yes ?? v.yes_seats ?? 0), thr = Number(v.threshold ?? 51), ok = v.passed ?? (yes >= thr);
-        vb.insertAdjacentHTML("beforeend", `<div class="vote"><span>${v.label || v.bill || "Ley"}</span><div class="track"><div class="fill ${ok ? "" : "fail"}" style="width:${Math.min(100, yes)}%"></div><div class="thr" style="left:${thr}%"></div></div><span class="mono">${fmt(yes, 0)}/100 ${ok ? "aprobada" : "rechazada"}</span></div>`);
+        const yes = Number(v.yes_total ?? v.yes ?? 0), thr = Number(v.threshold ?? 51), ok = v.passed ?? (yes >= thr);
+        const label = v.label || Object.entries(v.policy_delta || {}).map(([k, d]) => `${POLICY_LBL[k] || k} ${d > 0 ? "+" : "−"}${fmt(Math.abs(d), 1)}`).join(", ") || "Ley";
+        const parties = (v.parties || []).map(pp => `<span class="chip">${pp.party_id.replace(/_/g, " ")} <span class="mono">${pp.yes_seats}/${pp.seats}</span></span>`).join("");
+        vb.insertAdjacentHTML("beforeend", `<div class="vote"><span>Ley: ${label}</span><div class="track"><div class="fill ${ok ? "" : "fail"}" style="width:${Math.min(100, yes)}%"></div><div class="thr" style="left:${thr}%"></div></div><span class="mono">${fmt(yes, 0)}/100 ${ok ? "aprobada" : "rechazada"}</span></div><div class="chips" style="margin-bottom:8px">${parties}</div>`);
       });
     } else cs.hidden = true;
+    const ns = $("nego-section"); const nl = $("negos"); nl.innerHTML = "";
+    const CONC = { restore_transfers: "restaurar transferencias", public_works: "obra pública", wage_bonus: "bono salarial", tax_exemption: "exención impositiva", cabinet_seat: "un ministerio", delay_policy: "postergar la medida" };
+    const MOVES = { GRANT: "concede", COUNTER: "contraoferta", REFUSE: "rechaza", ACCEPT: "acepta", WALK_AWAY: "se levanta de la mesa" };
+    const negs = (m.negotiations || []).filter(n => n.outcome !== "no_agreement" || (n.turns || []).length > 1).slice(0, 4);
+    const refused = (m.negotiations || []).length - negs.length;
+    if (negs.length || refused) {
+      ns.hidden = false;
+      negs.forEach(n => {
+        const ok = n.outcome === "agreement";
+        const dialogue = (n.turns || []).map(t => `<span class="mono">${t.speaker}</span> ${MOVES[t.move] || t.move}${t.scale && t.scale < 1 && t.move !== "REFUSE" ? ` (${Math.round(t.scale * 100)} %)` : ""}`).join(" → ");
+        nl.insertAdjacentHTML("beforeend", `<li><span class="bar ${ok ? "support" : "oppose"}"></span><div><div class="who">${n.actor} <span class="tag">${ok ? "acuerdo" : n.outcome.replace(/_/g, " ")}</span></div><div class="what">pide ${CONC[n.requested_concession] || n.requested_concession}</div><div class="why">${dialogue}</div></div></li>`);
+      });
+      if (refused) nl.insertAdjacentHTML("beforeend", `<li><span></span><span class="empty">${refused} pedido(s) rechazado(s) de plano por falta de peso político.</span></li>`);
+    } else ns.hidden = true;
     const feed = $("feed"); feed.innerHTML = "";
     const acts = m.actions.slice(0, 6);
     if (!acts.length) feed.innerHTML = `<li><span></span><span class="empty">Nadie se movió este mes${m.denied ? ` (${m.denied} acciones denegadas)` : ""}.</span></li>`;
