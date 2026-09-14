@@ -1,0 +1,29 @@
+[project]
+name = "republica-artificial"
+version = "0.1.0"
+description = "República Artificial — laboratorio político jugable y framework de experimentación con agentes IA."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2",
+    "typer>=0.12",
+    "rich",
+    "pyyaml",
+]
+
+[project.scripts]
+republica = "republica.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "hypothesis",
+    "ruff",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/republica"]
