@@ -48,3 +48,14 @@ def test_build_html_escapes_script_close() -> None:
     html = build_html(run_data)
     assert "</script><b>" not in html.split("__")[0]
     assert "<\\/script><b>" in html
+
+
+def test_cli_viewer_writes_html(tmp_path: Path) -> None:
+    from typer.testing import CliRunner
+
+    from republica.cli import app
+
+    src = _write_run(tmp_path)
+    result = CliRunner().invoke(app, ["viewer", str(src), "--out", str(tmp_path / "v.html")])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "v.html").read_text(encoding="utf-8").startswith("<title>")

@@ -187,6 +187,21 @@ def run(
 
 
 @app.command()
+def viewer(
+    path: Annotated[Path, typer.Argument(help="Archivo JSONL de una corrida (`republica run`).")],
+    out: Annotated[
+        Path | None, typer.Option("--out", help="Salida HTML (default: mismo nombre con .html).")
+    ] = None,
+    title: Annotated[str | None, typer.Option("--title", help="Titulo de la pagina.")] = None,
+) -> None:
+    """Genera un visor HTML autocontenido de la corrida (graficos, boletin, actores)."""
+    from republica.ui.viewer import export
+
+    target = export(path, out or path.with_suffix(".html"), title)
+    console.print(f"[green]OK[/green] visor -> {target}")
+
+
+@app.command()
 def narrate(
     path: Annotated[Path, typer.Argument(help="Archivo JSONL de una corrida (`republica run`).")],
 ) -> None:
