@@ -1,0 +1,435 @@
+<title>__TITLE__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f2f4f6;
+  --surface: #ffffff;
+  --surface-2: #e9edf1;
+  --line: #d3d9df;
+  --ink: #131a21;
+  --ink-2: #4c5966;
+  --ink-3: #7d8994;
+  --accent: #1f6fa8;
+  --accent-ink: #ffffff;
+  --gold: #b7791f;
+  --gold-bg: #fbf1dc;
+  --good: #1e7f4f;
+  --bad: #b8362f;
+  --bad-bg: #f8e2df;
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --s3: #1baf7a;
+  --s4: #eda100;
+  --grid: #e3e8ec;
+  --shadow: 0 1px 2px rgba(19,26,33,.06), 0 8px 24px rgba(19,26,33,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #12171c;
+    --surface: #1a2027;
+    --surface-2: #222a33;
+    --line: #2f3944;
+    --ink: #eef2f5;
+    --ink-2: #b4bec8;
+    --ink-3: #7f8a95;
+    --accent: #5aa5e0;
+    --accent-ink: #0d1218;
+    --gold: #e1b25a;
+    --gold-bg: #3a2f14;
+    --good: #4cc48a;
+    --bad: #f0776f;
+    --bad-bg: #3d1f1c;
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+    --s4: #c98500;
+    --grid: #262f38;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #12171c;
+  --surface: #1a2027;
+  --surface-2: #222a33;
+  --line: #2f3944;
+  --ink: #eef2f5;
+  --ink-2: #b4bec8;
+  --ink-3: #7f8a95;
+  --accent: #5aa5e0;
+  --accent-ink: #0d1218;
+  --gold: #e1b25a;
+  --gold-bg: #3a2f14;
+  --good: #4cc48a;
+  --bad: #f0776f;
+  --bad-bg: #3d1f1c;
+  --s1: #3987e5;
+  --s2: #d95926;
+  --s3: #199e70;
+  --s4: #c98500;
+  --grid: #262f38;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  padding-block: 0 24px;
+  padding-inline: 20px;
+}
+.mono { font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace; font-variant-numeric: tabular-nums; }
+h1, h2, h3 { margin: 0; font-family: "Bricolage Grotesque", "IBM Plex Sans", system-ui, sans-serif; text-wrap: balance; }
+.topbar {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px;
+  padding-block: 16px 12px; border-bottom: 1px solid var(--line); margin-bottom: 18px;
+}
+.topbar h1 { font-size: 20px; font-weight: 800; letter-spacing: -.01em; }
+.topbar .meta { color: var(--ink-3); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+.topbar .outcome { margin-left: auto; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
+.outcome.survived { background: color-mix(in oklab, var(--good) 16%, var(--surface)); color: var(--good); }
+.outcome.collapse, .outcome.hyperinflation { background: var(--bad-bg); color: var(--bad); }
+.layout { display: grid; grid-template-columns: minmax(0, 7fr) minmax(300px, 5fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+
+/* charts */
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 560px) { .charts { grid-template-columns: 1fr; } }
+.chart { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px 6px; }
+.chart header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+.chart h3 { font-size: 13px; font-weight: 700; color: var(--ink-2); letter-spacing: .01em; }
+.chart .now { font-size: 18px; font-weight: 500; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart svg text { font-family: "IBM Plex Mono", monospace; font-size: 10px; fill: var(--ink-3); }
+.chart .grid line { stroke: var(--grid); stroke-width: 1; }
+.chart .axis line { stroke: var(--line); }
+.chart .area { opacity: .12; }
+.chart .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .cursor { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart .dot { stroke: var(--surface); stroke-width: 2; }
+.chart .shock { fill: var(--gold); }
+.chart .future { opacity: .28; }
+.tooltip {
+  position: fixed; pointer-events: none; z-index: 5; background: var(--ink); color: var(--bg);
+  padding: 6px 9px; border-radius: 6px; font-size: 12px; box-shadow: var(--shadow); display: none; white-space: nowrap;
+}
+
+/* bulletin */
+.bulletin { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; }
+.bulletin .masthead { padding: 14px 18px 10px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.masthead .eyebrow { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.masthead h2 { font-size: 34px; font-weight: 800; letter-spacing: -.02em; line-height: 1.05; margin-top: 2px; }
+.masthead .sub { color: var(--ink-2); font-size: 12px; margin-top: 4px; }
+.section { padding: 12px 18px; border-bottom: 1px solid var(--line); }
+.section:last-child { border-bottom: 0; }
+.section h3 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px; font-family: "IBM Plex Sans", system-ui, sans-serif; font-weight: 600; }
+.indicators { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 16px; }
+.ind { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: baseline; padding: 3px 0; border-bottom: 1px dotted var(--line); }
+.ind .lbl { color: var(--ink-2); font-size: 12.5px; }
+.ind .val { font-size: 14px; font-weight: 500; }
+.ind .unit { color: var(--ink-3); font-size: 11px; margin-left: 2px; }
+.ind .delta { font-size: 11.5px; min-width: 52px; text-align: right; }
+.delta.up { color: var(--good); } .delta.down { color: var(--bad); } .delta.flat { color: var(--ink-3); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-size: 12px; background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); }
+.chip.new { background: var(--gold-bg); color: var(--gold); border-color: color-mix(in oklab, var(--gold) 40%, var(--line)); font-weight: 600; }
+.chip.event { background: var(--bad-bg); color: var(--bad); border-color: color-mix(in oklab, var(--bad) 40%, var(--line)); font-weight: 600; }
+.chip.policy { background: color-mix(in oklab, var(--accent) 12%, var(--surface)); color: var(--accent); border-color: color-mix(in oklab, var(--accent) 35%, var(--line)); }
+.empty { color: var(--ink-3); font-size: 12.5px; }
+.feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.feed li { display: grid; grid-template-columns: 8px 1fr; gap: 10px; align-items: start; }
+.feed .bar { width: 8px; border-radius: 2px; background: var(--s1); margin-top: 3px; height: 32px; }
+.feed .bar.oppose { background: var(--s2); } .feed .bar.support { background: var(--s3); } .feed .bar.media { background: var(--s4); } .feed .bar.denied { background: var(--line); }
+.feed .who { font-weight: 600; font-size: 13px; }
+.feed .what { font-size: 12px; color: var(--ink-2); }
+.feed .why { font-size: 12px; color: var(--ink-3); overflow-wrap: anywhere; }
+.tag { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin-left: 6px; }
+.tag.denied { color: var(--bad); }
+.vote { display: flex; align-items: center; gap: 10px; font-size: 12.5px; margin-bottom: 6px; }
+.vote .track { flex: 1; height: 8px; background: var(--surface-2); border-radius: 4px; position: relative; overflow: hidden; }
+.vote .fill { height: 100%; background: var(--s3); }
+.vote .fill.fail { background: var(--s2); }
+.vote .thr { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ink); left: 51%; }
+
+/* timeline */
+.timeline { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px 14px; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px; }
+.btn { font: inherit; font-weight: 600; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); cursor: pointer; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.controls label { color: var(--ink-2); font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; }
+select { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.controls .pos { margin-left: auto; color: var(--ink-2); font-size: 12.5px; }
+.controls kbd { font-family: "IBM Plex Mono", monospace; font-size: 11px; padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-2); }
+.track-wrap { position: relative; padding-top: 14px; }
+.marks { position: absolute; left: 0; right: 0; top: 0; height: 14px; }
+.marks span { position: absolute; top: 0; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 8px solid var(--gold); transform: translateX(-5px); }
+.marks span.ev { border-top-color: var(--bad); }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+.years { display: flex; justify-content: space-between; color: var(--ink-3); font-size: 11px; margin-top: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="topbar">
+  <h1>República de Aurora</h1>
+  <span class="meta" id="meta"></span>
+  <span class="outcome" id="outcome"></span>
+</div>
+
+<div class="layout">
+  <section class="charts" id="charts" aria-label="Series principales"></section>
+  <aside class="bulletin" aria-live="polite">
+    <div class="masthead">
+      <div class="eyebrow">Boletín mensual · Casa de Gobierno</div>
+      <h2 id="date">—</h2>
+      <div class="sub" id="sub"></div>
+    </div>
+    <div class="section">
+      <h3>Indicadores</h3>
+      <div class="indicators" id="indicators"></div>
+    </div>
+    <div class="section">
+      <h3>Hoy</h3>
+      <div class="chips" id="today"></div>
+    </div>
+    <div class="section" id="congress-section" hidden>
+      <h3>Congreso</h3>
+      <div id="votes"></div>
+    </div>
+    <div class="section">
+      <h3>Reacciones de los actores</h3>
+      <ul class="feed" id="feed"></ul>
+    </div>
+  </aside>
+</div>
+
+<div class="timeline">
+  <div class="controls">
+    <button class="btn primary" id="play">▶ Reproducir</button>
+    <button class="btn" id="prev" aria-label="Mes anterior">←</button>
+    <button class="btn" id="next" aria-label="Mes siguiente">→</button>
+    <label for="speed">Velocidad
+      <select id="speed"><option value="900">lenta</option><option value="450" selected>normal</option><option value="180">rápida</option></select>
+    </label>
+    <span class="pos"><span id="pos"></span> · <kbd>←</kbd> <kbd>→</kbd> <kbd>espacio</kbd></span>
+  </div>
+  <div class="track-wrap">
+    <div class="marks" id="marks" aria-hidden="true"></div>
+    <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Mes">
+    <div class="years" id="years"></div>
+  </div>
+</div>
+<div class="tooltip mono" id="tip"></div>
+
+<script>
+(function () {
+  const RUN = __RUN_JSON__;
+  const M = RUN.months;
+  const N = M.length;
+  const IND = RUN.indicators;
+  const SHOCK_NAMES = {
+    drought: "Sequía", commodity_boom: "Boom de commodities", corruption_scandal: "Escándalo de corrupción",
+    general_strike: "Huelga general", international_crisis: "Crisis internacional", flood: "Inundación",
+    energy_discovery: "Descubrimiento energético", epidemic: "Epidemia", banking_crisis: "Crisis bancaria",
+    protest_wave: "Ola de protestas", growth_surprise: "Crecimiento inesperado", trade_partner_collapse: "Caída de socio comercial"
+  };
+  const EVENT_NAMES = {
+    forced_devaluation: "Devaluación forzada", government_collapse: "Cae el gobierno", collapse: "Cae el gobierno",
+    hyperinflation: "Hiperinflación", term_end: "Fin del mandato", agreement_broken: "Acuerdo roto"
+  };
+  const ACTION_NAMES = {
+    SUPPORT_POLICY: "apoya la política", OPPOSE_POLICY: "se opone a la política", NEGOTIATE: "pide negociar",
+    PUBLIC_STATEMENT: "declaración pública", LOBBY_CONGRESS: "presiona al Congreso", FORM_ALLIANCE: "forma alianza",
+    BREAK_ALLIANCE: "rompe alianza", CALL_PROTEST: "convoca protesta", STRIKE: "huelga", REQUEST_FUNDS: "pide fondos",
+    WITHHOLD_INVESTMENT: "frena inversiones", INVEST: "anuncia inversiones", PUBLISH_STORY: "publica", ENDORSE: "respalda",
+    CRITICIZE: "critica", RECOMMEND_RATE: "recomienda tasa", SET_RATE: "fija la tasa", PROPOSE_POLICY: "propone política",
+    ENACT_POLICY: "aplica política", GRANT_CONCESSION: "concede", NO_ACTION: "—"
+  };
+  const CHARTS = [
+    { key: "inflation_annual", title: "Inflación anualizada", unit: "%", color: "var(--s2)", dec: 0 },
+    { key: "unemployment", title: "Desempleo", unit: "%", color: "var(--s1)", dec: 1 },
+    { key: "government_approval", title: "Aprobación del gobierno", unit: "", color: "var(--s3)", dec: 0 },
+    { key: "reserves", title: "Reservas", unit: "USD M", color: "var(--s4)", dec: 0 }
+  ];
+  const fmt = (v, d) => (v === undefined || v === null || isNaN(v)) ? "—" : Number(v).toLocaleString("es-AR", { minimumFractionDigits: d, maximumFractionDigits: d });
+  const $ = (id) => document.getElementById(id);
+  let cur = 0, timer = null;
+
+  // ---------- header ----------
+  $("meta").textContent = `semilla ${RUN.seed ?? "?"} · ${N} meses · ${RUN.config_hash ? RUN.config_hash.slice(0, 8) : ""}`;
+  const oc = $("outcome"); oc.textContent = ({ survived: "Sobrevivió", collapse: "Colapso", hyperinflation: "Hiperinflación" })[RUN.outcome] || RUN.outcome;
+  oc.classList.add(RUN.outcome);
+
+  // ---------- charts ----------
+  const W = 320, H = 150, PL = 40, PR = 8, PT = 10, PB = 22;
+  const chartEls = [];
+  function buildChart(c) {
+    const wrap = document.createElement("div"); wrap.className = "chart";
+    wrap.innerHTML = `<header><h3>${c.title}</h3><span class="now mono" data-now></span></header>`;
+    const vals = M.map(m => Number(m.state[c.key]));
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    if (hi - lo < 1e-9) { hi = lo + 1; }
+    const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+    if (c.key !== "government_approval" && lo < 0 && Math.min(...vals) >= 0) lo = 0;
+    const x = i => PL + (i / Math.max(1, N - 1)) * (W - PL - PR);
+    const y = v => PT + (1 - (v - lo) / (hi - lo)) * (H - PT - PB);
+    const ticks = 4; let grid = "", labels = "";
+    for (let t = 0; t <= ticks; t++) {
+      const v = lo + (hi - lo) * t / ticks; const yy = y(v).toFixed(1);
+      grid += `<line x1="${PL}" x2="${W - PR}" y1="${yy}" y2="${yy}"/>`;
+      labels += `<text x="${PL - 6}" y="${(+yy + 3.5).toFixed(1)}" text-anchor="end">${fmt(v, c.key === "reserves" ? 0 : (c.dec))}</text>`;
+    }
+    let xl = "";
+    M.forEach((m, i) => { if (m.date && m.date.endsWith("-01")) xl += `<text x="${x(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${m.date.slice(0, 4)}</text>`; });
+    const pts = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+    const path = "M" + pts.join(" L");
+    const area = `M${x(0).toFixed(1)},${y(lo).toFixed(1)} L` + pts.join(" L") + ` L${x(N - 1).toFixed(1)},${y(lo).toFixed(1)} Z`;
+    let shocks = "";
+    M.forEach((m, i) => { if (m.shocks_new.length) shocks += `<path class="shock" d="M${(x(i) - 4).toFixed(1)},${H - PB + 3} h8 l-4,6 z"><title>${m.shocks_new.map(s => SHOCK_NAMES[s] || s).join(", ")}</title></path>`; });
+    const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${c.title}">
+      <g class="grid">${grid}</g><g class="axis"><line x1="${PL}" x2="${W - PR}" y1="${H - PB}" y2="${H - PB}"/></g>
+      ${labels}${xl}
+      <path class="area" d="${area}" fill="${c.color}"/>
+      <path class="line past" d="${path}" stroke="${c.color}"/>
+      <path class="line future" d="${path}" stroke="${c.color}"/>
+      ${shocks}
+      <line class="cursor" x1="0" x2="0" y1="${PT}" y2="${H - PB}"/>
+      <circle class="dot" r="4.5" fill="${c.color}" cx="0" cy="0"/>
+      <rect class="hit" x="${PL}" y="0" width="${W - PL - PR}" height="${H}" fill="transparent"/>
+    </svg>`;
+    wrap.insertAdjacentHTML("beforeend", svg);
+    const el = { wrap, c, vals, x, y, past: wrap.querySelector(".past"), cursor: wrap.querySelector(".cursor"), dot: wrap.querySelector(".dot"), now: wrap.querySelector("[data-now]"), pathLen: 0 };
+    const svgEl = wrap.querySelector("svg");
+    svgEl.addEventListener("mousemove", ev => {
+      const r = svgEl.getBoundingClientRect(); const px = (ev.clientX - r.left) / r.width * W;
+      const i = Math.max(0, Math.min(N - 1, Math.round((px - PL) / (W - PL - PR) * (N - 1))));
+      const tip = $("tip"); tip.style.display = "block"; tip.style.left = (ev.clientX + 12) + "px"; tip.style.top = (ev.clientY - 28) + "px";
+      tip.textContent = `${M[i].date} · ${c.title}: ${fmt(vals[i], c.dec)} ${c.unit}`;
+      chartEls.forEach(e => e.cursor.setAttribute("x1", e.x(i)) || e.cursor.setAttribute("x2", e.x(i)));
+    });
+    svgEl.addEventListener("mouseleave", () => { $("tip").style.display = "none"; chartEls.forEach(e => { e.cursor.setAttribute("x1", e.x(cur)); e.cursor.setAttribute("x2", e.x(cur)); }); });
+    svgEl.addEventListener("click", ev => { const r = svgEl.getBoundingClientRect(); const px = (ev.clientX - r.left) / r.width * W; go(Math.round((px - PL) / (W - PL - PR) * (N - 1))); });
+    return el;
+  }
+  CHARTS.forEach(c => { const el = buildChart(c); chartEls.push(el); $("charts").appendChild(el.wrap); });
+  function clipPast(el, i) {
+    // the "past" line is the same path clipped to the current month via stroke-dasharray
+    if (!el.pathLen) el.pathLen = el.past.getTotalLength();
+    const frac = N > 1 ? i / (N - 1) : 1;
+    // approximate by x proportion of total length (paths are monotonic in x)
+    let len = 0;
+    if (i > 0) { const p0 = el.past.getPointAtLength(0); void p0; len = pathLengthToX(el, el.x(i)); }
+    el.past.setAttribute("stroke-dasharray", `${len} ${el.pathLen}`);
+    void frac;
+  }
+  function pathLengthToX(el, targetX) {
+    let lo = 0, hi = el.pathLen;
+    for (let k = 0; k < 18; k++) { const mid = (lo + hi) / 2; if (el.past.getPointAtLength(mid).x < targetX) lo = mid; else hi = mid; }
+    return hi;
+  }
+
+  // ---------- bulletin ----------
+  const DELTA_EPS = { reserves: 50, exchange_rate: 0.5, public_debt: 0.3, inflation_annual: 0.5 };
+  function renderBulletin(i) {
+    const m = M[i], prev = i > 0 ? M[i - 1] : null;
+    const [yy, mm] = (m.date || "").split("-");
+    const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+    $("date").textContent = mm ? `${MONTHS[+mm - 1]} ${yy}` : `mes ${i + 1}`;
+    const p = m.policy || {};
+    $("sub").innerHTML = `Mes ${i + 1} de ${N} · tasa <span class="mono">${fmt(p.interest_rate_target, 1)} %</span> · gasto <span class="mono">${fmt(p.primary_spending, 1)}</span> · impuestos <span class="mono">${fmt(p.tax_rate, 1)}</span> · transferencias <span class="mono">${fmt(p.provincial_transfers, 1)}</span> % PIB`;
+    const ind = $("indicators"); ind.innerHTML = "";
+    IND.forEach(d => {
+      const v = m.state[d.key], pv = prev ? prev.state[d.key] : v; const dv = v - pv;
+      const eps = DELTA_EPS[d.key] ?? 0.05;
+      const dir = Math.abs(dv) < eps ? "flat" : (dv > 0) === !d.lower_better ? "up" : "down";
+      const arrow = Math.abs(dv) < eps ? "→" : dv > 0 ? "▲" : "▼";
+      ind.insertAdjacentHTML("beforeend", `<div class="ind"><span class="lbl">${d.label}</span><span class="val mono">${fmt(v, d.dec)}<span class="unit">${d.unit}</span></span><span class="delta mono ${dir}">${arrow} ${fmt(Math.abs(dv), d.key === "reserves" ? 0 : Math.max(1, d.dec))}</span></div>`);
+    });
+    const today = $("today"); today.innerHTML = "";
+    m.shocks_new.forEach(s => today.insertAdjacentHTML("beforeend", `<span class="chip new">⚡ ${SHOCK_NAMES[s] || s}</span>`));
+    m.shocks_active.filter(s => !m.shocks_new.includes(s)).forEach(s => today.insertAdjacentHTML("beforeend", `<span class="chip">${SHOCK_NAMES[s] || s} <span class="mono">(sigue)</span></span>`));
+    m.events.forEach(e => { const id = String(e).split(":")[0]; today.insertAdjacentHTML("beforeend", `<span class="chip event">● ${EVENT_NAMES[id] || e}</span>`); });
+    if (prev) {
+      const pp = prev.policy || {};
+      [["interest_rate_target", "tasa", "pp"], ["primary_spending", "gasto", "pp PIB"], ["tax_rate", "impuestos", "pp PIB"], ["provincial_transfers", "transferencias", "pp PIB"]].forEach(([k, lbl, u]) => {
+        const d = (p[k] ?? 0) - (pp[k] ?? 0); if (Math.abs(d) >= 0.05) today.insertAdjacentHTML("beforeend", `<span class="chip policy">${lbl} ${d > 0 ? "+" : "−"}${fmt(Math.abs(d), 1)} ${u}</span>`);
+      });
+    }
+    if (!today.children.length) today.innerHTML = `<span class="empty">Sin novedades. Un mes tranquilo.</span>`;
+    const cs = $("congress-section"); const vb = $("votes"); vb.innerHTML = "";
+    if (m.votes && m.votes.length) {
+      cs.hidden = false;
+      m.votes.forEach(v => {
+        const yes = Number(v.yes ?? v.total_yes ?? v.yes_seats ?? 0), thr = Number(v.threshold ?? 51), ok = v.passed ?? (yes >= thr);
+        vb.insertAdjacentHTML("beforeend", `<div class="vote"><span>${v.label || v.bill || "Ley"}</span><div class="track"><div class="fill ${ok ? "" : "fail"}" style="width:${Math.min(100, yes)}%"></div><div class="thr" style="left:${thr}%"></div></div><span class="mono">${fmt(yes, 0)}/100 ${ok ? "aprobada" : "rechazada"}</span></div>`);
+      });
+    } else cs.hidden = true;
+    const feed = $("feed"); feed.innerHTML = "";
+    const acts = m.actions.slice(0, 6);
+    if (!acts.length) feed.innerHTML = `<li><span></span><span class="empty">Nadie se movió este mes${m.denied ? ` (${m.denied} acciones denegadas)` : ""}.</span></li>`;
+    acts.forEach(a => {
+      const stance = (a.params && a.params.stance) || "";
+      const cls = !a.authorized ? "denied" : a.type === "OPPOSE_POLICY" || stance === "oppose" || a.type === "STRIKE" || a.type === "CALL_PROTEST" || a.type === "CRITICIZE" || a.type === "WITHHOLD_INVESTMENT" ? "oppose"
+        : a.type === "SUPPORT_POLICY" || stance === "support" || a.type === "ENDORSE" || a.type === "INVEST" || a.type === "GRANT_CONCESSION" ? "support"
+        : a.type === "PUBLISH_STORY" ? "media" : "";
+      let what = ACTION_NAMES[a.type] || a.type;
+      if (a.params) {
+        if (a.params.frame) what += ` · ${a.params.frame}`;
+        if (a.params.requested_concession) what += ` · ${String(a.params.requested_concession).replace(/_/g, " ")}`;
+        if (a.params.concession) what += ` ${String(a.params.concession).replace(/_/g, " ")} a ${a.params.to}`;
+        if (a.params.delta_pp !== undefined) what += ` ${a.params.delta_pp > 0 ? "+" : ""}${fmt(a.params.delta_pp, 1)} pp`;
+        if (a.params.stance) what += ` (${a.params.stance})`;
+      }
+      const inten = a.intensity != null ? `<span class="tag">intensidad ${fmt(a.intensity, 2)}</span>` : "";
+      const den = a.authorized ? "" : `<span class="tag denied">denegada</span>`;
+      const why = (a.reason || "").replace(/^score=[^)]*\)\s*/, "");
+      feed.insertAdjacentHTML("beforeend", `<li><span class="bar ${cls}"></span><div><div class="who">${a.actor}${inten}${den}</div><div class="what">${what}</div><div class="why">${why}</div></div></li>`);
+    });
+    if (m.denied && acts.length) feed.insertAdjacentHTML("beforeend", `<li><span></span><span class="empty">${m.denied} acción(es) fuera de sus atribuciones fueron denegadas.</span></li>`);
+  }
+
+  // ---------- timeline ----------
+  const scrub = $("scrub"); scrub.max = N - 1;
+  const marks = $("marks");
+  M.forEach((m, i) => {
+    const left = (i / Math.max(1, N - 1) * 100).toFixed(2) + "%";
+    if (m.shocks_new.length) marks.insertAdjacentHTML("beforeend", `<span style="left:${left}" title="${m.shocks_new.map(s => SHOCK_NAMES[s] || s).join(", ")}"></span>`);
+    if (m.events.some(e => !String(e).startsWith("term_end"))) marks.insertAdjacentHTML("beforeend", `<span class="ev" style="left:${left}" title="${m.events.join(", ")}"></span>`);
+  });
+  const yrs = [...new Set(M.map(m => (m.date || "").slice(0, 4)))].filter(Boolean);
+  $("years").innerHTML = yrs.map(y => `<span>${y}</span>`).join("");
+
+  function go(i) {
+    cur = Math.max(0, Math.min(N - 1, i));
+    scrub.value = cur;
+    $("pos").textContent = `${M[cur].date} · ${cur + 1}/${N}`;
+    chartEls.forEach(el => {
+      const cx = el.x(cur), cy = el.y(el.vals[cur]);
+      el.cursor.setAttribute("x1", cx); el.cursor.setAttribute("x2", cx);
+      el.dot.setAttribute("cx", cx); el.dot.setAttribute("cy", cy);
+      el.now.textContent = `${fmt(el.vals[cur], el.c.dec)}${el.c.unit === "%" ? " %" : ""}`;
+      clipPast(el, cur);
+    });
+    renderBulletin(cur);
+    if (cur === N - 1 && timer) stop();
+  }
+  function play() { if (timer) return stop(); if (cur >= N - 1) cur = -1; timer = setInterval(() => go(cur + 1), +$("speed").value); $("play").textContent = "❚❚ Pausa"; }
+  function stop() { clearInterval(timer); timer = null; $("play").textContent = "▶ Reproducir"; }
+  $("play").addEventListener("click", play);
+  $("prev").addEventListener("click", () => { stop(); go(cur - 1); });
+  $("next").addEventListener("click", () => { stop(); go(cur + 1); });
+  $("speed").addEventListener("change", () => { if (timer) { stop(); play(); } });
+  scrub.addEventListener("input", () => { stop(); go(+scrub.value); });
+  document.addEventListener("keydown", ev => {
+    if (ev.target.tagName === "SELECT" || ev.target.tagName === "INPUT") return;
+    if (ev.key === "ArrowRight") { stop(); go(cur + 1); } else if (ev.key === "ArrowLeft") { stop(); go(cur - 1); } else if (ev.key === " ") { ev.preventDefault(); play(); }
+  });
+  go(0);
+})();
+</script>
