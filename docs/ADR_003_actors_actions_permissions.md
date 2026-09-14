@@ -56,14 +56,21 @@ el prompt del agente IA (Fase 4). Nunca contiene el estado completo.
 
 ```python
 class Perception(BaseModel):
-    month: int; date: str; months_to_election: int
-    public_indicators: dict[str, float]     # los 8 del tablero + inflation_annual
-    private_indicators: dict[str, float]    # por rol: governor → su provincia; central_bank → reservas exactas, etc.
-    proposal: PolicyProposal | None         # lo que el gobierno propone este mes (delta de Policy + etiqueta)
-    active_shocks: list[str]; recent_events: list[str]
-    relationships: dict[str, int]           # solo las propias
-    memories: list[str]                     # vacío hasta Fase 6
-    goals: list[str]                        # derivados de interests
+    month: int
+    date: str
+    months_to_election: int
+    public_indicators: dict[str, float]  # los 8 del tablero + inflation_annual
+    private_indicators: dict[
+        str, float
+    ]  # por rol: governor → su provincia; central_bank → reservas exactas, etc.
+    proposal: (
+        PolicyProposal | None
+    )  # lo que el gobierno propone este mes (delta de Policy + etiqueta)
+    active_shocks: list[str]
+    recent_events: list[str]
+    relationships: dict[str, int]  # solo las propias
+    memories: list[str]  # vacío hasta Fase 6
+    goals: list[str]  # derivados de interests
 ```
 
 ## 4. Catálogo de acciones

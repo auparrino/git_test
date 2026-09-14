@@ -1,0 +1,151 @@
+[
+  {
+    "id": "drought",
+    "name": "Sequía",
+    "base_p": 0.02,
+    "conditional_p": [],
+    "duration": 3,
+    "effects": [
+      {"target": "shock_gdp", "value": -0.3, "when": "each"},
+      {"target": "shock_reserves", "value": -400.0, "when": "each"},
+      {"target": "province_sector:agro", "value": -10.0, "when": "each"}
+    ]
+  },
+  {
+    "id": "commodity_boom",
+    "name": "Boom de commodities",
+    "base_p": 0.03,
+    "conditional_p": [],
+    "duration": 6,
+    "effects": [
+      {"target": "commodity_price", "value": 20.0, "when": "first"},
+      {"target": "shock_reserves", "value": 300.0, "when": "each"}
+    ]
+  },
+  {
+    "id": "corruption_scandal",
+    "name": "Escándalo de corrupción",
+    "base_p": 0.03,
+    "conditional_p": [],
+    "duration": 1,
+    "effects": [
+      {"target": "shock_approval", "value": -6.0, "when": "each"},
+      {"target": "shock_conf", "value": -5.0, "when": "each"},
+      {"target": "shock_tension", "value": 5.0, "when": "each"}
+    ]
+  },
+  {
+    "id": "general_strike",
+    "name": "Huelga general",
+    "base_p": 0.02,
+    "conditional_p": [
+      {"add": 0.05, "any": [{"field": "social_tension", "op": ">", "value": 55.0}]}
+    ],
+    "duration": 1,
+    "effects": [
+      {"target": "shock_gdp", "value": -0.4, "when": "each"},
+      {"target": "shock_protest", "value": 20.0, "when": "each"},
+      {"target": "shock_approval", "value": -2.0, "when": "each"}
+    ]
+  },
+  {
+    "id": "international_crisis",
+    "name": "Crisis internacional",
+    "base_p": 0.015,
+    "conditional_p": [],
+    "duration": 3,
+    "effects": [
+      {"target": "world_demand", "value": -8.0, "when": "first"},
+      {"target": "commodity_price", "value": -10.0, "when": "first"},
+      {"target": "shock_fx", "value": 5.0, "when": "first"},
+      {"target": "shock_reserves", "value": -500.0, "when": "each"}
+    ]
+  },
+  {
+    "id": "flood",
+    "name": "Inundación",
+    "base_p": 0.02,
+    "conditional_p": [],
+    "duration": 2,
+    "effects": [
+      {"target": "shock_gdp", "value": -0.2, "when": "each"},
+      {"target": "shock_fiscal", "value": -0.5, "when": "each", "duration": 3},
+      {"target": "province_id:litoral", "value": -8.0, "when": "each"}
+    ]
+  },
+  {
+    "id": "energy_discovery",
+    "name": "Descubrimiento energético",
+    "base_p": 0.005,
+    "conditional_p": [],
+    "duration": 12,
+    "effects": [
+      {"target": "shock_reserves", "value": 200.0, "when": "each"},
+      {"target": "shock_gdp", "value": 0.1, "when": "each"},
+      {"target": "consumer_confidence", "value": 3.0, "when": "first"}
+    ]
+  },
+  {
+    "id": "epidemic",
+    "name": "Epidemia",
+    "base_p": 0.01,
+    "conditional_p": [],
+    "duration": 2,
+    "effects": [
+      {"target": "shock_gdp", "value": -0.8, "when": "each"},
+      {"target": "shock_u", "value": 0.5, "when": "first"},
+      {"target": "shock_fiscal", "value": -1.0, "when": "each", "duration": 3}
+    ]
+  },
+  {
+    "id": "banking_crisis",
+    "name": "Crisis bancaria",
+    "base_p": 0.005,
+    "conditional_p": [
+      {"add": 0.03, "any": [{"field": "inflation", "op": ">", "value": 6.0}, {"field": "reserves", "op": "<", "value": 3000.0}]}
+    ],
+    "duration": 2,
+    "effects": [
+      {"target": "shock_reserves", "value": -800.0, "when": "first"},
+      {"target": "shock_fx", "value": 10.0, "when": "first"},
+      {"target": "shock_conf", "value": -8.0, "when": "first"},
+      {"target": "shock_gdp", "value": -0.6, "when": "each"}
+    ]
+  },
+  {
+    "id": "protest_wave",
+    "name": "Ola de protestas",
+    "base_p": 0.01,
+    "conditional_p": [
+      {"add": 0.04, "any": [{"field": "social_tension", "op": ">", "value": 60.0}]}
+    ],
+    "duration": 1,
+    "effects": [
+      {"target": "shock_protest", "value": 25.0, "when": "each"},
+      {"target": "shock_stability", "value": -5.0, "when": "each"},
+      {"target": "shock_approval", "value": -3.0, "when": "each"}
+    ]
+  },
+  {
+    "id": "growth_surprise",
+    "name": "Crecimiento inesperado",
+    "base_p": 0.03,
+    "conditional_p": [],
+    "duration": 2,
+    "effects": [
+      {"target": "shock_gdp", "value": 0.4, "when": "each"},
+      {"target": "consumer_confidence", "value": 4.0, "when": "first"}
+    ]
+  },
+  {
+    "id": "trade_partner_collapse",
+    "name": "Caída de un socio comercial",
+    "base_p": 0.01,
+    "conditional_p": [],
+    "duration": 4,
+    "effects": [
+      {"target": "world_demand", "value": -10.0, "when": "first"},
+      {"target": "shock_reserves", "value": -300.0, "when": "each"}
+    ]
+  }
+]

@@ -46,8 +46,9 @@ class ActorDecision(BaseModel):
     confidence: float = Field(ge=0, le=1)
     reasoning: str = Field(max_length=600)
 
+
 class ActionRequest(BaseModel):
-    type: str                      # se valida contra el catálogo DESPUÉS, en authorize (no en el schema)
+    type: str  # se valida contra el catálogo DESPUÉS, en authorize (no en el schema)
     params: dict[str, float | str | int] = {}
     target: str | None = None
 ```

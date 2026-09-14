@@ -1,0 +1,9 @@
+id,name,population_k,gdp_share,main_sector,governor_party,u_offset,dependence
+norte,Norte,900,0.06,agro,alianza_provincial,3.0,0.8
+litoral,Litoral,1300,0.11,agro,frente_federal,1.0,0.6
+capital,Capital,2800,0.34,services,union_republicana,-1.5,0.1
+centro,Centro,1500,0.14,industry,frente_federal,0.0,0.4
+cuyo,Cuyo,700,0.06,mining,union_republicana,0.5,0.5
+pampa,Pampa,1600,0.17,agro,frente_federal,-0.5,0.3
+patagonia,Patagonia,500,0.07,energy,movimiento_libertad,-1.0,0.4
+costa,Costa,700,0.05,services,partido_social,2.0,0.7

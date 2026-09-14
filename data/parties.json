@@ -1,0 +1,52 @@
+[
+  {
+    "id": "frente_federal",
+    "name": "Frente Federal",
+    "seats": 38,
+    "economic": -0.3,
+    "social": 0.2,
+    "in_government": true,
+    "is_ally": false,
+    "coalition_weight": 1.0
+  },
+  {
+    "id": "union_republicana",
+    "name": "Unión Republicana",
+    "seats": 30,
+    "economic": 0.5,
+    "social": 0.1,
+    "in_government": false,
+    "is_ally": false,
+    "coalition_weight": 1.0
+  },
+  {
+    "id": "partido_social",
+    "name": "Partido Social",
+    "seats": 14,
+    "economic": -0.8,
+    "social": 0.6,
+    "in_government": false,
+    "is_ally": false,
+    "coalition_weight": 1.0
+  },
+  {
+    "id": "movimiento_libertad",
+    "name": "Movimiento Libertad",
+    "seats": 10,
+    "economic": 0.9,
+    "social": -0.2,
+    "in_government": false,
+    "is_ally": false,
+    "coalition_weight": 1.0
+  },
+  {
+    "id": "alianza_provincial",
+    "name": "Alianza Provincial",
+    "seats": 8,
+    "economic": 0.0,
+    "social": 0.0,
+    "in_government": false,
+    "is_ally": true,
+    "coalition_weight": 0.85
+  }
+]

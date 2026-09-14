@@ -1,6 +1,6 @@
 # SPEC v0.1 — República de Aurora, mundo determinista
 
-Estado: **borrador aprobado para implementar**. Los coeficientes son hipótesis calibradas a mano para
+Estado: **implementado (v0.1)**; calibración registrada en `CALIBRATION_LOG.md`. Los coeficientes son hipótesis calibradas a mano para
 producir un mundo *internamente coherente*, no un modelo econométrico. Viven en `data/country.json`
 para poder ajustarlos sin tocar código.
 
@@ -79,9 +79,14 @@ Son *inputs* del mes, no estado. En v0.1 los fija el jugador o una regla; en Fas
 | `provincial_transfers` | 6.0 (% PIB) | [0, 15] | Parte del gasto que va a provincias. Solo afecta ingresos provinciales en v0.1. |
 | `fx_intervention` | 0.5 | [0, 1] | Cuánto defiende el BC el tipo de cambio con reservas. |
 
-`PolicyRule` es una interfaz `decide(state, month) -> Policy`. v0.1 trae dos:
-`ConstantPolicy` (default: no hacer nada) y `TaylorPolicy`
-(`interest_rate_target = r_neutral + 12·π + 1.5·12·(π − 0.8)`, con `π` mensual; recortado al rango).
+`PolicyRule` es una interfaz `decide(state, month) -> Policy`. v0.1 trae tres:
+- `ConstantPolicy`: no hacer nada *en términos nominales* (tasa fija en 30). Es lo que hace un jugador
+  que no toca nada; con inflación cambiante equivale a apretar o aflojar sin querer.
+- `PassivePolicy` (**baseline de referencia y default de `run`/`batch`**): el BC sigue a la inflación
+  del mes anterior manteniendo la tasa real en `r_neutral + 2`:
+  `interest_rate_target = r_neutral + 2 + 12·inflation_lag1`. "No hacer nada" en términos reales.
+- `TaylorPolicy`: `interest_rate_target = r_neutral + 12·π + 1.5·12·(π − 0.8)`, con `π` mensual;
+  recortado al rango.
 
 ---
 
@@ -108,7 +113,9 @@ Los coeficientes están en `country.json → coefficients` con el nombre indicad
 
 ```
 g_m  = g_trend
-     − a_r  · r_gap / 100                       # a_r  = 2.0   (10 pp de tasa real sobre neutral → −0.2 pp/mes)
+     − a_r  · clamp(r_gap, r_gap_min, r_gap_max) / 100   # a_r = 2.0, r_gap_min = −10, r_gap_max = 30
+                                                 # (10 pp de tasa real sobre neutral → −0.2 pp/mes; saturado:
+                                                 #  tasas reales muy negativas no estimulan sin límite)
      + a_f  · (deficit − 3.0)                   # a_f  = 0.05  (déficit extra estimula a corto plazo)
      + a_c  · (consumer_confidence − 50) / 100  # a_c  = 0.3
      + a_x  · Δcommodity_price / 100            # a_x  = 1.0   (Δ del índice este mes)
@@ -144,7 +151,7 @@ Si `reserves < intervention_usd`, el BC no puede intervenir: `de = de_raw`, `int
 
 ```
 inflation' = rho_pi · inflation                       # rho_pi = 0.85 (inercia)
-           + c_e · de                                 # c_e    = 0.10 (pass-through)
+           + c_e · de                                 # c_e    = 0.06 (pass-through; ver CALIBRATION_LOG)
            + c_g · demand_gap                         # c_g    = 0.5
            + c_f · pos(deficit − 2.0)                 # c_f    = 0.12 (déficit no financiable → emisión)
            − c_r · r_gap / 100                        # c_r    = 1.0
@@ -169,7 +176,7 @@ unemployment' = unemployment
 ### 4.5 Salario real
 
 ```
-wage_growth_nominal = w_idx · inflation_prev           # w_idx = 0.8 (indexación al mes anterior)
+wage_growth_nominal = w_idx · inflation_prev           # w_idx = 1.0 (indexación completa al mes anterior)
                     + w_prod                            # w_prod = 0.1 (productividad)
                     + w_g · demand_gap                  # w_g = 0.3
                     − w_u · u_gap / 10                  # w_u = 0.3
@@ -200,13 +207,13 @@ public_debt' = public_debt
 reserves' = reserves
           + k_tb   · (commodity_price − 100)            # k_tb   = 20   (USD M por punto)
           + k_w    · (world_demand − 100)               # k_w    = 10
-          + k_k    · r_gap                              # k_k    = 40   (carry)
-          − k_conf · pos(50 − institutional_confidence) # k_conf = 15
+          + k_k    · r_gap                              # k_k    = 15   (carry)
+          − k_conf · pos(50 − institutional_confidence) # k_conf = 10
           − intervention_usd
           + shock_reserves
 ```
 
-Con valores iniciales: `+80 − 75 = +5 USD M/mes` (aprox. estable).
+Con valores iniciales: `+30 − 50 = −20 USD M/mes` (drenaje leve: presión para actuar).
 
 ### 4.8 Pobreza (ajuste hacia objetivo)
 
@@ -448,14 +455,14 @@ Al final: outcome y resumen (inflación acumulada, variación del PIB, desempleo
 4. **Sequía:** `--force-shock drought@5` vs. misma semilla sin forzar: `reserves` menor en los meses 6–9 y `government_approval` menor en al menos uno de los meses 6–9.
 5. **Tasa:** política que sube la tasa 15 pp en el mes 1 vs. constante, misma semilla, sin shocks: `inflation` menor en el mes 12 y `unemployment` mayor en el mes 12.
 6. **Emisión:** `primary_spending = 32` (déficit ≈ 10 % PIB) vs. default, sin shocks: inflación anualizada del mes 24 al menos 15 pp mayor.
-7. **Distribución de outcomes:** en 1.000 semillas con `ConstantPolicy`, `survived` entre 50 % y 95 %. (Si queda fuera, se recalibra `country.json`, no el test.)
+7. **Distribución de outcomes:** en 1.000 semillas, `survived` entre 50 % y 95 % tanto con `ConstantPolicy` como con `PassivePolicy`, y `passive ≥ constant`. (Si queda fuera, se recalibra `country.json`, no el test.)
 8. **Narración legible:** `narrate` de la semilla 7 no lanza excepciones y contiene al menos una frase de umbral.
 
 ---
 
 ## 12. Supuestos discutibles (marcados para el checkpoint humano)
 
-- **Indexación salarial 0.8 con un mes de rezago.** Es lo que hace que la inflación duela políticamente. Si se baja a 0.5, el salario real es mucho más sensible y el juego se vuelve más duro.
+- **Indexación salarial completa (1.0) con un mes de rezago.** El salario real solo se erosiona cuando la inflación *acelera* y se recupera cuando desacelera. Con 0.8 (primera versión) se erosionaba un 10 % en 48 meses aun con inflación en baja: incoherente. Ver CALIBRATION_LOG.
 - **Pass-through cambiario 0.10 por pp.** Alto para una economía cerrada, razonable para una bimonetaria.
 - **Déficit > 2 % del PIB se monetiza.** No hay mercado de deuda en v0.1. Es una simplificación fuerte que hace que el gasto sea inflacionario casi de inmediato.
 - **Tasa efectiva de la deuda 5 % fija.** Ignora que subir la tasa de política encarece la deuda. Se puede acoplar en v0.2 (`interest_cost = debt · (0.03 + 0.3·interest_rate/100)`).
