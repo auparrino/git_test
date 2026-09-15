@@ -1,9 +1,9 @@
-region,provinces,population_2022,gdp_share_approx,source,confidence
-CABA,Ciudad Autónoma de Buenos Aires,3120612,0.24,analyst assessment (concentracion economica ampliamente documentada; sin fuente descargada de PBG por provincia),medium
-GBA,Buenos Aires,17569053,0.24,analyst assessment (concentracion economica ampliamente documentada; sin fuente descargada de PBG por provincia),medium
-Pampeana,La Pampa; Entre Ríos,1792448,0.06,analyst assessment (concentracion economica ampliamente documentada; sin fuente descargada de PBG por provincia),low
-Córdoba–Santa Fe,Córdoba; Santa Fe,7397427,0.19,analyst assessment (concentracion economica ampliamente documentada; sin fuente descargada de PBG por provincia),low
-NOA,Catamarca; Jujuy; La Rioja; Salta; Santiago del Estero; Tucumán,5760055,0.08,analyst assessment (concentracion economica ampliamente documentada; sin fuente descargada de PBG por provincia),low
-NEA,Chaco; Corrientes; Formosa; Misiones,4242660,0.05,analyst assessment (concentracion economica ampliamente documentada; sin fuente descargada de PBG por provincia),low
-Cuyo,Mendoza; San Juan; San Luis,3373672,0.06,analyst assessment (concentracion economica ampliamente documentada; sin fuente descargada de PBG por provincia),low
-Patagonia,"Chubut; Neuquén; Río Negro; Santa Cruz; Tierra del Fuego, Antártida e Islas del Atlántico Sur",2615891,0.08,analyst assessment (concentracion economica ampliamente documentada; sin fuente descargada de PBG por provincia),low
+region,provinces,population_2022,gdp_share_approx,source,confidence,reviewed_by
+CABA,Ciudad Autónoma de Buenos Aires,3120612,0.24,analyst assessment (concentracion economica ampliamente documentada; sin fuente descargada de PBG por provincia),medium,opus
+GBA,Buenos Aires,17569053,0.24,analyst assessment (concentracion economica ampliamente documentada; sin fuente descargada de PBG por provincia),medium,opus
+Pampeana,La Pampa; Entre Ríos,1792448,0.06,analyst assessment (concentracion economica ampliamente documentada; sin fuente descargada de PBG por provincia),low,opus
+Córdoba–Santa Fe,Córdoba; Santa Fe,7535506,0.19,analyst assessment (concentracion economica ampliamente documentada; sin fuente descargada de PBG por provincia),low,opus
+NOA,Catamarca; Jujuy; La Rioja; Salta; Santiago del Estero; Tucumán,5760055,0.08,analyst assessment (concentracion economica ampliamente documentada; sin fuente descargada de PBG por provincia),low,opus
+NEA,Chaco; Corrientes; Formosa; Misiones,4242660,0.05,analyst assessment (concentracion economica ampliamente documentada; sin fuente descargada de PBG por provincia),low,opus
+Cuyo,Mendoza; San Juan; San Luis,3373672,0.06,analyst assessment (concentracion economica ampliamente documentada; sin fuente descargada de PBG por provincia),low,opus
+Patagonia,"Chubut; Neuquén; Río Negro; Santa Cruz; Tierra del Fuego, Antártida e Islas del Atlántico Sur",2615891,0.08,analyst assessment (concentracion economica ampliamente documentada; sin fuente descargada de PBG por provincia),low,opus
