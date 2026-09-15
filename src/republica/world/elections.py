@@ -212,6 +212,20 @@ def pos(x: float) -> float:
     return x if x > 0.0 else 0.0
 
 
+#: Divisor del `tanh` de `econ_vote_c` (ADR 006 secc. 2.2, literal: `/ 10`).
+#: RECALIBRADO en la Quinta ronda de calibracion (encargo B2, ver
+#: docs/CALIBRATION_LOG.md): con `TAU_SHARE = 0.15` (Cuarta ronda) el voto
+#: economico quedo sobre-sensible (+-8% de salario real en 12 meses movia la
+#: primera vuelta del oficialismo 53.75pp; rango pedido 15-25pp). `42.0`
+#: (en vez de `10.0`) reduce la amplitud de `econ_vote_c` sin cambiar su
+#: forma (`tanh` sigue saturando en +-1 para deltas grandes, solo que hace
+#: falta un delta mas grande para llegar ahi) -- barrido empirico (script de
+#: calibracion en el scratchpad de la sesion, no versionado) sobre 50
+#: semillas por punto: divisor `18` todavia da 39.7pp, `42` da 20.4pp
+#: (centro del rango 15-25pp pedido, con margen a ambos lados).
+ECON_VOTE_DIVISOR = 42.0
+
+
 def econ_vote(
     cohort: Cohort,
     delta_real_wage_pct_12m: float,
@@ -220,14 +234,17 @@ def econ_vote(
 ) -> float:
     """`econ_vote_c` (ADR 006 secc. 2.2, literal), con las sensibilidades
     propias de la cohorte (`s_w`, `s_u`, `s_pi` de `cohorts.csv`, ADR 005
-    secc. 3) en vez de un `s_w_c`/`s_u_c`/`s_pi_c` nuevo sin declarar."""
+    secc. 3) en vez de un `s_w_c`/`s_u_c`/`s_pi_c` nuevo sin declarar. El
+    divisor del `tanh` es `ECON_VOTE_DIVISOR` (RECALIBRADO, no el `10`
+    literal del ADR -- ver comentario de la constante/docs/
+    CALIBRATION_LOG.md)."""
     return math.tanh(
         (
             delta_real_wage_pct_12m * cohort.s_w
             - delta_unemployment_12m * cohort.s_u
             - pos(perceived_inflation - 2.0) * cohort.s_pi
         )
-        / 10.0
+        / ECON_VOTE_DIVISOR
     )
 
 

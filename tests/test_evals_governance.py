@@ -450,13 +450,16 @@ GOLDEN_HEAD_COMMIT = "eaed2a8"
 #: `tests/test_cohorts_perception.py`: `congress_enabled`/
 #: `negotiation_enabled` ON aca; el invariante de este test -- "gobernanza
 #: default reproduce el comportamiento de antes de ADR 007" -- no depende
-#: de la formula de negociacion/Congreso, sigue intacto). Recalculado
-#: corriendo el mismo `run_simulation(...)` de mas abajo contra el codigo ya
-#: corregido (no `git worktree add HEAD`: HEAD apunta al commit CON el bug,
-#: un worktree de HEAD solo reproduce el hash viejo) -- verificado
-#: deterministico.
-GOLDEN_SEED7_TAYLOR_SHA256 = "6157eab30a2ae837a62e9b51edc1b899f86a9648b90cb713d58fbcad86701303"
-GOLDEN_SEED42_TAYLOR_SHA256 = "1074ecb4cc7cec218e02bb67cf8be001a01c25d8e320c744c16f1e87563b51d6"
+#: de la formula de negociacion/Congreso, sigue intacto), y de nuevo en la
+#: Quinta ronda de calibracion (encargo B1, docs/CALIBRATION_LOG.md): esta
+#: corrida tiene `cohorts_enabled=True, media_enabled=True`, asi que la
+#: recalibracion de la regla de audiencia de medios (`world/perception.py`,
+#: ADR 005 secc. 4.5) cambia el JSONL byte a byte aunque el invariante que
+#: guarda este test (gobernanza) no dependa de eso. Recalculado corriendo el
+#: mismo `run_simulation(...)` de mas abajo contra el codigo ya
+#: corregido/recalibrado -- verificado deterministico.
+GOLDEN_SEED7_TAYLOR_SHA256 = "279cd674b84986b93abc0d73f488bad2bbf847263edc0267efd696b4bc3b289b"
+GOLDEN_SEED42_TAYLOR_SHA256 = "979e165a3fac69bb9dc858f00f69f65611c398364cc7c359dd42737cb7cf449b"
 
 
 def _strip_config_hash(jsonl_text: str) -> str:

@@ -120,13 +120,42 @@ perceived_inflation_c, perceived_unemployment_c, sentiment_c ∈ [−100, 100]
 Matriz cohorte × medio con shares que suman 1 por cohorte (ej. `middle_class: nacional 0.4, mercado 0.5,
 popular 0.1`; `informal: popular 0.6, nacional 0.3, mercado 0.1`).
 
-### 4.3 Sesgo de un frame
+### 4.3 Sesgo de un frame (revisado v0.8)
+Tabla ORIGINAL (v0.1-v0.7 del ADR):
+
 | frame | Δ perceived_inflation | Δ perceived_unemployment | Δ sentiment |
 |---|---|---|---|
 | `crisis` | `+1.5 · influence.public` (pp mensuales) | `+2.0 · influence.public` | `−10 · influence.public` |
 | `recovery` | `−0.8 · influence.public` | `−1.0 · influence.public` | `+6 · influence.public` |
 | `scandal` | 0 | 0 | `−6 · influence.public` (y `institutional_confidence` como en ADR 003) |
 | `neutral` | 0 | 0 | 0 |
+
+**Tabla vigente desde v0.8** (Quinta ronda de calibracion, encargo B1 -- ver
+`docs/CALIBRATION_LOG.md` para la derivacion completa):
+
+| frame | Δ perceived_inflation | Δ perceived_unemployment | Δ sentiment |
+|---|---|---|---|
+| `crisis` | `+0.30 · influence.public` (pp mensuales) | `+0.40 · influence.public` | `−10 · influence.public` (sin cambios) |
+| `recovery` | `−0.52 · influence.public` | `−0.55 · influence.public` | `+6 · influence.public` (sin cambios) |
+| `scandal` | 0 | 0 | `−6 · influence.public` (y `institutional_confidence` como en ADR 003) |
+| `neutral` | 0 | 0 | 0 |
+
+Motivo: con la tabla original, en estado estacionario (sesgo constante, secc.
+4.4) la brecha de percepcion de un medio a influencia maxima
+(`influence.public = 0.6`, techo de secc. 4.5) llegaba a `1.5 · 0.6 = 0.9 pp
+por mes` (`10.8 pp` "anualizadas", `× 12`) -- el problema de convergencia que
+registra `docs/EMERGENCE_LOG.md`. La tabla nueva acota esa brecha a <= ~4 pp
+anualizadas por medio y variable (`crisis`: 2.16/2.88 pp; `recovery`:
+3.74/3.96 pp), y usa una escala DISTINTA para `crisis` (mas chica) que para
+`recovery` (mas grande, cerca de su propia cota) a proposito: `crisis` es el
+frame que domina la mayoria de los meses en la corrida de referencia (seed
+7, taylor, 48 meses), asi que escalarlo chico alcanza para bajar la brecha
+promedio dentro de rango; dejar `recovery` mas fuerte es lo que permite que
+un ciclo de crecimiento real empuje la aprobacion lo suficiente como para
+que al menos un medio se quede fuera de `crisis` una fraccion sustancial de
+los meses (objetivo "spread de audiencia + pluralidad de frames" del
+encargo B1). `sentiment` no se toco (no entra en la metrica `perception_gap`
+que fija el objetivo de calibracion).
 
 `PUBLISH_STORY.target_bloc` limita el efecto a esa cohorte; `all` lo reparte por consumo.
 
@@ -140,10 +169,41 @@ perception_gap = Σ pop_share_c · (perceived_inflation_c − inflation')     # 
 Los medios **nunca** tocan variables reales. Test: con `features.media = true` y todos los frames
 `neutral`, la trayectoria real es idéntica a `features.media = false`.
 
-### 4.5 Audiencia
+### 4.5 Audiencia (revisado v0.8)
+**Version original (v0.1-v0.7):**
 `influence.public_m' = influence.public_m + 0.02 · (alineación_m − 0.5)`, con `alineación_m` = fracción de
 cohortes cuyo `sentiment_c` tiene el mismo signo que el frame del medio (crisis ↔ negativo). Un medio
 que insiste en "crisis" cuando la gente está bien pierde audiencia. Acotado a [0.05, 0.6].
+
+Con esta regla, corriendo `seed=7 --policy taylor --months 48`, los 3 medios convergían a
+`influence.public = 0.6` (el techo) y al frame `crisis`; `perception_gap` quedaba uniforme entre las 8
+cohortes (~+0.9 pp/mes, +10 pp "anualizado") porque `alineación_m` se medía contra las 8 cohortes por
+igual, sin importar si las consumían o no -- ver `docs/EMERGENCE_LOG.md`, fila "convergencia de
+medios". Recalibrado en la Quinta ronda (encargo B1, `docs/CALIBRATION_LOG.md` tiene la derivación
+completa con números antes/después):
+
+**Version vigente desde v0.8:**
+
+1. **Alineación por AUDIENCIA PROPIA, no por población total.** `alineación_m` pasa a ser la fracción
+   de la audiencia PROPIA del medio `m` (cohortes ponderadas por `pop_share_c · consumption[c][m]`,
+   normalizado a 1 -- `data/media_consumption.csv`, secc. 4.2) cuyo `sentiment_c` coincide en signo con
+   la polaridad del frame, en vez de la fracción pareja de las 8 cohortes. Un medio de nicho ya no gana
+   o pierde audiencia según el humor de cohortes que ni siquiera lo leen.
+2. **Sesgo por frame acotado** (secc. 4.3, tabla revisada v0.8): la brecha de percepción en estado
+   estacionario a influencia máxima queda <= ~4 pp anualizadas por medio y variable, contra las ~10.8
+   pp de antes.
+3. **Costo de reputación (nuevo, deliverable de la Quinta ronda).** Si el frame de un medio contradice
+   la macro real 3+ meses CONSECUTIVOS (`crisis` mientras `gdp_growth > 2` e inflación cayendo, o
+   `recovery` mientras el desempleo sube y la inflación acelera -- medido sobre una ventana móvil de 4
+   meses, no el delta de un solo mes, para no confundir la racha con el ruido exógeno mes a mes),
+   `influence.public_m` pierde `0.03` por mes MIENTRAS la contradicción persiste. Esa pérdida es una
+   deuda de reputación ACUMULATIVA que nunca se perdona: un medio que sostuvo un frame contradictorio
+   ya no puede volver a `influence.public = 0.6` (el techo original) aunque después se alinee siempre
+   con la realidad -- sin este piso permanente, la deriva normal de audiencia (punto 1) reconverge al
+   techo en pocos meses de alineación y borra cualquier diferencia entre medios.
+
+Acotado a [0.05, 0.6] (sin cambios; el "0.6" es el techo original, no el techo efectivo de un medio
+con deuda de reputación).
 
 ---
 

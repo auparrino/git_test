@@ -303,3 +303,161 @@ del oficialismo de 10.6 % a 64.3 % (53 pp). Un rango razonable sería 15–25 pp
 con `τ = 0.15` amplifica mucho; bajar `v_econ` de 0.35 a ~0.2 o dividir por 20 en el `tanh`.
 Hacerlo junto con la calibración de la regla de audiencia de medios, sin romper los tests de
 aprobación 65/25.
+
+## Quinta ronda (regla de audiencia de medios + sensibilidad del voto económico)
+
+Encargo de calibración con dos objetivos (B1, B2) más una re-corrida de los dos experimentos
+canónicos que usan `features.media`/`features.elections` (B3). Los tres tocan solo datos/parámetros
+(`world/perception.py::FRAME_BIAS`/audiencia/reputación, `world/elections.py::ECON_VOTE_DIVISOR`) y
+la ventana de contradicción vive en `engine/simulation.py` (wiring, no fórmula nueva de `world/`);
+ninguna fórmula de `world/economy.py`/`world/society.py`/`world/politics.py` se tocó.
+
+### B1: regla de audiencia de medios (ADR 005 §4.5, revisado v0.8)
+
+**Diagnóstico** (fila "convergencia de medios" de `docs/EMERGENCE_LOG.md`): con `seed=7 --policy
+taylor --months 48`, los tres medios convergían a `influence.public = 0.6` (el techo) y al frame
+`crisis`, con `perception_gap` uniforme entre las 8 cohortes. Causa estructural, no un bug puntual:
+`audience_alignment` pesaba las 8 cohortes por igual (no por si consumían ese medio o no) y, con
+`PUBLISH_STORY.target_bloc = "all"`, el sesgo de `compute_bias` se reparte por `consumption[c][m]`
+que suma 1 por cohorte — si los tres medios tienen el MISMO `(frame, influence)` en un mes, el sesgo
+resultante es matemáticamente idéntico para las 8 cohortes sin importar la matriz de consumo
+(`Σ_m consumption[c][m] · K = K`). Una vez que los tres convergen, se quedan pegados: con
+`AUDIENCE_MAX` como techo compartido y alineación perfecta sostenida, los tres terminan clampeados al
+mismo valor exacto.
+
+**Cambios** (`world/perception.py`, wiring en `engine/simulation.py`):
+
+1. **Alineación por audiencia PROPIA** (`outlet_audience_weights`/`audience_alignment`/
+   `drift_audience`, todas con un `outlet_id`/`consumption` nuevo): cada medio se mide contra sus
+   propias cohortes consumidoras (`pop_share_c · consumption[c][outlet]`, normalizado), no contra las
+   8 por igual.
+2. **`FRAME_BIAS` acotado y asimétrico** (tabla completa y derivación en ADR 005 §4.3 revisado v0.8):
+   `crisis` escalado a ~0.2× el original (`+0.30`/`+0.40` en vez de `+1.5`/`+2.0`) y `recovery` a
+   ~0.55–0.65× (`−0.52`/`−0.55` en vez de `−0.8`/`−1.0`) — asimétrico a propósito: `crisis` domina la
+   mayoría de los meses de la corrida de referencia, así que escalarlo chico alcanza para bajar la
+   brecha promedio; dejar `recovery` más fuerte (cerca de su propia cota de 4 pp anualizadas) es lo
+   que le da a un medio margen para quedarse fuera de "crisis" una fracción sustancial de los meses
+   cuando la economía realmente mejora. Verificado empíricamente (script de calibración en el
+   scratchpad de la sesión, no versionado) que un escalado simétrico de `crisis`/`recovery` NO puede
+   cumplir los dos objetivos de abajo (brecha promedio Y ≥30 % de meses no-crisis) a la vez, para
+   ningún factor único.
+3. **Costo de reputación con ventana de tendencia** (`frame_contradicts_reality`/
+   `update_contradiction_streak`/`reputation_penalty`, nuevas en `world/perception.py`;
+   `outlet_reputation_debt` nuevo en `Simulation`): `crisis` con `gdp_growth > 2` e inflación cayendo,
+   o `recovery` con desempleo subiendo e inflación acelerando, sostenido 3+ meses SEGUIDOS, cuesta
+   `−0.03/mes` mientras persiste. El "cayendo"/"subiendo"/"acelerando" se mide contra el valor de hace
+   `TREND_WINDOW_MONTHS = 4` meses (no el mes inmediato anterior): con `exogenous_noise=True` el delta
+   mes a mes cambia de signo constantemente y casi nunca sostiene una racha real de 3+ meses; una
+   ventana más ancha (y el crecimiento promediado sobre la misma ventana) sigue el criterio literal
+   del encargo pero filtra ese ruido. La deuda de reputación es ACUMULATIVA (nunca se perdona): un
+   medio que sostuvo un frame contradictorio no vuelve a `AUDIENCE_MAX` aunque después se alinee
+   siempre con la realidad — sin este piso permanente, la deriva normal de audiencia (punto 1)
+   reconverge al techo compartido en pocos meses de alineación y borra cualquier diferencia entre
+   medios (el mismo problema de convergencia, solo retrasado).
+
+**Resultado** (`seed=7 --policy taylor --months 48`, antes/después):
+
+| métrica | antes | después | objetivo |
+|---|---|---|---|
+| `influence.public` final (3 medios) | 0.60 / 0.60 / 0.60 | 0.45 / 0.57 / 0.57 | spread ≥ 0.1 |
+| spread (max−min) | 0.00 | 0.12 | ≥ 0.1 |
+| `perception_gap` promedio (48 meses) | 0.76 pp/mes | 0.11 pp/mes | en [0.1, 0.6] |
+| varianza entre cohortes de `perceived_inflation_c` (máx. de los 48 meses) | 0.0 (exacto, todos los meses) | 0.00296 (mes con más dispersión; no-cero) | no-cero |
+| meses en frame ≠ `crisis`, `media_mercado` | 2/48 (4.2 %) | 2/48 (4.2 %) | — |
+| meses en frame ≠ `crisis`, `media_nacional` | 8/48 (16.7 %) | 8/48 (16.7 %) | — |
+| meses en frame ≠ `crisis`, `media_popular` | 8/48 (16.7 %) | **15/48 (31.3 %)** | ≥ 1 medio ≥ 30 % |
+
+Las 4 metas del encargo B1 se cumplen con margen. Tests nuevos en
+`tests/test_cohorts_perception.py` (sección 10): `test_seed7_taylor_outlets_reach_distinct_final_influence`,
+`test_seed7_taylor_at_least_one_outlet_mostly_non_crisis`,
+`test_seed7_taylor_perception_gap_in_target_band_with_cohort_variance`, más
+`test_audience_alignment_weighs_by_outlets_own_audience_not_total_population` (unitario del cambio 1).
+
+**Golden hashes recalculados** (legítimamente afectados: `cohorts_enabled=True, media_enabled=True`
+cambia el JSONL byte a byte aunque el invariante que guarda cada test no sea sobre medios):
+
+- `tests/test_memory_elections.py::GOLDEN_SEED7_SHA256`/`GOLDEN_SEED42_TAYLOR_SHA256`
+  (`test_features_off_matches_pre_adr006_golden_hash`, `memory`/`elections` apagados pero
+  `cohorts`/`media` prendidos).
+- `tests/test_evals_governance.py::GOLDEN_SEED7_TAYLOR_SHA256`/`GOLDEN_SEED42_TAYLOR_SHA256`
+  (`test_default_governance_matches_pre_adr007_golden_hash`, mismo motivo).
+- Los golden hash de `features.cohorts=False`/`features.media=False` (p.ej.
+  `tests/test_cohorts_perception.py::GOLDEN_SEED7_TAYLOR_COHORTS_MEDIA_OFF_SHA256`) **no cambiaron**
+  (verificado: siguen en verde) — no dependen de `world/perception.py`.
+
+**Efecto de segundo orden sobre `seed=7`/elecciones** (documentado, no un objetivo de B1): con menos
+sesgo negativo acumulado de los medios, la aprobación del mes 47 en la corrida con actores + memoria +
+elecciones activas queda más alta que antes (~42.9 en vez de <40), y el oficialismo de `seed=7` ya NO
+pierde la reelección en el mes 48 (antes sí, Cuarta ronda meta 6). Esto rompía 3 tests que asumían esa
+derrota como dato de la semilla:
+
+- `tests/test_memory_elections.py::test_seed7_taylor_month48_no_longer_near_uniform_and_incumbent_loses`
+  → renombrado a `test_seed7_taylor_month48_no_longer_near_uniform`, assertions ajustadas a lo que
+  sigue siendo cierto (spread > 10pp, D'Hondt suma 100, no gana Alianza Provincial) y a los números
+  nuevos (aprobación mes 47 < 50, no < 40).
+- `tests/test_memory_elections.py::test_transition_after_defeat_changes_president_keeps_memories_clears_agreements`
+  y `test_parties_by_id_refreshed_on_every_decision_actor_after_transition` → cambiados a `seed=0`
+  (verificado: 29 de 30 semillas 0–29 siguen dando derrota bajo el código recalibrado; el resto de
+  cada test, memorias/`parties_by_id`, no depende de la semilla en sí, solo de que HAYA una derrota).
+
+### B2: sensibilidad del voto económico (ADR 006 §2.2)
+
+**Diagnóstico** (pendiente de la cuarta ronda): ±8 % de salario real en 12 meses movía la primera
+vuelta del oficialismo 53.75 pp (10.56 % → 64.31 %), muy por encima del rango pedido (15–25 pp).
+
+**Cambio**: nuevo `ECON_VOTE_DIVISOR` (`world/elections.py::econ_vote`, antes `10.0` literal del ADR)
+subido a `42.0` — mismo `tanh`, solo hace falta un delta de salario real más grande para acercarse a
+la saturación. `v_econ` (`WEIGHTS`), `TAU_SHARE` y `data/cohorts_loyalty.csv` **sin tocar**: no hizo
+falta re-tunearlos porque las metas 1 (línea de base) y 2 (aprobación 65/25) del encargo original usan
+escenarios con `delta_real_wage_pct_12m = 0`, donde `econ_vote_c = tanh(0) = 0` — el divisor no les
+pega en absoluto (verificado, ver tabla). Barrido empírico (script de calibración en el scratchpad de
+la sesión, no versionado) sobre 50 semillas por punto de `ECON_VOTE_DIVISOR ∈ {18, 22, 26, 30, 35, 40,
+41, 42, 43, 44, 45, 50, 60}`; `42` cae cerca del centro del rango pedido con margen a los dos lados.
+
+**Resultado** (primera vuelta del oficialismo, ±8 % salario real/12 meses, 50 semillas, promedio):
+
+| | antes (`/10`) | después (`/42`) | objetivo |
+|---|---|---|---|
+| +8 % salario real | 64.31 % | 46.05 % | — |
+| −8 % salario real | 10.56 % | 25.70 % | — |
+| diferencia | 53.75 pp | **20.36 pp** | 15–25 pp |
+
+Tests: `tests/test_memory_elections.py::test_economic_vote_moves_incumbent_share_in_15_to_25pp_band`
+(reemplaza `test_economic_vote_moves_incumbent_share_at_least_6pp`, mismo escenario, banda 15–25pp en
+vez de piso ≥6pp). `test_high_approval_reelects_and_low_approval_defeats_in_at_least_90pct` y
+`test_baseline_reproduces_initial_party_system` siguen en verde SIN CAMBIOS (100 %/0 % de 100 semillas
+y las 5 bancas dentro de ±5pp respectivamente — idénticos a la Cuarta ronda, como predice el análisis
+de arriba).
+
+### B3: re-corrida de los experimentos canónicos
+
+`uv run republica experiment run <yaml> --workers 4 --out experiments/results/<name>` +
+`... report <dir>` para `central_bank_independence` (50 semillas/brazo, 2 brazos) y `fiscal_rule` (20
+semillas/brazo, 9 brazos) — los dos con `cohorts`/`media`/`memory`/`elections` prendidos, así que los
+dos quedan afectados por B1/B2. `report.md`, `metrics.csv` y `plots/*.png` sobreescritos (JSONLs
+gitignored, no se versionan).
+
+**`central_bank_independence`**: la hipótesis registrada (independiente = menor inflación mediana
+final, mayor desempleo final, sin diferencia clara de supervivencia) **sigue confirmada**: inflación
+anualizada final mediana 38.86 (dependiente) vs 23.48 (independiente) — Cliff's δ = −0.50 (antes:
+40.27 vs 22.06, δ = −0.53); desempleo final 8.85 vs 10.96 — δ = +0.76 (antes: 8.82 vs 11.08, δ =
++0.78). `perception_gap_mean` baja fuerte en los dos brazos (0.65→0.09 dependiente, 0.80→0.16
+independiente) — consistente con B1 (brecha de percepción objetivo mucho más chica). La distribución
+de `outcomes` cambia bastante en magnitud (dependiente: `reelected` pasa de 6/50 a 25/50; independiente:
+de 3/50 a 23/50) porque `government_approval` — una variable REAL, no solo perceptual — depende en
+parte de `consumer_confidence`, que a su vez lee `perceived_inflation_agg`: con menos sesgo negativo de
+medios, la aprobación agregada en ambos brazos queda más alta en promedio, y eso se refleja en más
+reelecciones. **No cambia la conclusión cualitativa de la hipótesis** (la comparación ENTRE brazos es
+la misma), solo el nivel absoluto de `outcomes`/`approval_final` en ambos brazos por igual.
+
+**`fiscal_rule`**: la hipótesis (supervivencia cae e inflación sube con `c_f`/`primary_spending`
+crecientes, peor cuadrante en `c_f=0.16 × primary_spending=27`, mejor en `c_f=0.08 × 
+primary_spending=23`) **sigue confirmada**, mapa de calor de supervivencia IDÉNTICO (100/100/45,
+100/95/5, 100/80/0 — los outcomes de hiperinflación/colapso son variables reales, no tocadas por
+medios de forma directa). Las medianas de `inflation_annual_final`/`gdp_growth_mean` cambian por
+fracciones de punto en varias celdas (p.ej. `c_f=0.16 × primary_spending=25`: 216.96 → 212.36;
+`c_f=0.08 × primary_spending=27`: 1017.68 → 1037.48) — el mismo mecanismo indirecto que en
+`central_bank_independence` (`government_approval` real, afectado por `consumer_confidence` ←
+`perceived_inflation_agg`, retroalimenta congreso/actores/protestas dentro de la corrida). Diferencias
+menores al 2 % en casi todas las celdas, sin cambiar el orden relativo de ningún cuadrante del mapa de
+calor. **Veredicto: sin cambio en la conclusión cualitativa de ninguno de los dos experimentos.**

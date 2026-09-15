@@ -30,13 +30,46 @@ Q_PERCEPTION = 0.4
 Q_SENTIMENT = 0.3
 
 #: Sesgo por frame, por punto de `influence.public` del medio (ADR 005 secc.
-#: 4.3, tabla literal). `scandal` no sesga percepcion de
+#: 4.3, tabla RECALIBRADA en la Quinta ronda de calibracion -- ver
+#: docs/CALIBRATION_LOG.md). `scandal` no sesga percepcion de
 #: inflacion/desempleo (solo `sentiment_c`); su efecto sobre
 #: `institutional_confidence` sigue el camino de ADR 003
 #: (`engine/consequences.py`, sin tocar: ver Notas de implementacion).
+#:
+#: Con la formula de estado estacionario de secc. 4.4 (`perceived_inflation_c
+#: - inflation' -> bias_pi_c` cuando el sesgo es constante, porque el filtro
+#: `q` converge a `perceived = real + bias`), la tabla ORIGINAL del ADR
+#: (`crisis` `+1.5`/`+2.0`, `recovery` `-0.8`/`-1.0`) daba, a
+#: `influence.public = AUDIENCE_MAX = 0.6` (el techo de secc. 4.5),
+#: `1.5 · 0.6 = 0.9 pp/mes -> 10.8 pp` "anualizadas" (`× 12`, la misma cuenta
+#: de docs/EMERGENCE_LOG.md) -- muy por encima del objetivo de calibracion
+#: (<= ~4 pp anualizadas por medio y variable a influencia maxima).
+#:
+#: `inflation`/`unemployment` de `crisis`/`recovery` estan escalados
+#: distinto (no un factor unico): `crisis` a ~0.2x (`0.30`/`0.40` ->
+#: `2.16`/`2.88` pp anualizadas) y `recovery` a ~0.55-0.65x (`-0.52`/`-0.55`
+#: -> `-3.74`/`-3.96` pp anualizadas), las dos por debajo de la cota de 4 pp
+#: pero deliberadamente ASIMETRICAS: `crisis` es el frame que domina la
+#: mayoria de los meses de la corrida de referencia (seed 7, taylor, 48
+#: meses) para los tres medios, asi que escalarlo MUY chico alcanza para
+#: bajar la brecha promedio (`perception_gap`) dentro de rango sin necesitar
+#: tocar `recovery`; dejar `recovery` mas fuerte (cerca de su propia cota de
+#: 4 pp) hace que un ciclo de crecimiento real (como el de los meses 11-18
+#: de esa corrida) empuje la aprobacion lo suficiente como para que al menos
+#: un medio se quede en `recovery`/`neutral` mas tiempo en vez de recaer en
+#: `crisis` -- objetivo "al menos un medio con >= 30% de meses en frame no
+#: crisis" de docs/CALIBRATION_LOG.md (Quinta ronda). Verificado empiricamente
+#: (no derivado en cerrado): un escalado simetrico de `crisis`/`recovery` no
+#: puede cumplir ambos objetivos a la vez (brecha promedio en [0.1, 0.6] pp
+#: Y >= 30% de meses no-crisis) para ningun factor unico -- ver script de
+#: calibracion en el scratchpad de la sesion, no versionado.
+#:
+#: `sentiment` no se toca: no entra en `perception_gap` (la metrica que fija
+#: el objetivo) y solo se usa por signo en `audience_alignment`/
+#: `drift_audience`, asi que escalarlo no cambia ese calculo.
 FRAME_BIAS: dict[str, dict[str, float]] = {
-    "crisis": {"inflation": 1.5, "unemployment": 2.0, "sentiment": -10.0},
-    "recovery": {"inflation": -0.8, "unemployment": -1.0, "sentiment": 6.0},
+    "crisis": {"inflation": 0.30, "unemployment": 0.40, "sentiment": -10.0},
+    "recovery": {"inflation": -0.52, "unemployment": -0.55, "sentiment": 6.0},
     "scandal": {"inflation": 0.0, "unemployment": 0.0, "sentiment": -6.0},
     "neutral": {"inflation": 0.0, "unemployment": 0.0, "sentiment": 0.0},
 }
@@ -50,6 +83,18 @@ FRAME_POLARITY: dict[str, int] = {"crisis": -1, "recovery": 1, "scandal": -1}
 AUDIENCE_DRIFT_RATE = 0.02
 AUDIENCE_MIN = 0.05
 AUDIENCE_MAX = 0.6
+
+#: Racha minima de meses consecutivos de frame contradictorio antes de
+#: aplicar el castigo de reputacion (ADR 005 secc. 4.5, revisado v0.8).
+CONTRADICTION_STREAK_MONTHS = 3
+#: Costo de reputacion por mes mientras la contradiccion persiste (idem).
+CONTRADICTION_PENALTY = 0.03
+#: Ventana (meses) para medir "inflacion cayendo"/"desempleo subiendo" del
+#: chequeo de contradiccion (ADR 005 secc. 4.5, revisado v0.8): comparar
+#: contra el valor de hace `TREND_WINDOW_MONTHS` meses (no contra el mes
+#: inmediato anterior) para no confundir una racha real con el ruido
+#: exogeno mes a mes (ver `engine/simulation.py`, Notas de implementacion).
+TREND_WINDOW_MONTHS = 4
 
 #: Rango declarado de `perceived_inflation_c`/`perceived_unemployment_c`/
 #: `sentiment_c` (ADR 005 secc. 4.1, literal).
@@ -208,35 +253,112 @@ def perception_gap(
     )
 
 
+def outlet_audience_weights(
+    outlet_id: str, cohorts: list[Cohort], consumption: dict[str, dict[str, float]]
+) -> dict[str, float]:
+    """Pondera cada cohorte por su peso en la audiencia PROPIA de
+    `outlet_id` (ADR 005 secc. 4.5, revisado v0.8): `pop_share_c ·
+    consumption[c][outlet_id]` (secc. 4.2), normalizado a que sume 1. Antes
+    de la Quinta ronda de calibracion, `audience_alignment` pesaba todas las
+    cohortes por igual sin importar si consumian ese medio o no -- por eso
+    los tres medios convergian a la misma audiencia y al mismo frame
+    (docs/EMERGENCE_LOG.md, fila "convergencia de medios"): un medio de
+    nicho (p.ej. `media_mercado`, fuerte en `middle_class`/`rural`) ganaba o
+    perdia audiencia segun el humor de cohortes que ni siquiera lo leen.
+    Si `outlet_id` no aparece en `consumption` para ninguna cohorte
+    (audiencia total 0 -- csv incompleto o outlet nuevo sin fila), cae al
+    peso poblacional parejo (mismo comportamiento que antes de este
+    cambio)."""
+    raw = {c.id: c.pop_share * consumption.get(c.id, {}).get(outlet_id, 0.0) for c in cohorts}
+    total = sum(raw.values())
+    if total <= 0.0:
+        total_pop = sum(c.pop_share for c in cohorts) or 1.0
+        return {c.id: c.pop_share / total_pop for c in cohorts}
+    return {cid: w / total for cid, w in raw.items()}
+
+
 def audience_alignment(
-    frame: str, cohorts: list[Cohort], cohort_state: dict[str, CohortState]
+    frame: str,
+    outlet_id: str,
+    cohorts: list[Cohort],
+    cohort_state: dict[str, CohortState],
+    consumption: dict[str, dict[str, float]],
 ) -> float | None:
-    """Fraccion de cohortes cuyo `sentiment_c` tiene el mismo signo que la
-    polaridad de `frame` (ADR 005 secc. 4.5). `None` para `neutral` (sin
-    polaridad declarada: ese medio no gana ni pierde audiencia este mes)."""
+    """Fraccion de la AUDIENCIA PROPIA de `outlet_id` (ponderada por
+    `outlet_audience_weights`, no por poblacion total -- ADR 005 secc. 4.5,
+    revisado v0.8) cuyo `sentiment_c` tiene el mismo signo que la polaridad
+    de `frame`. `None` para `neutral` (sin polaridad declarada: ese medio no
+    gana ni pierde audiencia este mes)."""
     polarity = FRAME_POLARITY.get(frame)
     if polarity is None or not cohorts:
         return None
-    aligned = sum(
-        1
+    weights = outlet_audience_weights(outlet_id, cohorts, consumption)
+    return sum(
+        weights[c.id]
         for c in cohorts
         if (polarity > 0) == (cohort_state[c.id].sentiment > 0)
         and cohort_state[c.id].sentiment != 0.0
     )
-    return aligned / len(cohorts)
 
 
 def drift_audience(
     frame: str,
+    outlet_id: str,
     influence_public: float,
     cohorts: list[Cohort],
     cohort_state: dict[str, CohortState],
+    consumption: dict[str, dict[str, float]],
 ) -> float:
-    """`influence.public_m'` (ADR 005 secc. 4.5, literal), acotado a
-    `[0.05, 0.6]`: un medio que insiste en un frame cuando la gente no
-    coincide (`alineacion < 0.5`) pierde audiencia."""
-    alignment = audience_alignment(frame, cohorts, cohort_state)
+    """`influence.public_m'` (ADR 005 secc. 4.5, revisado v0.8), acotado a
+    `[0.05, 0.6]`: un medio que insiste en un frame cuando SU PROPIA
+    audiencia no coincide (`alineacion < 0.5`, ponderada por
+    `outlet_audience_weights`, no por poblacion total) pierde audiencia."""
+    alignment = audience_alignment(frame, outlet_id, cohorts, cohort_state, consumption)
     if alignment is None:
         return clamp(influence_public, AUDIENCE_MIN, AUDIENCE_MAX)
     updated = influence_public + AUDIENCE_DRIFT_RATE * (alignment - 0.5)
     return clamp(updated, AUDIENCE_MIN, AUDIENCE_MAX)
+
+
+def frame_contradicts_reality(
+    frame: str, gdp_growth: float, inflation_delta: float, unemployment_delta: float
+) -> bool:
+    """Un frame "miente" contra la macro real de ese mes (ADR 005 secc. 4.5,
+    revisado v0.8, deliverable nuevo de la Quinta ronda de calibracion):
+    `crisis` mientras `gdp_growth > 2` e inflacion CAYENDO
+    (`inflation_delta < 0`), o `recovery` mientras el desempleo SUBE
+    (`unemployment_delta > 0`) y la inflacion ACELERA (`inflation_delta >
+    0`). `scandal`/`neutral` nunca contradicen (no hacen una afirmacion
+    macro que la realidad pueda desmentir)."""
+    if frame == "crisis":
+        return gdp_growth > 2.0 and inflation_delta < 0.0
+    if frame == "recovery":
+        return unemployment_delta > 0.0 and inflation_delta > 0.0
+    return False
+
+
+def update_contradiction_streak(
+    streaks: dict[str, int],
+    outlet_id: str,
+    frame: str,
+    gdp_growth: float,
+    inflation_delta: float,
+    unemployment_delta: float,
+) -> int:
+    """Actualiza `streaks` (in place, `Simulation.outlet_contradiction_streak`)
+    con la racha de meses CONSECUTIVOS en que `outlet_id` publico un frame
+    contradictorio (`frame_contradicts_reality`) y devuelve la racha
+    resultante. Un mes sin contradiccion corta la racha a 0 (tiene que ser
+    3+ meses SEGUIDOS, ADR 005 secc. 4.5 revisado v0.8 -- no 3 en total)."""
+    if frame_contradicts_reality(frame, gdp_growth, inflation_delta, unemployment_delta):
+        streaks[outlet_id] = streaks.get(outlet_id, 0) + 1
+    else:
+        streaks[outlet_id] = 0
+    return streaks[outlet_id]
+
+
+def reputation_penalty(streak: int) -> float:
+    """`-0.03 · influence.public_m` por mes mientras la racha de
+    contradiccion sea >= `CONTRADICTION_STREAK_MONTHS` (ADR 005 secc. 4.5,
+    revisado v0.8), 0 en caso contrario."""
+    return CONTRADICTION_PENALTY if streak >= CONTRADICTION_STREAK_MONTHS else 0.0

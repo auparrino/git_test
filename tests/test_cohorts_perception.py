@@ -174,7 +174,9 @@ def test_target_bloc_limits_bias_to_that_cohort() -> None:
         )
     ]
     bias = compute_bias(cohorts, actions, consumption)
-    assert bias["middle_class"]["inflation"] == pytest.approx(1.5 * 0.4)
+    assert bias["middle_class"]["inflation"] == pytest.approx(
+        FRAME_BIAS["crisis"]["inflation"] * 0.4
+    )
     for cohort_id, b in bias.items():
         if cohort_id != "middle_class":
             assert b["inflation"] == 0.0
@@ -269,17 +271,60 @@ def test_all_neutral_frames_stay_close_to_media_off() -> None:
 
 
 def test_audience_alignment_fraction() -> None:
+    """Consumo uniforme y exclusivo de un solo medio (`outlet_x` en el 100 %
+    de la dieta de cada cohorte): con ese consumo la ponderacion por
+    audiencia propia (`outlet_audience_weights`, ADR 005 secc. 4.5, revisado
+    v0.8) coincide con la fraccion pareja de la version anterior --
+    verifica que el caso especial "toda la poblacion es audiencia" sigue
+    dando 0.0/1.0."""
     cohorts = load_cohorts()
     from republica.world.cohorts import CohortState
 
     state = {c.id: CohortState(50.0, 40.0, 0.0, 0.0) for c in cohorts}  # sentiment > 0
+    consumption = {c.id: {"outlet_x": 1.0} for c in cohorts}
     # "crisis" <-> negativo (secc. 4.5): con sentiment positivo en todas,
-    # 0 de 8 alineadas.
-    assert audience_alignment("crisis", cohorts, state) == pytest.approx(0.0)
-    # "recovery" <-> positivo: las 8 alineadas.
-    assert audience_alignment("recovery", cohorts, state) == pytest.approx(1.0)
+    # 0 de la audiencia alineada.
+    assert audience_alignment("crisis", "outlet_x", cohorts, state, consumption) == pytest.approx(
+        0.0
+    )
+    # "recovery" <-> positivo: toda la audiencia alineada.
+    assert audience_alignment("recovery", "outlet_x", cohorts, state, consumption) == pytest.approx(
+        1.0
+    )
     # "neutral" no tiene polaridad declarada.
-    assert audience_alignment("neutral", cohorts, state) is None
+    assert audience_alignment("neutral", "outlet_x", cohorts, state, consumption) is None
+
+
+def test_audience_alignment_weighs_by_outlets_own_audience_not_total_population() -> None:
+    """ADR 005 secc. 4.5 (revisado v0.8, Quinta ronda de calibracion): la
+    alineacion de un medio se mide contra SU PROPIA audiencia (ponderada por
+    `data/media_consumption.csv`), no contra las 8 cohortes por igual. Dos
+    medios distintos, con audiencias que sienten distinto, tienen que dar
+    alineaciones distintas para el MISMO `cohort_state` -- eso es lo que
+    permite que los medios dejen de converger todos al mismo frame."""
+    from republica.world.cohorts import CohortState
+
+    cohorts = load_cohorts()
+    # `outlet_a` es leido solo por cohortes con sentiment negativo,
+    # `outlet_b` solo por cohortes con sentiment positivo.
+    negative_ids = {c.id for c in cohorts[: len(cohorts) // 2]}
+    state = {
+        c.id: CohortState(50.0, -50.0 if c.id in negative_ids else 50.0, 0.0, 0.0) for c in cohorts
+    }
+    consumption = {
+        c.id: {"outlet_a": 1.0, "outlet_b": 0.0}
+        if c.id in negative_ids
+        else {"outlet_a": 0.0, "outlet_b": 1.0}
+        for c in cohorts
+    }
+    # "crisis" <-> negativo: la audiencia de outlet_a (toda negativa) esta
+    # 100% alineada; la de outlet_b (toda positiva) 0% alineada.
+    assert audience_alignment("crisis", "outlet_a", cohorts, state, consumption) == pytest.approx(
+        1.0
+    )
+    assert audience_alignment("crisis", "outlet_b", cohorts, state, consumption) == pytest.approx(
+        0.0
+    )
 
 
 def test_audience_drift_stays_within_bounds() -> None:
@@ -289,13 +334,18 @@ def test_audience_drift_stays_within_bounds() -> None:
 
     cohorts = load_cohorts()
     negative_state = {c.id: CohortState(50.0, -80.0, 0.0, 0.0) for c in cohorts}
+    consumption = {c.id: {"outlet_x": 1.0} for c in cohorts}
     influence = 0.4
     for _ in range(500):
-        influence = drift_audience("crisis", influence, cohorts, negative_state)
+        influence = drift_audience(
+            "crisis", "outlet_x", influence, cohorts, negative_state, consumption
+        )
     assert influence == pytest.approx(0.6)  # siempre alineado, sube hasta el techo
     influence = 0.4
     for _ in range(500):
-        influence = drift_audience("recovery", influence, cohorts, negative_state)
+        influence = drift_audience(
+            "recovery", "outlet_x", influence, cohorts, negative_state, consumption
+        )
     assert influence == pytest.approx(0.05)  # siempre desalineado, cae hasta el piso
     for _ in range(500):
         assert 0.05 <= influence <= 0.6
@@ -316,8 +366,10 @@ def test_publish_story_twice_same_month_accumulates_both_frames(monkeypatch) -> 
     calls: list[tuple[str, float, float]] = []
     real_drift_audience = simulation_mod.drift_audience
 
-    def spy_drift_audience(frame, influence_public, cohorts, cohort_state):
-        result = real_drift_audience(frame, influence_public, cohorts, cohort_state)
+    def spy_drift_audience(frame, outlet_id, influence_public, cohorts, cohort_state, consumption):
+        result = real_drift_audience(
+            frame, outlet_id, influence_public, cohorts, cohort_state, consumption
+        )
         calls.append((frame, influence_public, result))
         return result
 
@@ -592,3 +644,92 @@ def test_fake_rules_matches_rules_with_cohorts_and_media() -> None:
     assert [p.to_dict() for p in baseline.perception_records] == [
         p.to_dict() for p in via_llm.perception_records
     ]
+
+
+# ---------------------------------------------------------------------------
+# 10. Regla de audiencia recalibrada (ADR 005 secc. 4.5, revisado v0.8 --
+# Quinta ronda de calibracion, encargo B1, docs/CALIBRATION_LOG.md). Antes de
+# este cambio, `seed=7 --policy taylor --months 48` convergia los 3 medios a
+# `influence.public = 0.6` y al frame `crisis`, con `perception_gap` uniforme
+# (~+0.9 pp/mes, sin varianza entre cohortes) -- fila "convergencia de
+# medios" de docs/EMERGENCE_LOG.md.
+# ---------------------------------------------------------------------------
+
+
+def _run_seed7_taylor_48() -> History:
+    taylor = TaylorPolicy(
+        COUNTRY.default_policy,
+        COUNTRY.taylor,
+        COUNTRY.structure.r_neutral,
+        COUNTRY.policy_ranges["interest_rate_target"],
+    )
+    return run(
+        seed=7,
+        months=48,
+        policy_rule=taylor,
+        country=COUNTRY,
+        actors_enabled=True,
+        congress_enabled=True,
+        negotiation_enabled=True,
+        cohorts_enabled=True,
+        media_enabled=True,
+    )
+
+
+def test_seed7_taylor_outlets_reach_distinct_final_influence() -> None:
+    """Objetivo B1 de la Quinta ronda: `influence.public` final de los 3
+    medios ya NO converge a un unico valor -- spread (max - min) >= 0.1 en
+    el mes 48. Logrado con `outlet_reputation_debt` (deuda de reputacion
+    ACUMULATIVA, no se perdona: ver `engine/simulation.py`/`world/
+    perception.py::reputation_penalty`): un medio que sostuvo un frame
+    contradictorio 3+ meses seguidos (`media_mercado`, `crisis` durante el
+    boom de los meses 11-18 de esta corrida) no vuelve a `AUDIENCE_MAX`
+    aunque despues se alinee siempre con la realidad."""
+    history = _run_seed7_taylor_48()
+    final_influence = history.perception_records[-1].outlet_influence
+    assert len(final_influence) == 3
+    spread = max(final_influence.values()) - min(final_influence.values())
+    assert spread >= 0.1, f"final_influence={final_influence} spread={spread:.3f}"
+
+
+def test_seed7_taylor_at_least_one_outlet_mostly_non_crisis() -> None:
+    """Objetivo B1: al menos un medio pasa >= 30% de los 48 meses en un
+    frame DISTINTO de `crisis` (antes de esta ronda, ninguno superaba el
+    23%: los 3 medios convergian a "crisis" casi todos los meses)."""
+    history = _run_seed7_taylor_48()
+    frame_counts: dict[str, dict[str, int]] = {}
+    for ar in history.action_records:
+        d = ar.to_dict()
+        if d["type"] != "PUBLISH_STORY" or not d["authorized"]:
+            continue
+        counts = frame_counts.setdefault(d["actor"], {})
+        frame = d["params"].get("frame", "neutral")
+        counts[frame] = counts.get(frame, 0) + 1
+    assert frame_counts, "no se publico ningun PUBLISH_STORY en la corrida"
+    non_crisis_fraction = {
+        outlet: 1.0 - counts.get("crisis", 0) / sum(counts.values())
+        for outlet, counts in frame_counts.items()
+    }
+    assert max(non_crisis_fraction.values()) >= 0.30, non_crisis_fraction
+
+
+def test_seed7_taylor_perception_gap_in_target_band_with_cohort_variance() -> None:
+    """Objetivo B1: `perception_gap` promedio (48 meses) cae en [0.1, 0.6]
+    pp (antes: ~0.9 pp/mes uniforme, +10 pp "anualizado") Y la varianza
+    entre cohortes de `perceived_inflation_c` (dentro de un mismo mes) deja
+    de ser cero en algun momento de la corrida -- antes, `target_bloc=all`
+    mas los 3 medios con la MISMA `influence.public` y el MISMO frame hacia
+    que el sesgo fuera matematicamente identico para las 8 cohortes todos
+    los meses (`Sigma_m consumption[c][m] == 1`); con medios que ya no
+    convergen (test anterior), eso deja de ser cierto."""
+    history = _run_seed7_taylor_48()
+    gaps = [p.perception_gap for p in history.perception_records]
+    mean_gap = sum(gaps) / len(gaps)
+    assert 0.1 <= mean_gap <= 0.6, f"mean perception_gap={mean_gap:.3f}"
+
+    variances = []
+    for record in history.perception_records:
+        values = [v["perceived_inflation"] for v in record.cohorts.values()]
+        mean_v = sum(values) / len(values)
+        variances.append(sum((v - mean_v) ** 2 for v in values) / len(values))
+    assert max(variances) > 0.0, "perceived_inflation_c quedo identico entre cohortes todo el run"

@@ -69,13 +69,16 @@ from republica.world.events import (
 from republica.world.perception import (
     AUDIENCE_MAX,
     AUDIENCE_MIN,
+    TREND_WINDOW_MONTHS,
     MediaAction,
     PerceptionRecord,
     compute_bias,
     drift_audience,
     load_media_consumption,
+    reputation_penalty,
     step_perception,
     sync_to_real,
+    update_contradiction_streak,
 )
 from republica.world.perception import (
     perception_gap as compute_perception_gap,
@@ -313,6 +316,31 @@ class Simulation:
     #: la ficha" -- la ficha estatica sigue sirviendo para el resto de los
     #: mecanismos de ADR 003, p.ej. el `scale_by` de `PUBLIC_STATEMENT`).
     outlet_influence: dict[str, float] = field(default_factory=dict)
+    #: Racha de meses consecutivos que cada medio publico un frame
+    #: contradictorio (ADR 005 secc. 4.5, revisado v0.8 -- ver
+    #: `world/perception.py::update_contradiction_streak`). `{}` con
+    #: `media_enabled=False` (nunca se llena).
+    outlet_contradiction_streak: dict[str, int] = field(default_factory=dict)
+    #: Deuda de reputacion ACUMULADA (suma de todos los `-0.03` cobrados en
+    #: la corrida, nunca decrece -- ADR 005 secc. 4.5, revisado v0.8): un
+    #: medio que mintio 3+ meses seguidos no vuelve a su techo original de
+    #: `AUDIENCE_MAX` aunque despues se alinee siempre con la realidad (ver
+    #: `world/perception.py::reputation_penalty`/Notas de implementacion --
+    #: sin esto, la deriva de audiencia normal (secc. 4.5) termina
+    #: reconvergiendo a `AUDIENCE_MAX` de nuevo en unos pocos meses de
+    #: alineacion, borrando cualquier diferencia entre medios). `{}` con
+    #: `media_enabled=False`.
+    outlet_reputation_debt: dict[str, float] = field(default_factory=dict)
+    #: Ventana movil (ultimos `TREND_WINDOW_MONTHS` meses, mas viejo primero)
+    #: de inflacion/desempleo/crecimiento REALES, para el chequeo de
+    #: contradiccion de secc. 4.5 (revisado v0.8): un solo mes de delta es
+    #: demasiado ruidoso (con `exogenous_noise=True` un mes de inflacion
+    #: "subiendo" seguido de uno "bajando" es la norma, no la excepcion --
+    #: ver Notas de implementacion) para sostener una racha de 3+ meses
+    #: consecutivos. Vacio con `media_enabled=False`.
+    recent_inflation: list[float] = field(default_factory=list)
+    recent_unemployment: list[float] = field(default_factory=list)
+    recent_gdp_growth: list[float] = field(default_factory=list)
     perception_records: list[PerceptionRecord] = field(default_factory=list)
     #: ADR 006 (default `False`, mismo criterio que el resto de las
     #: features): `memory_enabled` solo tiene efecto si `actors_enabled`
@@ -961,23 +989,105 @@ def advance_month(sim: Simulation) -> MonthRecord:
                 sim.cohorts, sim.cohort_state, econ_state.inflation, econ_state.unemployment
             )
         gap = compute_perception_gap(sim.cohorts, sim.cohort_state, econ_state.inflation)
-        if sim.media_enabled and media_actions:
-            # Hallazgo #6 de REVIEW_002: antes se armaba `{outlet_id: frame}`
-            # (un dict por outlet), asi que un medio que publica DOS
-            # `PUBLISH_STORY` el mismo mes (con frames distintos, p.ej. uno
-            # `all` y otro dirigido a un `target_bloc`) solo drifteaba
-            # audiencia con el ULTIMO -- el primero se perdia sin efecto.
-            # Ahora se recorre `media_actions` sin deduplicar: cada historia
-            # de este mes aplica su propio `drift_audience` en secuencia
-            # (compuesto sobre la influencia ya actualizada por la historia
-            # anterior del mismo medio), acumulando todos los frames.
-            for ma in media_actions:
-                current = sim.outlet_influence.get(ma.outlet_id)
-                if current is None:
-                    continue
-                sim.outlet_influence[ma.outlet_id] = drift_audience(
-                    ma.frame, current, sim.cohorts, sim.cohort_state
-                )
+        if sim.media_enabled:
+            # ADR 005 secc. 4.5 (revisado v0.8): costo de reputacion cuando
+            # el frame contradice la macro real 3+ meses SEGUIDOS (ver
+            # `world/perception.py::update_contradiction_streak`/
+            # `reputation_penalty`). El "cayendo"/"subiendo" del chequeo se
+            # mide contra el valor de hace `TREND_WINDOW_MONTHS` meses (no
+            # contra el mes inmediato anterior): con `exogenous_noise=True`
+            # el delta mes a mes cambia de signo todo el tiempo, asi que casi
+            # nunca sostiene una racha de 3+ meses SEGUIDOS -- una ventana
+            # mas ancha (y el crecimiento promediado sobre la misma ventana)
+            # sigue el criterio literal del ADR pero filtra ese ruido, igual
+            # que ya hace `q` en `step_perception` (secc. 4.4) con el sesgo
+            # de medios. `sim.recent_*` guarda los reales de los ultimos
+            # meses (mas viejo primero); se actualiza TODOS los meses con
+            # `media_enabled` (no solo los que publican), para que la
+            # ventana no tenga huecos.
+            window = sim.recent_inflation[-TREND_WINDOW_MONTHS:]
+            inflation_ago = window[0] if len(window) >= TREND_WINDOW_MONTHS else sim.state.inflation
+            window_u = sim.recent_unemployment[-TREND_WINDOW_MONTHS:]
+            unemployment_ago = (
+                window_u[0] if len(window_u) >= TREND_WINDOW_MONTHS else sim.state.unemployment
+            )
+            gdp_window = [
+                *sim.recent_gdp_growth[-(TREND_WINDOW_MONTHS - 1) :],
+                econ_state.gdp_growth,
+            ]
+            trend_gdp_growth = sum(gdp_window) / len(gdp_window)
+            inflation_delta = econ_state.inflation - inflation_ago
+            unemployment_delta = econ_state.unemployment - unemployment_ago
+            if media_actions:
+                # Hallazgo #6 de REVIEW_002: antes se armaba
+                # `{outlet_id: frame}` (un dict por outlet), asi que un
+                # medio que publica DOS `PUBLISH_STORY` el mismo mes (con
+                # frames distintos, p.ej. uno `all` y otro dirigido a un
+                # `target_bloc`) solo drifteaba audiencia con el ULTIMO --
+                # el primero se perdia sin efecto. Se recorre
+                # `media_actions` sin deduplicar: cada historia de este mes
+                # aplica su propio `drift_audience` en secuencia (compuesto
+                # sobre la influencia ya actualizada por la historia
+                # anterior del mismo medio), acumulando todos los frames.
+                published_outlets = {ma.outlet_id for ma in media_actions}
+                for outlet_id in sim.outlet_influence:
+                    if outlet_id not in published_outlets:
+                        # Sin `PUBLISH_STORY` este mes no hay afirmacion
+                        # que contradiga nada: corta la racha (tiene que
+                        # ser 3+ meses SEGUIDOS publicando el frame
+                        # contradictorio).
+                        sim.outlet_contradiction_streak[outlet_id] = 0
+                for ma in media_actions:
+                    current = sim.outlet_influence.get(ma.outlet_id)
+                    if current is None:
+                        continue
+                    current = drift_audience(
+                        ma.frame,
+                        ma.outlet_id,
+                        current,
+                        sim.cohorts,
+                        sim.cohort_state,
+                        sim.media_consumption,
+                    )
+                    streak = update_contradiction_streak(
+                        sim.outlet_contradiction_streak,
+                        ma.outlet_id,
+                        ma.frame,
+                        trend_gdp_growth,
+                        inflation_delta,
+                        unemployment_delta,
+                    )
+                    penalty = reputation_penalty(streak)
+                    if penalty:
+                        # La deuda de reputacion es ACUMULATIVA y no se
+                        # perdona (ver campo en la dataclass, mas arriba):
+                        # un medio que mintio 3+ meses seguidos no vuelve a
+                        # `AUDIENCE_MAX` aunque se alinee siempre despues --
+                        # sin este piso permanente, la deriva de audiencia
+                        # normal de mas arriba reconverge a `AUDIENCE_MAX`
+                        # en unos pocos meses de alineacion y borra
+                        # cualquier diferencia entre medios (el bug
+                        # original que reporta docs/EMERGENCE_LOG.md, solo
+                        # que retrasado).
+                        sim.outlet_reputation_debt[ma.outlet_id] = (
+                            sim.outlet_reputation_debt.get(ma.outlet_id, 0.0) + penalty
+                        )
+                        current -= penalty
+                    ceiling = clamp(
+                        AUDIENCE_MAX - sim.outlet_reputation_debt.get(ma.outlet_id, 0.0),
+                        AUDIENCE_MIN,
+                        AUDIENCE_MAX,
+                    )
+                    sim.outlet_influence[ma.outlet_id] = clamp(current, AUDIENCE_MIN, ceiling)
+            sim.recent_inflation.append(econ_state.inflation)
+            sim.recent_unemployment.append(econ_state.unemployment)
+            sim.recent_gdp_growth.append(econ_state.gdp_growth)
+            if len(sim.recent_inflation) > TREND_WINDOW_MONTHS:
+                sim.recent_inflation.pop(0)
+            if len(sim.recent_unemployment) > TREND_WINDOW_MONTHS:
+                sim.recent_unemployment.pop(0)
+            if len(sim.recent_gdp_growth) > TREND_WINDOW_MONTHS - 1:
+                sim.recent_gdp_growth.pop(0)
         sim.perception_records.append(
             PerceptionRecord(
                 month=month,
