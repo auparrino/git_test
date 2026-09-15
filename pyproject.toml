@@ -15,8 +15,16 @@ dependencies = [
 # langfuse` -- sin instalar, `ai/tracing.py::try_export_langfuse` cae solo a
 # `traces.jsonl` (ver docstring). No es una dependencia por default: este
 # entorno no tiene red hacia Langfuse.
+#
+# ADR 008 secc. 3: extra opcional para `republica experiment load`/`report`
+# (DuckDB + notebooks de analisis). El runner (`republica experiment run`)
+# NO depende de esto -- corre una simulacion y escribe JSONL con las
+# dependencias base nada mas; `experiments/store.py`/`report.py` importan
+# `duckdb`/`matplotlib` de forma perezosa (dentro de la funcion que los usa)
+# y fallan con un mensaje en castellano si no estan instalados.
 [project.optional-dependencies]
 langfuse = ["langfuse>=2"]
+analysis = ["duckdb>=1", "pandas>=2", "matplotlib>=3"]
 
 [project.scripts]
 republica = "republica.cli:app"

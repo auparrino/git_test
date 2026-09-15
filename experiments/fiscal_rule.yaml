@@ -1,0 +1,37 @@
+# Experimento canonico 3 (ADR 008 secc. 5.3): sweep 3x3 de la sensibilidad
+# fiscal de la inflacion (`c_f`) x el gasto primario default
+# (`primary_spending`), un solo brazo base multiplicado por el producto
+# cartesiano de `sweep` -> 9 brazos con nombre deterministico. El reporte
+# arma un mapa de calor supervivencia x inflacion (ADR secc. 4, "mapa de
+# calor supervivencia x inflacion").
+name: fiscal_rule
+
+description: >
+  Hipotesis: la supervivencia cae y la inflacion anualizada final sube a
+  medida que aumenta `c_f` (mas traspaso de deficit a precios) y/o
+  `primary_spending` (mas gasto primario, a igual `tax_rate`) -- el mapa de
+  calor deberia mostrar el peor cuadrante en c_f=0.16 x
+  primary_spending=27 y el mejor en c_f=0.08 x primary_spending=23.
+
+base:
+  months: 48
+  features: {actors: true, congress: true, negotiation: true, cohorts: true, media: true, memory: true, elections: true}
+  brains: rules
+
+seeds: {start: 0, count: 20}
+
+arms:
+  base: {}
+
+sweep:
+  country.coefficients.c_f: [0.08, 0.12, 0.16]
+  country.default_policy.primary_spending: [23, 25, 27]
+
+metrics:
+  - outcome
+  - inflation_annual_final
+  - gdp_growth_mean
+  - unemployment_final
+  - approval_final
+  - stability_min
+  - reserves_min

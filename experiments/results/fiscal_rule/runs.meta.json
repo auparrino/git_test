@@ -1,0 +1,131 @@
+{
+  "experiment_name": "fiscal_rule",
+  "description": "Hipotesis: la supervivencia cae y la inflacion anualizada final sube a medida que aumenta `c_f` (mas traspaso de deficit a precios) y/o `primary_spending` (mas gasto primario, a igual `tax_rate`) -- el mapa de calor deberia mostrar el peor cuadrante en c_f=0.16 x primary_spending=27 y el mejor en c_f=0.08 x primary_spending=23.\n",
+  "experiment_yaml": "/home/user/git_test/experiments/fiscal_rule.yaml",
+  "seeds": {
+    "start": 0,
+    "count": 20
+  },
+  "metrics": [
+    "outcome",
+    "inflation_annual_final",
+    "gdp_growth_mean",
+    "unemployment_final",
+    "approval_final",
+    "stability_min",
+    "reserves_min"
+  ],
+  "arms": {
+    "base__c_f=0.08__primary_spending=23": {
+      "overrides": {
+        "country.coefficients.c_f": 0.08,
+        "country.default_policy.primary_spending": 23
+      },
+      "sweep_point": {
+        "country.coefficients.c_f": 0.08,
+        "country.default_policy.primary_spending": 23
+      },
+      "config_hash": "01b8ef683241c4fc4749b9a86805b1aafb6c447496fbec67f31bd4f8bf66939b",
+      "months": 48
+    },
+    "base__c_f=0.08__primary_spending=25": {
+      "overrides": {
+        "country.coefficients.c_f": 0.08,
+        "country.default_policy.primary_spending": 25
+      },
+      "sweep_point": {
+        "country.coefficients.c_f": 0.08,
+        "country.default_policy.primary_spending": 25
+      },
+      "config_hash": "49cd96168d1769694d63a5d76545b463dae8a74ad83e18a5b26cf54b207e1eec",
+      "months": 48
+    },
+    "base__c_f=0.08__primary_spending=27": {
+      "overrides": {
+        "country.coefficients.c_f": 0.08,
+        "country.default_policy.primary_spending": 27
+      },
+      "sweep_point": {
+        "country.coefficients.c_f": 0.08,
+        "country.default_policy.primary_spending": 27
+      },
+      "config_hash": "37760de93f1e940b0ccb7b8ab83a58d559284a8252eb2adce12ebc76b6985610",
+      "months": 48
+    },
+    "base__c_f=0.12__primary_spending=23": {
+      "overrides": {
+        "country.coefficients.c_f": 0.12,
+        "country.default_policy.primary_spending": 23
+      },
+      "sweep_point": {
+        "country.coefficients.c_f": 0.12,
+        "country.default_policy.primary_spending": 23
+      },
+      "config_hash": "e4323a25a05d96ed0baad669e1c24fb4df3397c9d71821c437cbd045c430e2c0",
+      "months": 48
+    },
+    "base__c_f=0.12__primary_spending=25": {
+      "overrides": {
+        "country.coefficients.c_f": 0.12,
+        "country.default_policy.primary_spending": 25
+      },
+      "sweep_point": {
+        "country.coefficients.c_f": 0.12,
+        "country.default_policy.primary_spending": 25
+      },
+      "config_hash": "673daae57255565c0198b9f5446ff61e20bb8a2aebb7fc83ec0a206363c0e887",
+      "months": 48
+    },
+    "base__c_f=0.12__primary_spending=27": {
+      "overrides": {
+        "country.coefficients.c_f": 0.12,
+        "country.default_policy.primary_spending": 27
+      },
+      "sweep_point": {
+        "country.coefficients.c_f": 0.12,
+        "country.default_policy.primary_spending": 27
+      },
+      "config_hash": "85625d65cba316866ccd4eb234c775310c4d6244b4c244e519d82e625ffc14a0",
+      "months": 48
+    },
+    "base__c_f=0.16__primary_spending=23": {
+      "overrides": {
+        "country.coefficients.c_f": 0.16,
+        "country.default_policy.primary_spending": 23
+      },
+      "sweep_point": {
+        "country.coefficients.c_f": 0.16,
+        "country.default_policy.primary_spending": 23
+      },
+      "config_hash": "29169103976831ea1110182bcc830841c25e4a414766a64b90f640493feb1be8",
+      "months": 48
+    },
+    "base__c_f=0.16__primary_spending=25": {
+      "overrides": {
+        "country.coefficients.c_f": 0.16,
+        "country.default_policy.primary_spending": 25
+      },
+      "sweep_point": {
+        "country.coefficients.c_f": 0.16,
+        "country.default_policy.primary_spending": 25
+      },
+      "config_hash": "17ca75b3c968cbaaa522942523ece0cf1a33028f2a639b112fe02be49b09d86d",
+      "months": 48
+    },
+    "base__c_f=0.16__primary_spending=27": {
+      "overrides": {
+        "country.coefficients.c_f": 0.16,
+        "country.default_policy.primary_spending": 27
+      },
+      "sweep_point": {
+        "country.coefficients.c_f": 0.16,
+        "country.default_policy.primary_spending": 27
+      },
+      "config_hash": "4823ca9f0872fa394c7630ccde1544df806e0889c91f4e096e3a8fa7355946ef",
+      "months": 48
+    }
+  },
+  "package_version": "0.1.0",
+  "generated_at": "2026-09-15T01:40:09.848516+00:00",
+  "elapsed_seconds": 9.470518702999925
+}

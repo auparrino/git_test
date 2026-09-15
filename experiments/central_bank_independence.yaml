@@ -1,0 +1,43 @@
+# Experimento canonico 1 (ADR 008 secc. 5.1): autonomia del Banco Central,
+# 2 (recomienda nomas, "dependiente" del presidente) vs. 4 (fija la tasa y
+# hace intervencion cambiaria acotada, "independiente"), mismas 50 semillas
+# en los dos brazos, todas las features prendidas, actores por reglas.
+name: central_bank_independence
+
+# Hipotesis registrada ANTES de correr el experimento (ADR secc. 5.1,
+# literal -- "registrada antes de correr"): el brazo independiente tiene
+# menor inflacion final mediana y mayor desempleo que el dependiente, sin
+# diferencia clara en supervivencia. El reporte (`report.md`) dice si se
+# cumplio o no, con el IC de la diferencia y el Cliff's delta de cada
+# metrica -- no se edita esta descripcion despues de correrlo.
+description: >
+  Hipotesis: el brazo independiente (autonomy=4, el Banco Central fija la
+  tasa sin pasar por el presidente) tiene menor inflacion anualizada final
+  mediana y mayor desempleo final que el brazo dependiente (autonomy=2,
+  solo recomienda), sin diferencia clara en la tasa de supervivencia entre
+  los dos brazos.
+
+base:
+  months: 48
+  features: {actors: true, congress: true, negotiation: true, cohorts: true, media: true, memory: true, elections: true}
+  brains: rules
+
+seeds: {start: 0, count: 50}
+
+arms:
+  dependent:
+    governance: {central_bank: {autonomy: 2}}
+  independent:
+    governance: {central_bank: {autonomy: 4}}
+
+metrics:
+  - outcome
+  - inflation_annual_final
+  - gdp_growth_mean
+  - unemployment_final
+  - approval_final
+  - stability_min
+  - reserves_min
+  - authority_violations
+  - perception_gap_mean
+  - agreements_broken

@@ -34,6 +34,8 @@ traces_app = typer.Typer(help="Trazas de decision de actores IA (ADR 007 secc. 5
 app.add_typer(traces_app, name="traces")
 eval_app = typer.Typer(help="Evals de agentes (ADR 007 secc. 1-4).")
 app.add_typer(eval_app, name="eval")
+experiment_app = typer.Typer(help="Experimentos en lote, DuckDB y comparacion (ADR 008).")
+app.add_typer(experiment_app, name="experiment")
 console = Console()
 
 
@@ -1152,6 +1154,112 @@ def eval_export_promptfoo(
 
     paths = export_promptfoo(out)
     console.print(f"[green]OK[/green] promptfoo -> {', '.join(str(p) for p in paths)}")
+
+
+@experiment_app.command("run")
+def experiment_run(
+    yaml_path: Annotated[Path, typer.Argument(help="YAML del experimento (ADR 008 secc. 1).")],
+    out: Annotated[
+        Path | None,
+        typer.Option("--out", help="Directorio de salida (default: simulations/exp/<nombre>/)."),
+    ] = None,
+    workers: Annotated[
+        int, typer.Option("--workers", help="Procesos en paralelo (forzado a 1 para brazos llm:*).")
+    ] = 1,
+) -> None:
+    """`republica experiment run <yaml> --workers N --out DIR` (ADR 008
+    secc. 2): corre todas las semillas de todos los brazos, escribe
+    `<out>/<arm>/<seed>.jsonl`, `runs.meta.json` y `metrics.csv`."""
+    from republica.experiments.config import ExperimentConfig
+    from republica.experiments.runner import run_experiment
+
+    out_dir = out or Path("simulations/exp") / ExperimentConfig.load(yaml_path).name
+    result = run_experiment(yaml_path, out_dir, workers=workers)
+    console.print(
+        f"[green]OK[/green] experimento={result['experiment']} brazos={len(result['arms'])} "
+        f"corridas={result['n_ok']}/{result['n_tasks']} fallidas={result['n_failed']} "
+        f"({result['elapsed_seconds']:.1f}s) -> {result['out_dir']}"
+    )
+    if result["n_failed"]:
+        console.print(f"[yellow]{result['n_failed']} corridas fallidas: ver failed.jsonl[/yellow]")
+
+
+@experiment_app.command("status")
+def experiment_status_cmd(
+    out: Annotated[Path, typer.Argument(help="Directorio de un experimento ya corrido.")],
+) -> None:
+    """`republica experiment status <dir>`: progreso por brazo y corridas
+    fallidas (ADR 008 secc. 2)."""
+    from republica.experiments.runner import experiment_status
+
+    status = experiment_status(out)
+    table = Table(title=f"Estado de {status['experiment']} ({out})")
+    table.add_column("brazo")
+    table.add_column("completas", justify="right")
+    table.add_column("total", justify="right")
+    table.add_column("faltantes")
+    for arm, info in status["arms"].items():
+        missing = ", ".join(str(s) for s in info["missing"]) or "-"
+        table.add_row(arm, str(info["done"]), str(info["total"]), missing)
+    console.print(table)
+    console.print(f"Corridas fallidas registradas: {status['n_failed']}")
+
+
+@experiment_app.command("resume")
+def experiment_resume(
+    out: Annotated[Path, typer.Argument(help="Directorio de un experimento ya corrido.")],
+    workers: Annotated[
+        int, typer.Option("--workers", help="Procesos en paralelo (forzado a 1 para brazos llm:*).")
+    ] = 1,
+) -> None:
+    """`republica experiment resume <dir>` (ADR 008 secc. 2): vuelve a
+    correr solo los `(brazo, semilla)` sin JSONL."""
+    from republica.experiments.runner import resume_experiment
+
+    result = resume_experiment(out, workers=workers)
+    console.print(
+        f"[green]OK[/green] resume {result['experiment']}: "
+        f"{result['n_ok']}/{result['n_tasks']} corridas pendientes ok, "
+        f"{result['n_failed']} fallidas ({result['elapsed_seconds']:.1f}s)"
+    )
+
+
+@experiment_app.command("load")
+def experiment_load(
+    out: Annotated[Path, typer.Argument(help="Directorio de un experimento ya corrido.")],
+    db: Annotated[
+        Path, typer.Option("--db", help="Archivo DuckDB de destino (ADR 008 secc. 3).")
+    ] = Path("simulations/republica.duckdb"),
+) -> None:
+    """`republica experiment load <dir> --db <archivo>` (ADR 008 secc. 3):
+    carga las corridas del experimento en DuckDB (idempotente). Requiere el
+    extra opcional `analysis` (`uv sync --group dev --extra analysis`)."""
+    try:
+        from republica.experiments.store import load_experiment
+    except ImportError as exc:  # pragma: no cover - falta el extra
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    try:
+        result = load_experiment(out, db)
+    except RuntimeError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    console.print(
+        f"[green]OK[/green] {result['runs_seen']} corridas de {result['experiment']} -> {db}"
+    )
+
+
+@experiment_app.command("report")
+def experiment_report(
+    out: Annotated[Path, typer.Argument(help="Directorio de un experimento ya corrido.")],
+) -> None:
+    """`republica experiment report <dir>` (ADR 008 secc. 4): escribe
+    `report.md` (y PNG en `plots/` si `matplotlib` esta instalado)."""
+    from republica.experiments.report import build_report
+
+    path = build_report(out)
+    console.print(f"[green]OK[/green] reporte -> {path}")
 
 
 if __name__ == "__main__":

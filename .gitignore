@@ -39,3 +39,9 @@ simulations/*
 !simulations/.gitkeep
 *.duckdb
 .langfuse
+
+# ADR 008: corridas crudas de experimentos (cientos de JSONL, cientos de MB) --
+# report.md/metrics.csv/plots/*.png/runs.meta.json SI se versionan (son el
+# resultado legible y chico), las corridas se reproducen con `republica
+# experiment run`/`resume` a partir del yaml + runs.meta.json.
+experiments/results/**/*.jsonl

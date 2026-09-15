@@ -1,0 +1,48 @@
+# Experimento canonico 2 (ADR 008 secc. 5.2): mismo pais, mismas semillas,
+# comparar el cerebro que toma las decisiones de TODOS los actores --
+# reglas, `fake:rules` (mismo motor de reglas mediado por el `FakeBackend`,
+# para probar que la tuberia LLM no cambia el resultado) y, si hay Ollama
+# corriendo, dos modelos reales. En este entorno (offline, sin Ollama) solo
+# corren los dos primeros brazos -- ver `experiments/results/
+# brain_comparison/README.md` y las Notas de implementacion de ADR 008.
+name: brain_comparison
+
+description: >
+  Hipotesis: `fake:rules` reproduce las metricas de `rules` (misma tuberia
+  de decision, solo mediada por un `FakeBackend`) -- sirve de control del
+  experimento. Los brazos `llm:ollama:qwen3:8b`/`llm:ollama:qwen3:32b`
+  (comentados: necesitan un servidor Ollama local, ADR 008 secc. 5.2)
+  miden si un modelo mas grande produce mas `diversity`/menos
+  `authority_violations` que las reglas, a costo de mas `agreements_broken`.
+
+base:
+  months: 48
+  features: {actors: true, congress: true, negotiation: true, cohorts: true, media: true, memory: true, elections: true}
+
+seeds: {start: 0, count: 30}
+
+arms:
+  rules:
+    brains: {default: rules}
+  fake_rules:
+    brains: {default: "fake:rules"}
+  # Brazos con Ollama real (ADR secc. 5.2): descomentar con un servidor
+  # Ollama local corriendo `qwen3:8b`/`qwen3:32b` (`ollama pull qwen3:8b`,
+  # docs/OLLAMA_SETUP.md). `republica experiment run` los corre siempre en
+  # serie (--workers se ignora para brazos llm:*, ADR secc. 2).
+  # ollama_qwen3_8b:
+  #   brains: {default: "llm:ollama:qwen3:8b"}
+  # ollama_qwen3_32b:
+  #   brains: {default: "llm:ollama:qwen3:32b"}
+
+metrics:
+  - outcome
+  - inflation_annual_final
+  - gdp_growth_mean
+  - unemployment_final
+  - approval_final
+  - stability_min
+  - reserves_min
+  - authority_violations
+  - perception_gap_mean
+  - agreements_broken

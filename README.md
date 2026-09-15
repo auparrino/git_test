@@ -17,7 +17,8 @@ Objetivo final: un sistema computacional para explorar y evaluar instituciones p
 | v0.5 | Congreso y negociación | ✅ |
 | v0.5 | Cohortes, medios y percepción; memoria y elecciones | 🔨 (ADR 005, 006) |
 | — | Visor HTML de corridas (`republica viewer`) | ✅ |
-| v0.8 | Evals, trazas, gobernanza; experimentos en lote con DuckDB | diseño listo (ADR 007, 008) |
+| v0.7 | Evals, trazas, gobernanza (`republica eval`, `republica traces`, `data/governance.yaml`) | ✅ |
+| v0.8 | Experimentos en lote, DuckDB y comparación de modelos (`republica experiment`) | ✅ |
 
 Plan completo, criterios de "listo" y modelo a usar en cada etapa: [`docs/PLAN.md`](docs/PLAN.md).
 Checklist operativa: [`docs/PASO_A_PASO.md`](docs/PASO_A_PASO.md). Especificación del mundo:
@@ -32,8 +33,32 @@ uv run republica narrate simulations/run_7.jsonl               # la historia, me
 uv run republica batch --seeds 300 --policy passive            # distribución de outcomes
 uv run republica play --seed 7                                 # vos sos el presidente
 uv run republica viewer simulations/run_7.jsonl                # visor HTML: graficos, boletin, actores
+uv run republica eval --suite all --brain rules --judge fake --out evals/reports/rules  # evals de agentes
 uv run pytest -q
 ```
+
+### Experimentos en lote (ADR 008)
+
+```bash
+uv sync --group dev --extra analysis                             # duckdb/pandas/matplotlib (opcional)
+uv run republica experiment run experiments/central_bank_independence.yaml \
+    --workers 4 --out experiments/results/central_bank_independence
+uv run republica experiment status experiments/results/central_bank_independence
+uv run republica experiment resume experiments/results/central_bank_independence
+uv run republica experiment load experiments/results/central_bank_independence \
+    --db simulations/republica.duckdb                            # requiere el extra 'analysis'
+uv run republica experiment report experiments/results/central_bank_independence  # -> report.md + plots/
+duckdb simulations/republica.duckdb < experiments/queries/survival_by_arm.sql
+```
+
+Los 3 experimentos canónicos (`experiments/*.yaml`) y sus resultados reales ya corridos:
+[`experiments/results/central_bank_independence/report.md`](experiments/results/central_bank_independence/report.md)
+(50 semillas × 2 brazos: autonomía del Banco Central 2 vs. 4),
+[`experiments/results/fiscal_rule/report.md`](experiments/results/fiscal_rule/report.md)
+(sweep 3×3, mapa de calor supervivencia × inflación) y
+[`experiments/results/brain_comparison/report.md`](experiments/results/brain_comparison/report.md)
+(`rules` vs. `fake:rules`; los brazos `llm:ollama:*` están comentados en el YAML porque este entorno
+no tiene Ollama).
 
 Orden de construcción:
 

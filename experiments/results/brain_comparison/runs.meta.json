@@ -1,0 +1,42 @@
+{
+  "experiment_name": "brain_comparison",
+  "description": "Hipotesis: `fake:rules` reproduce las metricas de `rules` (misma tuberia de decision, solo mediada por un `FakeBackend`) -- sirve de control del experimento. Los brazos `llm:ollama:qwen3:8b`/`llm:ollama:qwen3:32b` (comentados: necesitan un servidor Ollama local, ADR 008 secc. 5.2) miden si un modelo mas grande produce mas `diversity`/menos `authority_violations` que las reglas, a costo de mas `agreements_broken`.\n",
+  "experiment_yaml": "/home/user/git_test/experiments/brain_comparison.yaml",
+  "seeds": {
+    "start": 0,
+    "count": 30
+  },
+  "metrics": [
+    "outcome",
+    "inflation_annual_final",
+    "gdp_growth_mean",
+    "unemployment_final",
+    "approval_final",
+    "stability_min",
+    "reserves_min",
+    "authority_violations",
+    "perception_gap_mean",
+    "agreements_broken"
+  ],
+  "arms": {
+    "rules": {
+      "overrides": {
+        "brains.default": "rules"
+      },
+      "sweep_point": {},
+      "config_hash": "979c4004a635a322bf96bf6b2b9498d65aaf0c8fa67c8237144276052d2e7f60",
+      "months": 48
+    },
+    "fake_rules": {
+      "overrides": {
+        "brains.default": "fake:rules"
+      },
+      "sweep_point": {},
+      "config_hash": "e8a4b90b5c892952339be5ac37df7e47bc54f0c4335eb8d0469e7d980e26be71",
+      "months": 48
+    }
+  },
+  "package_version": "0.1.0",
+  "generated_at": "2026-09-15T01:40:39.127067+00:00",
+  "elapsed_seconds": 22.991764607999812
+}
