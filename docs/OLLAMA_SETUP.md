@@ -16,3 +16,6 @@
    antes de correr `republica`: `OllamaBackend` lo lee del entorno si no le pasás `host=` a mano.
 6. Sin Ollama a mano (como en este entorno de desarrollo): usá `--brain fake:rules` (misma tubería
    completa, cero LLM) para todo lo demás.
+7. Todo el plan de Fase 4 de una vez (bench por rol, Aurora y Argentina 2019-12 con LLM y por reglas,
+   evals, comparación de trazas): `MODEL=qwen3:8b ./scripts/fase4_ollama.sh`; salidas en
+   `simulations/fase4_logs/`, tablas para `docs/FASE4_BENCH_OLLAMA.md` y `docs/FASE4_RESULTS_OLLAMA.md`.

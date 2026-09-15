@@ -146,6 +146,16 @@ LINKED_SERIES = [
         "inflation_cpi_annual.csv",
         "1961-01-01",
     ),
+    (
+        "inflation_cpi_monthly_linked.csv",
+        "inflation_cpi_monthly.csv",
+        "1997-02-01",
+    ),
+    (
+        "poverty_linked.csv",
+        "poverty.csv",
+        "2003-07-01",
+    ),
 ]
 
 
