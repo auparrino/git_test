@@ -320,6 +320,12 @@ def electoral_pressure(in_government: bool | None, perception: Perception) -> fl
     return electoral_pressure_raw(in_government, perception.months_to_election, approval)
 
 
+#: `w_mem` (ADR 006 secc. 1.3, literal): peso del termino de memoria sobre
+#: `score` (`memory_score * 100`, ya escalado -- ver
+#: `ai/memory.py::MemoryStore.score_term`, misma constante).
+W_MEM = 0.15
+
+
 @dataclass(frozen=True)
 class ScoreBreakdown:
     ideo: float
@@ -328,9 +334,15 @@ class ScoreBreakdown:
     elec: float
     noise: float
     total: float
+    #: Termino de memoria (ADR 006 secc. 1.3), `None` con `features.memory =
+    #: False` -- `as_dict()` solo agrega la clave `"mem"` cuando no es
+    #: `None`, para que el `score` de un `ActionRecord` con memoria apagada
+    #: sea byte a byte identico al de antes de ADR 006 (ver golden hash
+    #: test).
+    mem: float | None = None
 
     def as_dict(self) -> dict[str, float]:
-        return {
+        out = {
             "ideo": round(self.ideo, 2),
             "int": round(self.interest, 2),
             "rel": round(self.rel, 2),
@@ -338,6 +350,9 @@ class ScoreBreakdown:
             "noise": round(self.noise, 2),
             "total": round(self.total, 2),
         }
+        if self.mem is not None:
+            out["mem"] = round(self.mem, 2)
+        return out
 
 
 def _in_government(actor: ActorSheet, parties_by_id: dict[str, Party]) -> bool | None:
@@ -358,8 +373,10 @@ def compute_score(
     signatures: dict[str, dict[str, float]],
     interests_cfg: dict[str, dict[str, float]],
     rng: random.Random,
+    memory_enabled: bool = False,
 ) -> ScoreBreakdown:
-    """`score` de ADR 003 secc. 6."""
+    """`score` de ADR 003 secc. 6, mas el termino de memoria de ADR 006
+    secc. 1.3 (`w_mem`) cuando `memory_enabled`."""
     delta = perception.proposal.delta if perception.proposal else {}
     indicators = {**perception.public_indicators, **perception.private_indicators}
     dependence = perception.private_indicators.get("dependence", 0.5)
@@ -367,6 +384,10 @@ def compute_score(
 
     ideo = ideological_fit(delta, actor, signatures)
     interest = interest_impact(actor, delta, indicators, dependence, bool(in_gov), interests_cfg)
+    # `perception.relationships["president"]` ya es `trust_president` en vez
+    # del valor crudo de `Relationships` cuando `features.memory` esta
+    # activo (`engine/perception.py::build_perception`, ADR 006 secc. 1.3):
+    # este termino no cambia de formula, solo de input.
     rel_president = perception.relationships.get("president", 50)
     rel = (rel_president - 50) * 2.0
     elec = electoral_pressure(in_gov, perception)
@@ -374,15 +395,23 @@ def compute_score(
     noise_val = rng.gauss(0.0, sigma) if sigma > 0.0 else 0.0
 
     w = weights.get(actor.role, weights["default"])
+    mem_term = W_MEM * perception.memory_score * 100.0 if memory_enabled else None
     total = (
         w["w_ideo"] * ideo
         + w["w_int"] * interest
         + w["w_rel"] * rel
         + w["w_elec"] * elec
         + noise_val
+        + (mem_term or 0.0)
     )
     return ScoreBreakdown(
-        ideo=ideo, interest=interest, rel=rel, elec=elec, noise=noise_val, total=total
+        ideo=ideo,
+        interest=interest,
+        rel=rel,
+        elec=elec,
+        noise=noise_val,
+        total=total,
+        mem=mem_term,
     )
 
 
@@ -467,6 +496,7 @@ class RuleBasedActor:
         signatures: dict[str, dict[str, float]] | None = None,
         interests_cfg: dict[str, dict[str, float]] | None = None,
         governance: Governance | None = None,
+        memory_enabled: bool = False,
     ) -> None:
         self.sheet = sheet
         self.parties_by_id = {p.id: p for p in parties}
@@ -477,6 +507,10 @@ class RuleBasedActor:
         self.signatures = signatures if signatures is not None else load_signatures()
         self.interests_cfg = interests_cfg if interests_cfg is not None else load_interests_config()
         self.governance = governance if governance is not None else load_governance()
+        #: ADR 006 secc. 1.3 (default `False`, mismo criterio que el resto
+        #: de las features de ADR 005/006): si `w_mem`/`trust_president`
+        #: estan activos para este actor.
+        self.memory_enabled = memory_enabled
         #: Ultimo `ScoreBreakdown` calculado por `_decide_generic` (`None`
         #: para medios/banco central, que no puntuan propuestas: secc. 6.3/
         #: 6.4). Efecto de lado leido por `engine/scheduler.py` para el
@@ -516,6 +550,7 @@ class RuleBasedActor:
             self.signatures,
             self.interests_cfg,
             rng,
+            memory_enabled=self.memory_enabled,
         )
         self.last_score = score
         intensity = min(1.0, abs(score.total) / INTENSITY_SCALE)

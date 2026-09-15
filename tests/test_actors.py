@@ -64,7 +64,12 @@ def test_permission_matrix_has_an_allowed_and_a_denied_action_per_role() -> None
     parties_by_id = {p.id: p for p in COUNTRY.parties}
     ctx = AuthContext(
         state=COUNTRY.initial_state,
-        month=1,
+        # mes 46 (no 1): cae en la ventana de campana (ADR 006 secc. 2.5,
+        # meses 45-48 de un mandato de 48), asi que `CAMPAIGN`/`PROMISE`
+        # (agregados a `president`/`party` en `data/permissions.yaml`)
+        # tambien pasan el chequeo 3 de `authorize()` como cualquier otro
+        # tipo permitido del rol.
+        month=46,
         parties_by_id=parties_by_id,
         governance=governance,
         permissions=permissions,
@@ -127,6 +132,10 @@ def _fill_minimal_params(action_type: ActionType, actor: ActorSheet) -> Action:
         params = {"to": "gov_norte", "concession": "restore_transfers"}
     elif action_type is ActionType.NEGOTIATE:
         params = {"requested_concession": "wage_bonus", "offer": "algo"}
+    elif action_type is ActionType.CAMPAIGN:
+        params = {"focus": "all", "intensity": 0.5}
+    elif action_type is ActionType.PROMISE:
+        params = {"text": "test", "target": "urban_workers", "direction": "expansive"}
     return Action(type=action_type, actor_id=actor.id, reason="test", params=params)
 
 

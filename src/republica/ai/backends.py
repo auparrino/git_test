@@ -253,6 +253,15 @@ class FakeBackend:
 
     policy: str
     scripted: dict[tuple[str, int], dict[str, Any]] | None = None
+    #: ADR 006 secc. 1.3 (default `False`, mismo criterio de siempre): el
+    #: `RuleBasedActor` que envuelve `policy="rules"` necesita saber si
+    #: `w_mem`/`trust_president` estan activos para reproducir EXACTAMENTE
+    #: el mismo score que una corrida `"rules"` directa -- sin esto,
+    #: `fake:rules` con `features.memory = True` divergia del `RuleBasedActor`
+    #: real (que si recibe `memory_enabled` via `ai/brains.py::
+    #: build_decision_actor`), rompiendo el test de aceptacion 1 de ADR 004
+    #: secc. 9 en cuanto la memoria esta prendida.
+    memory_enabled: bool = False
     name: str = field(default="", init=False)
     #: Cache de `RuleBasedActor` por actor (solo `policy="rules"`): evita
     #: reconstruir el actor -- y releer `data/actor_weights.yaml`/etc. -- en
@@ -286,6 +295,7 @@ class FakeBackend:
             country.taylor,
             country.structure.r_neutral,
             country.policy_ranges["interest_rate_target"],
+            memory_enabled=self.memory_enabled,
         )
         self._rule_actors[actor_id] = rule_actor
         return rule_actor

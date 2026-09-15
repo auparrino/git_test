@@ -39,6 +39,11 @@ class ActionType(StrEnum):
     ENACT_POLICY = "ENACT_POLICY"
     GRANT_CONCESSION = "GRANT_CONCESSION"
     NO_ACTION = "NO_ACTION"
+    #: ADR 006 secc. 2.5: campana electoral. Solo `president`/`party`, solo
+    #: en los ultimos 4 meses de un mandato (`engine/permissions.py`
+    #: chequeo 3, `world/elections.py::is_campaign_month`).
+    CAMPAIGN = "CAMPAIGN"
+    PROMISE = "PROMISE"
 
 
 class ConcessionType(StrEnum):
@@ -117,6 +122,29 @@ class GrantConcessionParams(_Params):
     concession: ConcessionType
 
 
+class CampaignParams(_Params):
+    """`CAMPAIGN(focus, intensity)` (ADR 006 secc. 2.5, literal): `focus` es
+    un `cohort_id` de `data/cohorts.csv` o `"all"`."""
+
+    focus: str
+    intensity: float = Field(ge=0.0, le=1.0)
+
+
+class PromiseParams(_Params):
+    """`PROMISE(text, target)` (ADR 006 secc. 2.5, literal). `direction` no
+    esta en el ADR (que solo pide comparar contra la "firma economica" del
+    delta de politica): se agrega explicita en vez de inferirla del texto
+    libre, para poder detectar `promise_broken` sin un parser de lenguaje
+    natural -- documentado en Notas de implementacion. `"expansive"` =
+    promesa de mas gasto/proteccion (firma economica negativa esperada);
+    `"restrictive"` = promesa de ajuste/ortodoxia (firma economica positiva
+    esperada), misma convencion de signo que `data/policy_signatures.yaml`."""
+
+    text: str
+    target: str
+    direction: str = Field(pattern="^(expansive|restrictive)$")
+
+
 #: Esquema de params por tipo (ADR 003 secc. 4).
 PARAM_SCHEMAS: dict[ActionType, type[_Params]] = {
     ActionType.SUPPORT_POLICY: IntensityParams,
@@ -140,6 +168,8 @@ PARAM_SCHEMAS: dict[ActionType, type[_Params]] = {
     ActionType.ENACT_POLICY: ProposePolicyParams,
     ActionType.GRANT_CONCESSION: GrantConcessionParams,
     ActionType.NO_ACTION: NoParams,
+    ActionType.CAMPAIGN: CampaignParams,
+    ActionType.PROMISE: PromiseParams,
 }
 
 

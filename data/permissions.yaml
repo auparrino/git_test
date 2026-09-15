@@ -9,6 +9,10 @@ president:
   - ENACT_POLICY
   - GRANT_CONCESSION
   - NO_ACTION
+  # ADR 006 secc. 2.5: solo en los ultimos 4 meses del mandato (chequeo 3
+  # de `engine/permissions.py`).
+  - CAMPAIGN
+  - PROMISE
 
 economy_minister:
   - SUPPORT_POLICY
@@ -48,6 +52,9 @@ party:
   - BREAK_ALLIANCE
   - CALL_PROTEST
   - NO_ACTION
+  # ADR 006 secc. 2.5: solo en los ultimos 4 meses del mandato.
+  - CAMPAIGN
+  - PROMISE
 
 union:
   - SUPPORT_POLICY

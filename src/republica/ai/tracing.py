@@ -54,6 +54,9 @@ class DecisionTrace:
     consequences: dict[str, Any] = field(default_factory=dict)
     #: Reservado para Fase 7 (Langfuse), vacio en v0.4 (ADR 004 secc. 6).
     eval_score: float | None = None
+    #: Cuantas frases de `MEMORIAS RELEVANTES` traia el prompt de este actor
+    #: (ADR 006 deliverable 3): `len(perception.memories)`, 0 sin memoria.
+    memories_retrieved: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -81,4 +84,5 @@ class DecisionTrace:
             "latency_ms": self.latency_ms,
             "tokens": self.tokens,
             "eval_score": self.eval_score,
+            "memories_retrieved": self.memories_retrieved,
         }

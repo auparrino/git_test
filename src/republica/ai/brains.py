@@ -75,9 +75,13 @@ def parse_brain_spec(spec: str) -> tuple[str, str | None]:
     return kind, rest
 
 
-def build_backend(spec: str, *, cache_dir: str | Path | None) -> LLMBackend:
+def build_backend(
+    spec: str, *, cache_dir: str | Path | None, memory_enabled: bool = False
+) -> LLMBackend:
     """`spec` sin el caso `"rules"` (eso no usa backend, ver
-    `build_decision_actor`): `"fake:<policy>"` o `"llm:ollama:<model>"`."""
+    `build_decision_actor`): `"fake:<policy>"` o `"llm:ollama:<model>"`.
+    `memory_enabled` (ADR 006 secc. 1.3) solo importa para `fake:rules`, que
+    envuelve un `RuleBasedActor` real."""
     kind, rest = parse_brain_spec(spec)
     backend: LLMBackend
     if kind == "fake":
@@ -87,7 +91,7 @@ def build_backend(spec: str, *, cache_dir: str | Path | None) -> LLMBackend:
                 f"policy de FakeBackend desconocida en '{spec}': {policy!r} "
                 f"(usar {_FAKE_POLICIES} desde la CLI, o construir FakeBackend a mano)"
             )
-        backend = FakeBackend(policy=policy)
+        backend = FakeBackend(policy=policy, memory_enabled=memory_enabled)
     elif kind == "llm":
         if not rest or ":" not in rest:
             raise ValueError(f"brain llm mal formado: {spec!r} (usar llm:ollama:<modelo>)")
@@ -113,10 +117,13 @@ def build_decision_actor(
     seed: int,
     temperature: float = 0.4,
     cache_dir: str | Path | None = None,
+    memory_enabled: bool = False,
 ) -> RuleBasedActor | LLMActor:
     """`spec` -> el objeto `decide(perception, rng) -> list[Action]` para
     `sheet` (ADR 004 secc. 7, deliverable 6: "cada actor obtiene el cerebro
-    de la tabla")."""
+    de la tabla"). `memory_enabled` (ADR 006 secc. 1.3) solo importa para
+    `RuleBasedActor` (`w_mem`/`trust_president`); un `LLMActor` ya ve las
+    memorias via el prompt (`MEMORIAS RELEVANTES`), sin necesitar el flag."""
     if spec == "rules":
         return RuleBasedActor(
             sheet,
@@ -124,8 +131,9 @@ def build_decision_actor(
             country.taylor,
             country.structure.r_neutral,
             country.policy_ranges["interest_rate_target"],
+            memory_enabled=memory_enabled,
         )
-    backend = build_backend(spec, cache_dir=cache_dir)
+    backend = build_backend(spec, cache_dir=cache_dir, memory_enabled=memory_enabled)
     return LLMActor(
         sheet,
         backend,

@@ -1,0 +1,32 @@
+# Ver comentario de `union_republicana.yaml` (mismo mecanismo, ADR 006 secc.
+# 2.4): ficha de recambio para `minister_economy` si gana la Alianza
+# Provincial.
+id: minister_economy
+name: Cdor. Hector Yrigoyen
+role: economy_minister
+ideology:
+  economic: 0.0
+  social: 0.0
+  federalism: 0.8
+  institutionalism: 0.3
+personality:
+  ambition: 0.5
+  risk_tolerance: 0.4
+  loyalty: 0.7
+  pragmatism: 0.7
+interests:
+- provincial_transfers
+- fiscal_balance
+- employment
+influence:
+  public: 0.4
+  congress: 0.5
+  streets: 0.1
+  markets: 0.4
+relationships:
+  president: 70
+  central_bank: 55
+  biz_finance: 50
+  union_cgt: 50
+bio: Economista provincial pragmatico, prioriza las transferencias a las
+  provincias y el equilibrio fiscal gradual.

@@ -13,6 +13,7 @@ from republica.actors.llm_based import LLMActor
 from republica.actors.rule_based import RuleBasedActor, make_actor_rng
 from republica.actors.sheet import ActorSheet, load_actors
 from republica.ai.brains import DEFAULT_BRAIN, build_decision_actor
+from republica.ai.memory import MemoryStore
 from republica.ai.tracing import DecisionTrace, make_run_id
 from republica.engine.actions import Action, ActionType
 from republica.engine.consequences import (
@@ -148,6 +149,10 @@ class ActorEngine:
     #: un id sintetico ("congress") para no compartir secuencia con ningun
     #: actor real.
     congress_rng: random.Random = field(default_factory=lambda: random.Random(0))
+    #: `MemoryStore` de todos los actores (ADR 006 secc. 1.2), persistente
+    #: mes a mes igual que `relationships`/`agreements`; vacio/no usado con
+    #: `features.memory = False`.
+    memory_store: MemoryStore = field(default_factory=MemoryStore)
     #: Eventos `agreement_broken:*:actor` de este mes (`check_actor_compliance`,
     #: ADR 005 secc. 2): efecto de lado leido por `engine/simulation.py`
     #: (mismo patron que `last_score`/`last_trace`) para sumarlos a
@@ -164,6 +169,7 @@ def build_actor_engine(
     default_brain: str = DEFAULT_BRAIN,
     llm_temperature: float = 0.4,
     llm_cache_dir: str | None = None,
+    memory_enabled: bool = False,
 ) -> ActorEngine:
     """Arma un `ActorEngine` nuevo: carga las 29 fichas (o las que se pasen,
     para tests), un actor de decision por rol no-`president` y un RNG propio
@@ -186,6 +192,7 @@ def build_actor_engine(
             seed=seed,
             temperature=llm_temperature,
             cache_dir=llm_cache_dir,
+            memory_enabled=memory_enabled,
         )
         for actor_id, sheet in actors.items()
         if sheet.role != "president"
@@ -223,6 +230,8 @@ def run_actor_turn(
     congress_enabled: bool = False,
     bloc_cohort_views: dict[str, dict[str, float]] | None = None,
     media_perception_active: bool = False,
+    memory_enabled: bool = False,
+    term_length: int = 48,
 ) -> tuple[list[ActionRecord], dict[str, float], list[NegotiationRecord]]:
     """Pasos 3-5 de ADR 003 secc. 7 (percepciones/decide/authorize/
     consequences), mas la negociacion de ADR 005 secc. 2 (paso 4 de su orden
@@ -285,6 +294,8 @@ def run_actor_turn(
             relationships=engine.relationships,
             agg=agg,
             cohort_view=cohort_view,
+            memory_store=engine.memory_store if memory_enabled else None,
+            memory_enabled=memory_enabled,
         )
         decision_actor = engine.decision_actors[actor_id]
         actions = decision_actor.decide(perception, engine.actor_rngs[actor_id])
@@ -304,6 +315,7 @@ def run_actor_turn(
         governance=engine.governance,
         cooldowns=engine.cooldowns,
         permissions=engine.permissions,
+        term_length=term_length,
     )
     allowed, denied = authorize_all(all_actions, engine.actors, auth_ctx)
 

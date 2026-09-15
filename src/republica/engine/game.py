@@ -29,6 +29,7 @@ from republica.engine.simulation import (
 )
 from republica.engine.simulation import run as run_simulation
 from republica.world.config import Country, load_country
+from republica.world.elections import is_campaign_month
 from republica.world.state import Policy, WorldState, clamp
 
 #: Topes de cambio mensual por instrumento (seccion 1, paso 3): tasa +-15pp,
@@ -117,6 +118,8 @@ class Game:
         negotiation_enabled: bool = True,
         cohorts_enabled: bool = True,
         media_enabled: bool = True,
+        memory_enabled: bool = True,
+        elections_enabled: bool = True,
     ) -> Game:
         """Arranca una partida nueva en el mes 0 (antes de jugar el mes 1).
 
@@ -167,6 +170,8 @@ class Game:
             negotiation_enabled=negotiation_enabled,
             cohorts_enabled=cohorts_enabled,
             media_enabled=media_enabled,
+            memory_enabled=memory_enabled,
+            elections_enabled=elections_enabled,
         )
         game = cls(
             country=base_country,
@@ -266,6 +271,50 @@ class Game:
                     "month": self.sim.month + 1,
                     "granted": sorted(granted_actor_ids),
                     "negotiation": dict(negotiation_decisions),
+                }
+            )
+
+    @property
+    def campaign_window_active(self) -> bool:
+        """`True` si el PROXIMO mes a jugar cae en la ventana de campana
+        (ADR 006 secc. 2.5, deliverable 6: pantalla de campana en `play`)."""
+        return self.sim.elections_enabled and is_campaign_month(
+            self.sim.month + 1, self.country.term_length
+        )
+
+    def apply_campaign(
+        self, focus: str, intensity: float, promises: list[tuple[str, str, str]]
+    ) -> None:
+        """`CAMPAIGN(focus, intensity)` + hasta 2 `PROMISE(text, target,
+        direction)` del jugador (ADR 006 secc. 2.5, play mode). Debe
+        llamarse antes de `step()`.
+
+        Actualiza `sim.campaign_state`/`sim.promises` directamente en vez de
+        pasar por `authorize()`/`apply_consequences` (a diferencia de
+        `GRANT_CONCESSION` en `set_grant_decisions`): el presidente humano
+        siempre esta "autorizado" a hacer campana dentro de la ventana (ya
+        la valida esta misma propiedad) y no hay una `Perception`/decision
+        de un actor de por medio que justifique el viaje completo por el
+        pipeline de acciones -- documentado en Notas de implementacion."""
+        if self.sim.actor_engine is None or not self.campaign_window_active:
+            return
+        incumbent_party = next((p.id for p in self.country.parties if p.in_government), None)
+        if incumbent_party and focus:
+            bucket = self.sim.campaign_state.setdefault(incumbent_party, {})
+            bucket[focus] = bucket.get(focus, 0.0) + 0.5 * max(0.0, min(1.0, intensity))
+        next_month = self.sim.month + 1
+        for text, target, direction in promises[:2]:
+            if not text.strip() or not target:
+                continue
+            self.sim.promises.append(
+                {
+                    "month": next_month,
+                    "actor": "president",
+                    "target": target,
+                    "text": text.strip(),
+                    "direction": (
+                        direction if direction in ("expansive", "restrictive") else "expansive"
+                    ),
                 }
             )
 
@@ -381,6 +430,8 @@ class Game:
             action_records=self.sim.action_records,
             vote_records=self.sim.vote_records,
             negotiation_records=self.sim.negotiation_records,
+            memory_records=self.sim.memory_records,
+            election_records=self.sim.election_records,
         )
         history_path.write_text(history.to_jsonl(), encoding="utf-8")
         data = {

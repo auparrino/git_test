@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from republica.actors.sheet import ActorSheet
 from republica.engine.actions import PARAM_SCHEMAS, Action, ActionType
 from republica.world.config import Party
+from republica.world.elections import is_campaign_month
 from republica.world.state import WorldState
 
 DEFAULT_PERMISSIONS_PATH = Path(__file__).resolve().parents[3] / "data" / "permissions.yaml"
@@ -67,6 +68,9 @@ class AuthContext:
     cooldowns: dict[tuple[str, ActionType], int] = field(default_factory=dict)
     action_counts: dict[str, int] = field(default_factory=dict)
     permissions: dict[str, set[ActionType]] = field(default_factory=dict)
+    #: `term_length` (ADR 006 secc. 2.5/§5, default 48 = comportamiento sin
+    #: elecciones): usado solo por el chequeo de `CAMPAIGN`/`PROMISE`.
+    term_length: int = 48
 
 
 @dataclass(frozen=True)
@@ -102,6 +106,13 @@ def _check_state_conditions(actor: ActorSheet, action: Action, ctx: AuthContext)
         non_fiscal = set(delta) - FISCAL_INSTRUMENTS
         if non_fiscal:
             return f"el ministro solo puede proponer instrumentos fiscales, no {sorted(non_fiscal)}"
+    if action.type in (ActionType.CAMPAIGN, ActionType.PROMISE) and not is_campaign_month(
+        ctx.month, ctx.term_length
+    ):
+        return (
+            f"{action.type.value} solo se permite en los ultimos 4 meses del mandato "
+            f"(mandato de {ctx.term_length} meses)"
+        )
     return None
 
 

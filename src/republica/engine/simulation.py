@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import random
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any
 
 from republica.actors.president_rules import (
@@ -15,6 +15,7 @@ from republica.actors.president_rules import (
 from republica.actors.rule_based import economic_policy_direction, load_signatures
 from republica.actors.sheet import ActorSheet
 from republica.ai.brains import DEFAULT_BRAIN
+from republica.ai.memory import MemoryContext, MemoryEvent, generate_month_memories
 from republica.ai.tracing import DecisionTrace
 from republica.engine.actions import Action
 from republica.engine.congress import Bill, VoteRecord, derive_congress_support, requires_law
@@ -37,6 +38,18 @@ from republica.world.cohorts import (
 )
 from republica.world.config import Country, load_country
 from republica.world.economy import finalize_exogenous, step_economy, step_exogenous
+from republica.world.elections import (
+    PROMISE_WINDOW_MONTHS,
+    ElectionResult,
+    LoyaltyTable,
+    build_post_election_actors,
+    build_post_election_parties,
+    honeymoon_approval,
+    is_election_month,
+    load_loyalty,
+    reseed_president_relationships,
+    run_election,
+)
 from republica.world.events import (
     ActiveShock,
     EndogenousTracker,
@@ -65,7 +78,7 @@ from republica.world.provinces import compute_provinces
 from republica.world.society import step_society
 from republica.world.state import Exogenous, Policy, WorldState, clamp, clamp_state
 
-OUTCOMES = ("survived", "collapse", "hyperinflation")
+OUTCOMES = ("survived", "collapse", "hyperinflation", "reelected", "defeated")
 
 
 @dataclass
@@ -136,6 +149,14 @@ class History:
     #: `negotiation_records`: con todos los sidecars vacios, `to_jsonl()`
     #: produce el mismo texto que antes de este commit).
     perception_records: list[PerceptionRecord] = field(default_factory=list)
+    #: `MemoryEvent` (ADR 006 secc. 1.2, `kind: "memory"`), acumuladas mes a
+    #: mes igual que `perception_records`; vacio con `features.memory`
+    #: apagado (mismo patron: con todos los sidecars vacios, `to_jsonl()`
+    #: produce el mismo texto que antes de ADR 006).
+    memory_records: list[MemoryEvent] = field(default_factory=list)
+    #: `ElectionResult` (ADR 006 secc. 2.4, `kind: "election"`), vacio con
+    #: `features.elections` apagado.
+    election_records: list[ElectionResult] = field(default_factory=list)
 
     def to_jsonl(self) -> str:
         by_month: dict[int, list[Any]] = {}
@@ -153,6 +174,12 @@ class History:
         perceptions_by_month: dict[int, list[PerceptionRecord]] = {}
         for p in self.perception_records:
             perceptions_by_month.setdefault(p.month, []).append(p)
+        memories_by_month: dict[int, list[MemoryEvent]] = {}
+        for me in self.memory_records:
+            memories_by_month.setdefault(me.turn, []).append(me)
+        elections_by_month: dict[int, list[ElectionResult]] = {}
+        for er in self.election_records:
+            elections_by_month.setdefault(er.month, []).append(er)
 
         lines = []
         for r in self.records:
@@ -167,6 +194,10 @@ class History:
                 lines.append(json.dumps(v.to_dict(), ensure_ascii=False))
             for p in perceptions_by_month.get(r.month_index, []):
                 lines.append(json.dumps(p.to_dict(), ensure_ascii=False))
+            for me in memories_by_month.get(r.month_index, []):
+                lines.append(json.dumps(me.to_dict(), ensure_ascii=False))
+            for er in elections_by_month.get(r.month_index, []):
+                lines.append(json.dumps(er.to_dict(), ensure_ascii=False))
         lines.append(
             json.dumps(
                 {"outcome": self.outcome, "seed": self.seed, "config_hash": self.config_hash},
@@ -186,6 +217,8 @@ class History:
             "vote_records": [v.to_dict() for v in self.vote_records],
             "negotiation_records": [n.to_dict() for n in self.negotiation_records],
             "perception_records": [p.to_dict() for p in self.perception_records],
+            "memory_records": [m.to_dict() for m in self.memory_records],
+            "election_records": [e.to_dict() for e in self.election_records],
         }
 
 
@@ -274,6 +307,30 @@ class Simulation:
     #: mecanismos de ADR 003, p.ej. el `scale_by` de `PUBLIC_STATEMENT`).
     outlet_influence: dict[str, float] = field(default_factory=dict)
     perception_records: list[PerceptionRecord] = field(default_factory=list)
+    #: ADR 006 (default `False`, mismo criterio que el resto de las
+    #: features): `memory_enabled` solo tiene efecto si `actors_enabled`
+    #: tambien lo esta (el `MemoryStore` vive en `ActorEngine`).
+    #: `elections_enabled` ademas requiere `cohorts_enabled` (el modelo de
+    #: intencion de voto de ADR 006 secc. 2.2 esta construido sobre
+    #: cohortes) -- ver `new_simulation`.
+    memory_enabled: bool = False
+    elections_enabled: bool = False
+    memory_records: list[MemoryEvent] = field(default_factory=list)
+    election_records: list[ElectionResult] = field(default_factory=list)
+    loyalty_table: LoyaltyTable = field(default_factory=LoyaltyTable)
+    #: `campaign_p` acumulado por partido y foco (ADR 006 secc. 2.5:
+    #: `CAMPAIGN(focus, intensity)` -> `campaign_p += 0.5 * intensity`),
+    #: reseteado en cada transicion de gobierno.
+    campaign_state: dict[str, dict[str, float]] = field(default_factory=dict)
+    #: `PROMISE` activas (ADR 006 secc. 2.5): `{month, actor, target, text,
+    #: direction}`, se van del todo (`promise_broken` o expiracion de la
+    #: ventana de 6 meses) en `_check_promises`.
+    promises: list[dict[str, Any]] = field(default_factory=list)
+    #: `loyalty -0.1` por `promise_broken` (ADR 006 secc. 2.5, literal):
+    #: ajuste que se SUMA a `cohorts_loyalty.csv` en tiempo de lectura
+    #: (`world/elections.py::compute_vote_intention(loyalty_adjustments=...)`),
+    #: sin reescribir el CSV.
+    loyalty_adjustments: dict[tuple[str, str], float] = field(default_factory=dict)
 
 
 def new_simulation(
@@ -296,6 +353,9 @@ def new_simulation(
     media_enabled: bool = False,
     cohorts: list[Cohort] | None = None,
     media_consumption: dict[str, dict[str, float]] | None = None,
+    memory_enabled: bool = False,
+    elections_enabled: bool = False,
+    loyalty_table: LoyaltyTable | None = None,
 ) -> Simulation:
     """Construye una `Simulation` nueva sin correrla (uso interactivo, Fase 2:
     ver `engine/game.py`, que llama `advance_month` mes a mes).
@@ -329,6 +389,7 @@ def new_simulation(
     country = country or load_country()
     catalog = ShockCatalog(build_catalog(country.shocks))
     resolved_policy_rule = policy_rule or ConstantPolicy(country.default_policy)
+    resolved_memory_enabled = memory_enabled and actors_enabled
     actor_engine = (
         build_actor_engine(
             seed,
@@ -338,6 +399,7 @@ def new_simulation(
             default_brain=default_brain,
             llm_temperature=llm_temperature,
             llm_cache_dir=llm_cache_dir,
+            memory_enabled=resolved_memory_enabled,
         )
         if actors_enabled
         else None
@@ -351,6 +413,15 @@ def new_simulation(
         (cohorts if cohorts is not None else load_cohorts()) if cohorts_enabled else []
     )
     resolved_media_enabled = media_enabled and cohorts_enabled and actors_enabled
+    # ADR 006 secc. 2: el modelo de intencion de voto (secc. 2.2) esta
+    # construido sobre cohortes; sin `cohorts_enabled` no hay `CohortState`
+    # que alimentarle (ver Notas de implementacion).
+    resolved_elections_enabled = elections_enabled and actors_enabled and cohorts_enabled
+    resolved_loyalty_table = (
+        (loyalty_table if loyalty_table is not None else load_loyalty())
+        if resolved_elections_enabled
+        else LoyaltyTable()
+    )
     resolved_consumption = (
         (media_consumption if media_consumption is not None else load_media_consumption())
         if cohorts_enabled
@@ -390,6 +461,9 @@ def new_simulation(
         else {},
         media_consumption=resolved_consumption,
         outlet_influence=outlet_influence,
+        memory_enabled=resolved_memory_enabled,
+        elections_enabled=resolved_elections_enabled,
+        loyalty_table=resolved_loyalty_table,
     )
 
 
@@ -398,6 +472,90 @@ def _format_date(start_year: int, start_month: int, month_index: int) -> str:
     year = start_year + total // 12
     month = total % 12 + 1
     return f"{year:04d}-{month:02d}"
+
+
+def _run_election(
+    sim: Simulation, clamped: WorldState, month: int, country: Country
+) -> tuple[WorldState, ElectionResult]:
+    """Corre la eleccion de este mes (ADR 006 secc. 2.2/2.3) y aplica la
+    transicion de gobierno (secc. 2.4). Muta `sim.actor_engine`/
+    `sim.country`/`sim.cohort_state`/`sim.campaign_state` segun corresponda;
+    devuelve el `WorldState` con la aprobacion de luna de miel/continuidad
+    ya aplicada (secc. 2.4, literal) y el `ElectionResult`.
+
+    `Δreal_wage_12m`/`Δunemployment_12m` (secc. 2.2) se calculan contra el
+    `MonthRecord` de 12 meses atras si hay suficiente historia (si no, deltas
+    en 0 -- una eleccion en los primeros 12 meses de una corrida corta no
+    tiene "12 meses atras" reales, documentado en Notas de implementacion)."""
+    assert sim.actor_engine is not None
+    if len(sim.records) >= 12:
+        then = sim.records[-12].state
+        then_wage = then["real_wage"]
+        delta_real_wage_pct_12m = (
+            (clamped.real_wage - then_wage) / then_wage * 100.0 if then_wage else 0.0
+        )
+        delta_unemployment_12m = clamped.unemployment - then["unemployment"]
+    else:
+        delta_real_wage_pct_12m = 0.0
+        delta_unemployment_12m = 0.0
+
+    result = run_election(
+        month,
+        sim.cohorts,
+        sim.cohort_state,
+        country.parties,
+        clamped.government_approval,
+        sim.loyalty_table,
+        sim.rng,
+        delta_real_wage_pct_12m=delta_real_wage_pct_12m,
+        delta_unemployment_12m=delta_unemployment_12m,
+        campaign_state=sim.campaign_state,
+        memory_store=sim.actor_engine.memory_store if sim.memory_enabled else None,
+        loyalty_adjustments=sim.loyalty_adjustments,
+    )
+
+    # Bancas/`in_government` de la proxima temporada, siempre (ADR 006 secc.
+    # 2.4, literal: "las bancas de la eleccion reemplazan las de
+    # parties.json para el proximo mandato") -- pase lo que pase con el
+    # presidente.
+    new_parties = build_post_election_parties(result, country.parties)
+    new_coalition_seats = next(
+        (p.seats for p in new_parties if p.in_government), country.coalition_seats
+    )
+    sim.country = country.model_copy(
+        update={"parties": new_parties, "coalition_seats": new_coalition_seats}
+    )
+
+    changed = result.winner != result.incumbent_party
+    if changed:
+        # "Los demas actores persisten con su memoria. Memorias
+        # about=president se re-etiquetan" (ADR 006 secc. 2.4, literal):
+        # ANTES de reemplazar la ficha de `president`, para que la
+        # re-etiqueta apunte al presidente SALIENTE.
+        sim.actor_engine.memory_store.relabel_about(
+            "president", f"former_president_{result.incumbent_party}"
+        )
+        new_actors = build_post_election_actors(result, sim.actor_engine.actors)
+        reseed_president_relationships(sim.actor_engine.relationships, new_actors["president"])
+        minister_actor = sim.actor_engine.decision_actors.get("minister_economy")
+        if minister_actor is not None:
+            minister_actor.sheet = new_actors["minister_economy"]
+        sim.actor_engine.actors = new_actors
+        # "la Policy arranca en el default" / agreements cleared (secc. 2.4).
+        sim.actor_engine.agreements = []
+        sim.actor_engine.no_renegotiate_until = {}
+        sim.last_policy = sim.country.default_policy.model_copy()
+        sim.last_effective_policy = sim.country.default_policy.model_copy()
+        sim.concessions_delta = {}
+
+    approval = clamp(honeymoon_approval(result), 0.0, 100.0)
+    clamped = clamped.model_copy(update={"government_approval": approval})
+    if sim.cohorts_enabled:
+        sim.cohort_state = {
+            cid: replace(cs, approval=approval) for cid, cs in sim.cohort_state.items()
+        }
+    sim.campaign_state = {}
+    return clamped, result
 
 
 def advance_month(sim: Simulation) -> MonthRecord:
@@ -453,6 +611,9 @@ def advance_month(sim: Simulation) -> MonthRecord:
     #: y afines, "para memoria de Fase 6"), sumados a `MonthRecord.events`
     #: (paso 8/11) mas abajo. Vacio si `actors_enabled` esta apagado.
     agreement_events: list[str] = []
+    #: `{party_id: aprobo}` del `Bill` de este mes, si hubo uno (ADR 006
+    #: secc. 1.1, ver mas abajo). Vacio sin Congreso o sin `Bill` este mes.
+    vote_party_results: dict[str, bool] = {}
     #: Igual que en ADR 003 secc. 11 punto 7: placeholder de elecciones.
     # Se calcula siempre (no solo con actores) porque `derive_congress_support`
     # (mas abajo) tambien la necesita.
@@ -487,6 +648,17 @@ def advance_month(sim: Simulation) -> MonthRecord:
             )
         else:
             grants = []
+
+        # ADR 006 secc. 1.1 ("Pedido rechazado"): pedidos de `REQUEST_FUNDS`
+        # del mes pasado que el presidente NO concede este mes (capturado
+        # ANTES de que `run_actor_turn` pise `pending_requests` con los
+        # pedidos nuevos de este mes).
+        granted_this_month = {g.params.get("to") for g in grants}
+        refused_actor_ids = {
+            req.actor_id
+            for req in sim.actor_engine.pending_requests
+            if req.type.value == "REQUEST_FUNDS" and req.actor_id not in granted_this_month
+        }
 
         # Los shocks de duracion 1 se borran de `sim.active_shocks` en el
         # mismo mes en que se sortean (`ShockCatalog.apply_month`, arriba):
@@ -565,12 +737,45 @@ def advance_month(sim: Simulation) -> MonthRecord:
             congress_enabled=sim.congress_enabled,
             bloc_cohort_views=bloc_cohort_views,
             media_perception_active=sim.media_enabled,
+            memory_enabled=sim.memory_enabled,
+            term_length=country.term_length,
         )
         month_action_records = action_records
         sim.action_records.extend(action_records)
         sim.trace_records.extend(sim.actor_engine.last_traces)
         sim.negotiation_records.extend(negotiation_records)
         agreement_events.extend(sim.actor_engine.last_compliance_events)
+
+        # ADR 006 secc. 2.5: acumula `campaign_p` (`CAMPAIGN`) y registra las
+        # promesas activas (`PROMISE`) de este mes. Ambas se autorizan solo
+        # dentro de la ventana de campana (`engine/permissions.py`), pero el
+        # escaneo no necesita repetir ese chequeo: solo mira `authorized`.
+        if sim.elections_enabled:
+            incumbent_party_id = next((p.id for p in country.parties if p.in_government), None)
+            for ar in month_action_records:
+                if not ar.authorized:
+                    continue
+                actor_party = (
+                    incumbent_party_id
+                    if ar.actor == "president"
+                    else ar.actor.removeprefix("party_")
+                )
+                if ar.type == "CAMPAIGN" and actor_party:
+                    bucket = sim.campaign_state.setdefault(actor_party, {})
+                    focus = str(ar.params.get("focus", "all"))
+                    bucket[focus] = bucket.get(focus, 0.0) + 0.5 * float(
+                        ar.params.get("intensity", 0.0)
+                    )
+                elif ar.type == "PROMISE":
+                    sim.promises.append(
+                        {
+                            "month": month,
+                            "actor": ar.actor,
+                            "target": ar.params.get("target"),
+                            "text": str(ar.params.get("text", "")),
+                            "direction": ar.params.get("direction", "expansive"),
+                        }
+                    )
         # `actor_pending` (shock_*/policy_*) se guarda tal cual en
         # `sim.pending_terms`: el mismo split policy_/shock_* de arriba lo
         # procesa el mes que viene, al principio de `advance_month` (misma
@@ -595,6 +800,14 @@ def advance_month(sim: Simulation) -> MonthRecord:
                 sim.actor_engine.congress_rng,
             )
             sim.vote_records.append(vote_record)
+            # ADR 006 secc. 1.1 ("Ley clave votada"): `voted_for`/
+            # `voted_against` por partido, para `ai/memory.py::
+            # generate_month_memories` mas abajo.
+            vote_party_results = {
+                pv.party_id: (pv.yes_seats / pv.seats) >= 0.5
+                for pv in vote_record.parties
+                if pv.seats > 0
+            }
             if not vote_record.passed:
                 # ADR 005 secc. 1.3: la parte legislativa del delta no se
                 # aplica -- se revierte al valor efectivamente vigente el mes
@@ -716,9 +929,13 @@ def advance_month(sim: Simulation) -> MonthRecord:
     # la politica (secc. 5, paso 9: "cohortes -> approval agregada; sociedad
     # y politica restantes").
     cohort_approval: float | None = None
+    # Hoisted fuera del `if sim.cohorts_enabled:` (ADR 006): `_check_promises`
+    # (mas abajo) tambien necesita la firma economica del delta de politica
+    # de este mes para comparar una `PROMISE` contra lo que el gobierno
+    # efectivamente hizo, sin depender de `features.cohorts`.
+    policy_delta_for_direction = compute_policy_proposal(policy, prev_effective_policy).delta
+    policy_direction = economic_policy_direction(policy_delta_for_direction, load_signatures())
     if sim.cohorts_enabled:
-        policy_delta_for_direction = compute_policy_proposal(policy, prev_effective_policy).delta
-        policy_direction = economic_policy_direction(policy_delta_for_direction, load_signatures())
         sim.cohort_state, cohort_approval = step_cohorts(
             sim.cohorts,
             sim.cohort_state,
@@ -776,8 +993,90 @@ def advance_month(sim: Simulation) -> MonthRecord:
         events.append(dev_event.kind)
 
     outcome = check_termination(clamped, country.terminal, sim.tracker, month, country.months)
+
+    # -- ADR 006 secc. 1: memoria (generacion + consolidacion) -------------
+    # Corre con el `ActionRecord`/eventos de acuerdo/voto/shocks YA
+    # calculados de este mes (ver docstring de `ai/memory.py`: un unico
+    # punto de entrada). `refused_actor_ids`/`vote_party_results` se
+    # capturaron mas arriba, en los puntos del turno donde el motor ya
+    # resuelve esa informacion.
+    if sim.actors_enabled and sim.memory_enabled:
+        assert sim.actor_engine is not None
+        mem_ctx = MemoryContext(
+            month=month,
+            actors=sim.actor_engine.actors,
+            parties=country.parties,
+            action_records=month_action_records,
+            agreement_events=agreement_events,
+            refused_actor_ids=refused_actor_ids,
+            vote_party_results=vote_party_results,
+            shock_agg=agg,
+            new_shock_ids=new_ids,
+            forced_devaluation=dev_event is not None,
+            cohort_ids=[c.id for c in sim.cohorts],
+        )
+        new_memories = generate_month_memories(mem_ctx)
+        for me in new_memories:
+            sim.actor_engine.memory_store.add(me)
+        sim.memory_records.extend(new_memories)
+        if month % 12 == 0:
+            consolidated = sim.actor_engine.memory_store.consolidate(month)
+            sim.memory_records.extend(consolidated)
+
+    # -- ADR 006 secc. 2.5: `promise_broken` --------------------------------
+    if sim.actors_enabled and sim.memory_enabled and sim.promises:
+        assert sim.actor_engine is not None
+        parties_by_id = {p.id: p for p in country.parties}
+        still_active: list[dict[str, Any]] = []
+        for pr in sim.promises:
+            if month - pr["month"] > PROMISE_WINDOW_MONTHS:
+                continue  # expiro sin incumplirse: se descarta sin generar memoria
+            contradicted = (pr["direction"] == "expansive" and policy_direction > 0.15) or (
+                pr["direction"] == "restrictive" and policy_direction < -0.15
+            )
+            if not contradicted:
+                still_active.append(pr)
+                continue
+            target = pr["target"]
+            if target:
+                sim.actor_engine.memory_store.add(
+                    MemoryEvent(
+                        turn=month,
+                        actor=target,
+                        about=pr["actor"],
+                        kind="promise_broken",
+                        summary=(f'{pr["actor"]} incumplio su promesa: "{pr["text"][:100]}"'),
+                        importance=0.8,
+                        sentiment=-0.7,
+                    )
+                )
+                actor_party = (
+                    next((p.id for p in country.parties if p.in_government), None)
+                    if pr["actor"] == "president"
+                    else pr["actor"].removeprefix("party_")
+                )
+                if actor_party and actor_party in parties_by_id:
+                    key = (target, actor_party)
+                    sim.loyalty_adjustments[key] = sim.loyalty_adjustments.get(key, 0.0) - 0.1
+            # una promesa incumplida no se re-evalua (ADR 006 secc. 2.5:
+            # es un evento de una sola vez, no uno que se repita cada mes
+            # mientras la firma economica siga contradiciendola).
+        sim.promises = still_active
+
+    # -- ADR 006 secc. 2: elecciones -----------------------------------------
+    election_window = sim.actors_enabled and sim.elections_enabled
+    if election_window and is_election_month(month, country.term_length):
+        assert sim.actor_engine is not None
+        clamped, election_result = _run_election(sim, clamped, month, country)
+        sim.election_records.append(election_result)
+        events.append(f"election:{election_result.winner}")
+        if outcome == "survived":
+            outcome = election_result.outcome_type
+
     if outcome is not None:
-        events.append(f"term_end:{outcome}" if outcome == "survived" else outcome)
+        events.append(
+            f"term_end:{outcome}" if outcome in ("survived", "reelected", "defeated") else outcome
+        )
         sim.outcome = outcome
 
     # 9. registro
@@ -833,6 +1132,9 @@ def run(
     media_enabled: bool = False,
     cohorts: list[Cohort] | None = None,
     media_consumption: dict[str, dict[str, float]] | None = None,
+    memory_enabled: bool = False,
+    elections_enabled: bool = False,
+    loyalty_table: LoyaltyTable | None = None,
 ) -> History:
     """Corre `months` meses (o hasta un fin de partida temprano) y devuelve
     la `History`.
@@ -876,6 +1178,9 @@ def run(
         media_enabled=media_enabled,
         cohorts=cohorts,
         media_consumption=media_consumption,
+        memory_enabled=memory_enabled,
+        elections_enabled=elections_enabled,
+        loyalty_table=loyalty_table,
     )
     sim.country = sim.country.model_copy(update={"months": months})
     for _ in range(months):
@@ -892,4 +1197,6 @@ def run(
         vote_records=sim.vote_records,
         negotiation_records=sim.negotiation_records,
         perception_records=sim.perception_records,
+        memory_records=sim.memory_records,
+        election_records=sim.election_records,
     )

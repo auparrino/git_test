@@ -27,6 +27,7 @@ EVENT_LABELS = {
     "collapse": "El gobierno cae por perdida de estabilidad politica.",
     "hyperinflation": "La economia entra en hiperinflacion.",
     "term_end": "Fin del mandato: el gobierno completa su periodo.",
+    "election": "Hay elecciones este mes (ver el detalle abajo).",
 }
 
 
@@ -59,6 +60,9 @@ class Loaded:
     #: `PerceptionRecord` (ADR 005 secc. 4, `kind: "perception"`), agrupados
     #: por mes. Vacio con `--no-cohorts` (o sin actores).
     perceptions_by_month: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
+    #: `ElectionResult` (ADR 006 secc. 2.4, `kind: "election"`), agrupados
+    #: por mes. Vacio con `--no-elections` (o sin actores/cohortes).
+    elections_by_month: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
 
 
 def load_jsonl(path: str | Path) -> Loaded:
@@ -74,12 +78,13 @@ def load_jsonl(path: str | Path) -> Loaded:
         raise ValueError(f"{path} esta vacio")
     parsed = [json.loads(line) for line in lines[:-1]]
     summary = json.loads(lines[-1])
-    sidecar_kinds = ("action", "vote", "negotiation", "perception")
+    sidecar_kinds = ("action", "vote", "negotiation", "perception", "memory", "election", "trace")
     records = [r for r in parsed if r.get("kind") not in sidecar_kinds]
     actions_by_month: dict[int, list[dict[str, Any]]] = {}
     votes_by_month: dict[int, list[dict[str, Any]]] = {}
     negotiations_by_month: dict[int, list[dict[str, Any]]] = {}
     perceptions_by_month: dict[int, list[dict[str, Any]]] = {}
+    elections_by_month: dict[int, list[dict[str, Any]]] = {}
     for r in parsed:
         kind = r.get("kind")
         if kind == "action":
@@ -90,6 +95,8 @@ def load_jsonl(path: str | Path) -> Loaded:
             negotiations_by_month.setdefault(r["month"], []).append(r)
         elif kind == "perception":
             perceptions_by_month.setdefault(r["month"], []).append(r)
+        elif kind == "election":
+            elections_by_month.setdefault(r["month"], []).append(r)
     return Loaded(
         records=records,
         summary=summary,
@@ -97,6 +104,7 @@ def load_jsonl(path: str | Path) -> Loaded:
         votes_by_month=votes_by_month,
         negotiations_by_month=negotiations_by_month,
         perceptions_by_month=perceptions_by_month,
+        elections_by_month=elections_by_month,
     )
 
 
@@ -159,6 +167,37 @@ def _render_votes(console: Console, votes: list[dict[str, Any]]) -> None:
         )
 
 
+def _render_elections(console: Console, elections: list[dict[str, Any]]) -> None:
+    """`republica narrate` (ADR 006 secc. 6, deliverable 6): tabla de
+    resultados, balotaje si hubo, bancas, y la transicion de gobierno."""
+    for e in elections:
+        console.rule("[bold magenta]ELECCION[/bold magenta]")
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("Partido")
+        table.add_column("1a vuelta", justify="right")
+        table.add_column("Balotaje", justify="right")
+        table.add_column("Bancas", justify="right")
+        runoff = e.get("runoff") or {}
+        for party_id, pct in sorted(e["first_round"].items(), key=lambda kv: kv[1], reverse=True):
+            table.add_row(
+                party_id,
+                f"{pct:.1f} %",
+                f"{runoff[party_id]:.1f} %" if party_id in runoff else "-",
+                str(e["seats"].get(party_id, 0)),
+            )
+        console.print(table)
+        winner = e["winner"]
+        incumbent = e["incumbent_party"]
+        if winner == incumbent:
+            console.print(f"[bold]Gana la reeleccion:[/bold] {winner} (oficialismo continua).")
+        else:
+            console.print(
+                f"[bold]Cambio de gobierno:[/bold] {incumbent} pierde, asume {winner}. "
+                "El ministro de Economia y el gabinete se renuevan; la politica arranca "
+                "en el default y las relaciones del nuevo presidente son las de su partido."
+            )
+
+
 def _render_negotiations(console: Console, negotiations: list[dict[str, Any]]) -> None:
     """`republica narrate` (ADR 005 secc. 2, deliverable 7): una linea por
     acuerdo/ruptura."""
@@ -189,11 +228,13 @@ def render(
     actions_by_month: dict[int, list[dict[str, Any]]] | None = None,
     votes_by_month: dict[int, list[dict[str, Any]]] | None = None,
     negotiations_by_month: dict[int, list[dict[str, Any]]] | None = None,
+    elections_by_month: dict[int, list[dict[str, Any]]] | None = None,
 ) -> None:
     """Imprime la narracion completa mes a mes y el resumen final."""
     actions_by_month = actions_by_month or {}
     votes_by_month = votes_by_month or {}
     negotiations_by_month = negotiations_by_month or {}
+    elections_by_month = elections_by_month or {}
     prev_state: dict[str, Any] | None = None
     for record in records:
         state = record["state"]
@@ -228,6 +269,7 @@ def render(
 
         _render_negotiations(console, negotiations_by_month.get(record["month_index"], []))
         _render_votes(console, votes_by_month.get(record["month_index"], []))
+        _render_elections(console, elections_by_month.get(record["month_index"], []))
 
         prev_state = state
 

@@ -52,6 +52,12 @@ def load_run(path: Path) -> dict[str, Any]:
     votes: dict[int, list[dict[str, Any]]] = {}
     negotiations: dict[int, list[dict[str, Any]]] = {}
     perceptions: dict[int, list[dict[str, Any]]] = {}
+    #: `MemoryEvent`/`ElectionResult` (ADR 006, `kind: "memory"`/`"election"`),
+    #: agrupados por mes igual que el resto de los sidecars -- extension
+    #: minima para que el visor (editado aparte) pueda mostrarlos si quiere;
+    #: no se toca `viewer_template.html` en este commit.
+    memories: dict[int, list[dict[str, Any]]] = {}
+    elections: dict[int, list[dict[str, Any]]] = {}
     summary: dict[str, Any] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -71,6 +77,10 @@ def load_run(path: Path) -> dict[str, Any]:
             negotiations.setdefault(int(rec.get("month", 0)), []).append(rec)
         elif kind == "perception":
             perceptions.setdefault(int(rec.get("month", 0)), []).append(rec)
+        elif kind == "memory":
+            memories.setdefault(int(rec.get("month", 0)), []).append(rec)
+        elif kind == "election":
+            elections.setdefault(int(rec.get("month", 0)), []).append(rec)
     out_months = []
     for rec in months:
         idx = int(rec["month_index"])
@@ -112,6 +122,8 @@ def load_run(path: Path) -> dict[str, Any]:
                 "negotiations": negotiations.get(month_no, []),
                 "cohorts": rec.get("cohorts") or {},
                 "perceptions": perceptions.get(month_no, []),
+                "memories": memories.get(month_no, []),
+                "elections": elections.get(month_no, []),
             }
         )
     return {

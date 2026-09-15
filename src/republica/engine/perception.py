@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel, ConfigDict, Field
 
 from republica.actors.sheet import ActorSheet
+from republica.ai.memory import MemoryStore
 from republica.engine.consequences import Relationships
 from republica.engine.narrate import KEY_INDICATORS, annualized_inflation
 from republica.world.config import Party, Province
@@ -61,6 +62,12 @@ class Perception(BaseModel):
     relationships: dict[str, int]
     memories: list[str] = Field(default_factory=list)
     goals: list[str] = Field(default_factory=list)
+    #: `Σ sentiment_i · importance_i · recency_i` sobre memorias `about =
+    #: "president"` (ADR 006 secc. 1.3), SIN escalar por `w_mem`: lo escala
+    #: `actors/rule_based.py::compute_score`. `0.0` (default, memoria
+    #: apagada o sin memorias) reproduce el score de antes de ADR 006 --
+    #: ver `MemoryStore.memory_term`.
+    memory_score: float = 0.0
 
 
 #: Frases derivadas de `interests` (ADR 003 secc. 3: "goals derivados de
@@ -292,6 +299,8 @@ def build_perception(
     relationships: Relationships | None = None,
     agg: ShockAggregate | None = None,
     cohort_view: dict[str, float] | None = None,
+    memory_store: MemoryStore | None = None,
+    memory_enabled: bool = False,
 ) -> Perception:
     """Arma la `Perception` de `actor` para este mes (ADR 003 secc. 3,
     visibilidad por rol en ADR 004 secc. 5).
@@ -344,6 +353,24 @@ def build_perception(
         relationships.view_of(actor.id) if relationships is not None else dict(actor.relationships)
     )
 
+    memories: list[str] = []
+    memory_score = 0.0
+    if memory_enabled and memory_store is not None:
+        # ADR 006 secc. 1.3: `trust_president` REEMPLAZA, solo en esta
+        # vista de percepcion, el valor de `relationships["president"]`
+        # que decae hacia 50 (ADR 003 secc. 5). `Relationships` (el store
+        # del motor) no se toca: sigue siendo la unica fuente persistente,
+        # `w_rel` (ADR 003 secc. 6) automaticamente usa `trust_president` en
+        # vez del valor crudo porque lee de `perception.relationships`, no
+        # de `Relationships` directo (ver Notas de implementacion de ADR
+        # 006: "memoria agrega un modificador a la vista, no un segundo
+        # store").
+        if "president" in relationships_view:
+            relationships_view = dict(relationships_view)
+            relationships_view["president"] = round(memory_store.trust_president(actor.id, month))
+        memories = memory_store.retrieve(actor.id, month, relevant_actors={"president"})
+        memory_score = memory_store.memory_term(actor.id, month, "president")
+
     return Perception(
         month=month,
         date=date,
@@ -354,6 +381,7 @@ def build_perception(
         active_shocks=list(active_shocks),
         recent_events=list(recent_events),
         relationships=relationships_view,
-        memories=[],
+        memories=memories,
         goals=goals_from_interests(actor.interests),
+        memory_score=memory_score,
     )

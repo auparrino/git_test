@@ -1,0 +1,31 @@
+# Ver comentario de `union_republicana.yaml` (mismo mecanismo, ADR 006 secc.
+# 2.4): ficha de recambio para `minister_economy` si gana Movimiento Libertad.
+id: minister_economy
+name: Ing. Bruno Salvatierra
+role: economy_minister
+ideology:
+  economic: 0.9
+  social: -0.2
+  federalism: -0.3
+  institutionalism: 0.2
+personality:
+  ambition: 0.8
+  risk_tolerance: 0.8
+  loyalty: 0.7
+  pragmatism: 0.4
+interests:
+- fiscal_balance
+- low_taxes
+- financial_stability
+influence:
+  public: 0.6
+  congress: 0.4
+  streets: 0.1
+  markets: 0.8
+relationships:
+  president: 75
+  central_bank: 60
+  biz_finance: 75
+  union_cgt: 15
+bio: Economista libertario, busca un ajuste fiscal rapido y la maxima apertura
+  de mercado, sin concesiones graduales.

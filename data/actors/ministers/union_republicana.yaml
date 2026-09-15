@@ -1,0 +1,37 @@
+# Ficha de recambio para `minister_economy` tras una transicion de gobierno
+# (ADR 006 secc. 2.4) ganada por Union Republicana. `id` se mantiene
+# `minister_economy` a proposito (reemplaza el CONTENIDO de esa ficha, no
+# crea un actor nuevo: ver `world/elections.py::apply_government_transition`
+# y Notas de implementacion de ADR 006). Ideologia tomada de
+# `data/parties.json` (economic/social); `federalism`/`institutionalism` y
+# el resto de los campos son valores inventados para v0.6, del mismo orden
+# de magnitud que `minister_economy.yaml` original.
+id: minister_economy
+name: Lic. Marina Etcheverry
+role: economy_minister
+ideology:
+  economic: 0.5
+  social: 0.1
+  federalism: -0.1
+  institutionalism: 0.5
+personality:
+  ambition: 0.6
+  risk_tolerance: 0.5
+  loyalty: 0.8
+  pragmatism: 0.6
+interests:
+- fiscal_balance
+- low_taxes
+- financial_stability
+influence:
+  public: 0.5
+  congress: 0.6
+  streets: 0.1
+  markets: 0.7
+relationships:
+  president: 70
+  central_bank: 70
+  biz_finance: 70
+  union_cgt: 30
+bio: Economista ortodoxa de Union Republicana, prioriza el equilibrio fiscal y
+  la apertura financiera por sobre el gasto social.

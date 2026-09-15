@@ -224,6 +224,10 @@ class Country(BaseModel):
     name: str
     start: dict[str, int]
     months: int
+    #: `term_length` (ADR 006 secc. 2.1, default 48): duracion de un
+    #: mandato presidencial en meses. `run --months 96` con `term_length =
+    #: 48` simula dos mandatos (dos elecciones, en los meses 48 y 96).
+    term_length: int = 48
     initial_state: WorldState
     exogenous: Exogenous
     structure: Structure
@@ -265,6 +269,8 @@ class Country(BaseModel):
         "negotiation": True,
         "cohorts": True,
         "media": True,
+        "memory": True,
+        "elections": True,
     }
 
 
@@ -360,6 +366,7 @@ def load_country(data_dir: Path | str | None = None) -> Country:
         name=raw["name"],
         start=raw["start"],
         months=raw["months"],
+        term_length=raw.get("term_length", 48),
         initial_state=WorldState.model_validate(raw["initial_state"]),
         exogenous=Exogenous.model_validate(raw["exogenous"]),
         structure=Structure.model_validate(raw["structure"]),
@@ -383,6 +390,8 @@ def load_country(data_dir: Path | str | None = None) -> Country:
                 "negotiation": True,
                 "cohorts": True,
                 "media": True,
+                "memory": True,
+                "elections": True,
             },
         ),
     )

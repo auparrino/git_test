@@ -146,6 +146,7 @@ class LLMActor:
             actions_emitted=[_action_summary(a) for a in actions],
             latency_ms=result.latency_ms,
             tokens={"prompt": result.prompt_tokens, "completion": result.completion_tokens},
+            memories_retrieved=len(perception.memories),
         )
         return actions
 

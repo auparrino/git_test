@@ -1,0 +1,31 @@
+# Ver comentario de `union_republicana.yaml` (mismo mecanismo, ADR 006 secc.
+# 2.4): ficha de recambio para `minister_economy` si gana el Partido Social.
+id: minister_economy
+name: Dra. Celina Bracamonte
+role: economy_minister
+ideology:
+  economic: -0.8
+  social: 0.6
+  federalism: 0.1
+  institutionalism: 0.4
+personality:
+  ambition: 0.6
+  risk_tolerance: 0.6
+  loyalty: 0.8
+  pragmatism: 0.5
+interests:
+- social_programs
+- real_wages
+- public_employment
+influence:
+  public: 0.6
+  congress: 0.5
+  streets: 0.3
+  markets: 0.3
+relationships:
+  president: 70
+  central_bank: 45
+  biz_finance: 35
+  union_cgt: 70
+bio: Economista heterodoxa del Partido Social, prioriza el salario real y los
+  programas sociales por sobre el ajuste fiscal.

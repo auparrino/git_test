@@ -24,6 +24,7 @@ from republica.engine.narrate import EVENT_LABELS, annualized_inflation
 from republica.engine.policy import ConstantPolicy, PassivePolicy, PolicyRule, TaylorPolicy
 from republica.engine.simulation import History
 from republica.engine.simulation import run as run_simulation
+from republica.world.cohorts import load_cohorts
 from republica.world.config import load_country
 
 app = typer.Typer(help="Republica Artificial - laboratorio politico jugable.")
@@ -151,6 +152,22 @@ def run(
             "country.json.",
         ),
     ] = None,
+    memory: Annotated[
+        bool | None,
+        typer.Option(
+            "--memory/--no-memory",
+            help="Memoria de actores (ADR 006 secc. 1). Default: `features.memory` de "
+            "country.json.",
+        ),
+    ] = None,
+    elections: Annotated[
+        bool | None,
+        typer.Option(
+            "--elections/--no-elections",
+            help="Elecciones cada `term_length` meses (ADR 006 secc. 2). Default: "
+            "`features.elections` de country.json.",
+        ),
+    ] = None,
     brain: Annotated[
         str | None,
         typer.Option(
@@ -190,6 +207,14 @@ def run(
     media_enabled = (
         media if media is not None else country.features.get("media", True)
     ) and actors_enabled
+    memory_enabled = (
+        memory if memory is not None else country.features.get("memory", True)
+    ) and actors_enabled
+    elections_enabled = (
+        (elections if elections is not None else country.features.get("elections", True))
+        and actors_enabled
+        and cohorts_enabled
+    )
     brains_cfg = _resolve_brains(brain, brains)
     history = run_simulation(
         seed=seed,
@@ -206,6 +231,8 @@ def run(
         negotiation_enabled=negotiation_enabled,
         cohorts_enabled=cohorts_enabled,
         media_enabled=media_enabled,
+        memory_enabled=memory_enabled,
+        elections_enabled=elections_enabled,
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(history.to_jsonl(), encoding="utf-8")
@@ -213,7 +240,8 @@ def run(
         f"[green]OK[/green] seed={seed} months={len(history.records)} "
         f"outcome={history.outcome} actors={actors_enabled} "
         f"congress={congress_enabled} negotiation={negotiation_enabled} "
-        f"cohorts={cohorts_enabled} media={media_enabled} -> {out}"
+        f"cohorts={cohorts_enabled} media={media_enabled} "
+        f"memory={memory_enabled} elections={elections_enabled} -> {out}"
     )
 
 
@@ -245,6 +273,7 @@ def narrate(
         loaded.actions_by_month,
         loaded.votes_by_month,
         loaded.negotiations_by_month,
+        loaded.elections_by_month,
     )
 
 
@@ -526,6 +555,67 @@ def _collect_grant_decisions(game: Game, auto: bool) -> None:
     game.set_grant_decisions(granted, negotiation_decisions)
 
 
+def _collect_campaign_decisions(game: Game, auto: bool) -> None:
+    """Pantalla de campana (ADR 006 secc. 2.5, deliverable 6): en los
+    ultimos 4 meses del mandato, el jugador elige un foco de `CAMPAIGN`
+    (cohorte de `data/cohorts.csv` o "all") y hasta 2 `PROMISE`.
+    `--auto` elige foco "all" e intensidad maxima, sin promesas (ver
+    docstring de `Game.apply_campaign`)."""
+    if not game.campaign_window_active:
+        return
+    cohort_ids = ", ".join(c.id for c in load_cohorts())
+    if auto:
+        console.print("[dim]--auto: CAMPAIGN(focus=all, intensity=1.0), sin promesas[/dim]")
+        game.apply_campaign("all", 1.0, [])
+        return
+    console.rule("[bold magenta]CAMPANA[/bold magenta]")
+    focus = typer.prompt(f"  Foco de campana [{cohort_ids}/all]", default="all").strip()
+    try:
+        intensity = float(typer.prompt("  Intensidad (0-1)", default="1.0"))
+    except ValueError:
+        intensity = 1.0
+    promises: list[tuple[str, str, str]] = []
+    for i in (1, 2):
+        text = typer.prompt(f"  Promesa {i} (Enter para omitir)", default="").strip()
+        if not text:
+            continue
+        target = typer.prompt(
+            f"  Promesa {i}: cohorte destinataria [{cohort_ids}]", default=""
+        ).strip()
+        direction = typer.prompt(
+            f"  Promesa {i}: direccion [expansive/restrictive]", default="expansive"
+        ).strip()
+        promises.append((text, target, direction))
+    game.apply_campaign(focus, intensity, promises)
+
+
+def _render_election_night(console: Console, result) -> None:
+    """Pantalla de noche electoral (ADR 006 secc. 2.5, deliverable 6)."""
+    console.rule("[bold magenta]NOCHE ELECTORAL[/bold magenta]")
+    table = Table(show_header=True, header_style="bold")
+    table.add_column("Partido")
+    table.add_column("1a vuelta", justify="right")
+    table.add_column("Balotaje", justify="right")
+    table.add_column("Bancas", justify="right")
+    runoff = result.runoff or {}
+    for party_id, pct in sorted(result.first_round.items(), key=lambda kv: kv[1], reverse=True):
+        table.add_row(
+            party_id,
+            f"{pct:.1f} %",
+            f"{runoff[party_id]:.1f} %" if party_id in runoff else "-",
+            str(result.seats.get(party_id, 0)),
+        )
+    console.print(table)
+    if result.winner == result.incumbent_party:
+        console.print(f"[bold green]{result.winner} revalida el mandato.[/bold green]")
+    else:
+        console.print(
+            f"[bold red]{result.incumbent_party} pierde el gobierno.[/bold red] "
+            f"Asume [bold]{result.winner}[/bold]: nuevo gabinete, la politica vuelve al "
+            "default y hay luna de miel en la aprobacion."
+        )
+
+
 def _collect_choices(game: Game, auto: bool) -> dict[str, str]:
     choices: dict[str, str] = {}
     for dilemma in game.pending_dilemmas:
@@ -657,6 +747,21 @@ def play(
             help="Medios y percepcion (ADR 005 secc. 4), solo con --actors.",
         ),
     ] = True,
+    memory: Annotated[
+        bool,
+        typer.Option(
+            "--memory/--no-memory",
+            help="Memoria de actores (ADR 006 secc. 1), solo con --actors.",
+        ),
+    ] = True,
+    elections: Annotated[
+        bool,
+        typer.Option(
+            "--elections/--no-elections",
+            help="Elecciones cada `term_length` meses (ADR 006 secc. 2), solo con --actors "
+            "y --cohorts.",
+        ),
+    ] = True,
 ) -> None:
     """Modo juego: sos el presidente (SPEC_v0.2_play.md)."""
     if load is not None:
@@ -674,6 +779,8 @@ def play(
             llm_cache_dir=brains_cfg.cache_dir,
             cohorts_enabled=cohorts,
             media_enabled=media,
+            memory_enabled=memory,
+            elections_enabled=elections,
         )
 
     save_path = Path(f"simulations/game_{game.seed}.json")
@@ -683,11 +790,13 @@ def play(
         _render_dashboard(console, game, prev_state)
         choices = _collect_choices(game, auto)
         _collect_grant_decisions(game, auto)
+        _collect_campaign_decisions(game, auto)
         edits, quit_now = _menu(game, save_path, auto)
         if quit_now:
             game.save(save_path)
             console.print(f"[yellow]Partida guardada en {save_path}. Hasta la proxima.[/yellow]")
             return
+        n_elections_before = len(game.sim.election_records)
         record = game.step(choices, edits)
         if game.clip_report:
             for instrument, (requested, applied) in game.clip_report.items():
@@ -695,6 +804,8 @@ def play(
                     f"[dim]{instrument}: pedido {requested:+.1f}, aplicado {applied:+.1f} "
                     "(tope mensual)[/dim]"
                 )
+        if len(game.sim.election_records) > n_elections_before:
+            _render_election_night(console, game.sim.election_records[-1])
         prev_state = record.state
 
     game.save(save_path)
