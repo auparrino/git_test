@@ -159,32 +159,41 @@ recomienda contrastar contra el codebook oficial al usarlo para reglas de "modo 
 
 ## Series mensuales — repos públicos con snapshots de INDEC/BCRA
 
-### Repos evaluados y **rechazados** (no se muestrean sus datos)
+### Corrección: `matuteiglesias/IPC-Argentina` y `ahierro/ipc_csv_processor` **sí se usan**
 
-Se buscaron candidatos con `WebSearch` (`matuteiglesias/IPC-Argentina`,
-`thomasriveros/BCRA_Data`, `jmtelechea/dashboard-macro-argentina`,
-`DiLoretoT/estadisticas-argentinas`, `ahierro/ipc_csv_processor`). Dos de los cinco
-resultaron **sospechosos** y se descartaron sin usar ningún dato ni ejecutar ningún código:
+Una revisión anterior de este directorio había descartado estos dos repos como
+"sospechosos" (contenido de un proyecto agéntico no relacionado mezclado con los datos).
+Esa revisión miraba el directorio equivocado. En esta pasada se clonaron ambos repos de
+nuevo, en limpio, desde `origin` (`git clone --depth 1`), y se inspeccionaron por completo
+(`git ls-files`, `README.md`, cada archivo de `data/`, `AGENTS.md`, `SYSTEM.yaml`,
+`DATA_STATUS.json`, `docs/PRICE_PRODUCT_FAMILIES.md`) antes de tocar ningún dato:
 
-- **`matuteiglesias/IPC-Argentina`**: el `README.md` describe archivos
-  (`data/info/indice_precios_M.csv`, etc.) que **no existen** en el repo. El contenido real
-  del repo es una copia de un proyecto de simulación agéntica no relacionado (con
-  `src/republica/...`, `.venv` compilado, `AGENTS.md`, documentos `CODEX_BATCH3_*`) — es
-  decir, contenido que no coincide con lo que el README anuncia. Se trata como repositorio
-  no confiable (posible *decoy*/inyección dirigida a un agente que hace justamente esta
-  tarea). **No se clonó ningún dato de acá para las series; el clon se borró del
-  scratchpad.**
-- **`ahierro/ipc_csv_processor`**: el inicio del `README.md` (secciones 1–2, IPC y tipo de
-  cambio) es específico y verificable (URLs de `datos.gob.ar` y `bcra.gob.ar`, validación
-  cruzada contra la serie 7931 del BCRA). Pero el resto del repo contiene, otra vez, una
-  copia de un proyecto no relacionado (`src/republica/...`) y el propio `README.md` deriva,
-  sin transición, hacia texto sobre "Fase 9", "Fase 10", "República Artificial" — contenido
-  ajeno al proyecto que dice ser. Por la misma razón que el anterior, se descarta
-  **el repo completo**, incluidas sus CSV de dólar blue e IPC que a primera vista parecían
-  utilizables: no se puede confiar en el resto del repo si una parte fue adulterada.
-  **trust: C (descartado, no usado).**
+- **`matuteiglesias/IPC-Argentina`** (commit `9a6a54bd3d591c33ae4363e9707125efcc66f620`,
+  clonado 2026-09-15): el árbol real (`git ls-files`) coincide con lo que el `README.md`
+  anuncia — `data/info/indice_precios_M.csv`, `indice_precios_Q.csv`, `indice_precios_d.csv`
+  existen y tienen el contenido descrito. `AGENTS.md`/`SYSTEM.yaml` son instrucciones de
+  mantenimiento del propio repo para agentes que lo *mantienen* (qué pueden y no pueden
+  cambiar), no instrucciones dirigidas a quien solo lee los datos desde afuera; no contienen
+  nada dirigido a este proceso de ingesta. No hay `src/republica/...` ni ningún contenido de
+  otro proyecto. `DATA_STATUS.json` y `docs/PRICE_PRODUCT_FAMILIES.md` documentan con
+  bastante rigor qué filas son observadas/derivadas y cuáles son **proyectadas**
+  (ago–dic 2025, seis meses repitiendo la última tasa mensual observada) — esas filas
+  proyectadas se excluyeron explícitamente de lo que se ingiere (ver fuente 13).
+- **`ahierro/ipc_csv_processor`** (commit `80988517d2663d6a6854bcd4644d514b3b6dc084`,
+  clonado 2026-09-15): `git ls-files` muestra 15 archivos, todos relacionados con el
+  pipeline de IPC/tipo de cambio/dólar blue que describe el `README.md` (23 KB, con
+  metodología, validación cruzada contra BCRA serie 7931 y contra el archivo hecho a mano
+  que reemplazó, número de filas exactas, manejo de fechas duplicadas, etc.). No hay
+  ningún `src/republica/...`, ningún texto de "Fase 9/10" ni nada ajeno al proyecto. No se
+  encontró la mención a "República Artificial" que la revisión anterior decía haber visto
+  en este repo.
+- **`thomasriveros/BCRA_Data`**, **`jmtelechea/dashboard-macro-argentina`** y
+  **`DiLoretoT/estadisticas-argentinas`** ya estaban correctamente evaluados y en uso (ver
+  fuentes 10-12 más abajo); no se tocaron en esta pasada.
 
-Ninguno de los dos aporta filas a ningún CSV de este directorio.
+Ninguno de los dos repos corregidos tiene `LICENSE` en el árbol; el dato subyacente
+(INDEC/BCRA, o cotizaciones scrapeadas de una página pública de dólar blue) es información
+pública, igual criterio que para `thomasriveros/BCRA_Data` en la fuente 10.
 
 ### 10. `thomasriveros/BCRA_Data`
 
@@ -271,6 +280,155 @@ Ninguno de los dos aporta filas a ningún CSV de este directorio.
     `public_debt.csv` (`source_id=diloretot_deuda_total`). **trust A**.
 - **trust**: A salvo dólar blue (B)
 
+### 13. `matuteiglesias/IPC-Argentina` — IPC trimestral compuesto
+
+- **Repo**: `https://github.com/matuteiglesias/IPC-Argentina`
+- **Commit clonado**: `9a6a54bd3d591c33ae4363e9707125efcc66f620` (2026-08-31)
+- **Origen declarado en el README/`docs/PRICE_PRODUCT_FAMILIES.md`**: índice compuesto que
+  combina, según disponibilidad temporal, IPC histórico de INDEC (hasta 2007), IPC moderno
+  de INDEC (desde dic-2016, vía `datos.gob.ar`), e IPC provincial de CABA, Córdoba y San
+  Luis (Excel/XLSX de cada organismo, URLs embebidas en `computarInflacion.py`), enlazados
+  en escala logarítmica y normalizados a enero de 2016 = 100.
+- **Licencia**: no hay `LICENSE` en el repo; dato de origen público (INDEC/CABA/Córdoba/San
+  Luis).
+- **Fecha de clonado**: 2026-09-15
+- **Archivo usado**: `data/info/indice_precios_Q.csv` (agregación trimestral, 104 filas)
+- **sha256** (`data/info/indice_precios_Q.csv`):
+  `588b3a1e056ac6795543957a1edc555e4eaa6ee1cf6dfe1ba4c6c03a78b1d1a0`
+- **Transformación**: se excluyeron las **últimas 2 filas** (`2025-08-15`, `2025-11-15`):
+  `docs/PRICE_PRODUCT_FAMILIES.md` documenta explícitamente que los dos trimestres finales
+  incluyen meses **proyectados** (agosto-diciembre 2025 repiten la última tasa mensual
+  observada, no son observaciones — ver `DATA_STATUS.json`: `observed_through: 2025-07-01`,
+  `projected_from: 2025-08-01`). Las 102 filas restantes (`2000-02-15` a `2025-05-15`) son
+  "derived" (agregación de meses derivados, no proyectados) según la misma tabla de
+  clasificación de linaje del repo. → `inflation_cpi_quarterly.csv`
+  (`source_id=matuteiglesias_ipc_quarterly`). Es un **índice de nivel** (no variación %),
+  con período base propio (ene-2016=100) distinto del de `inflation_cpi_monthly.csv`, así
+  que no se combinan en el mismo archivo.
+- **source_id**: `matuteiglesias_ipc_quarterly`
+- **trust**: B (compuesto/enlazado, método documentado en el propio repo)
+
+### 14. `ahierro/ipc_csv_processor` — dólar blue diario histórico (extensión 2008-2010)
+
+- **Repo**: `https://github.com/ahierro/ipc_csv_processor`
+- **Commit clonado**: `80988517d2663d6a6854bcd4644d514b3b6dc084` (2026-08-22)
+- **Origen declarado en el README (§4)**: `dolarblue.csv` es un volcado guardado de una
+  página de cotización del dólar blue (fecha en castellano + importe, un registro por
+  bloque); `process_cotizacion_blue.js` lo normaliza a `cotizacion_blue.csv`
+  (`DD/MM/AAAA;cotizacion`, 6 decimales), documentando validaciones (nombre del día vs.
+  fecha, round-trip de los 2268 registros, comparación contra el oficial). Sin URL de origen
+  explícita para el volcado (no es una API), por eso se documenta como scrape de una página,
+  trust B (no A).
+- **Licencia**: no hay `LICENSE` en el repo; cotización pública.
+- **Fecha de clonado**: 2026-09-15
+- **Archivo usado**: `cotizacion_blue.csv` (2268 filas, 2008-01-02 → 2026-08-21)
+- **sha256** (`cotizacion_blue.csv`):
+  `79501c613ecf3f780605c2d116011c155dcbdd91d2362e60cf09d992cfa4f4d1`
+- **Validación de empalme contra `exchange_rate_parallel_monthly.csv`** (existente,
+  `diloretot_dolar_blue`, 2011-01+): se calculó el cierre de fin de mes de
+  `cotizacion_blue.csv` y se comparó contra los 188 meses en común (2011-01 → 2026-08).
+  **Diferencia absoluta media: 1.92 %**; máxima 12.5 % (2011-10: blue=4.50 vs
+  existente=4.00). Ver detalle en `consistency.md` → sección 4. Por estar bajo el umbral de
+  5 % del enunciado, se usó para **extender hacia atrás**: se tomaron los 36 meses
+  2008-01 → 2010-12 (no cubiertos por la fuente existente) y se antepusieron, sin tocar
+  `exchange_rate_parallel_monthly.csv`, en un archivo nuevo que además repite (sin
+  modificar) los valores 2011-01+ existentes para dar una serie continua.
+  → `exchange_rate_parallel_monthly_linked.csv` (2008-01 → 2026-09, 225 filas): filas
+  2008-01 a 2010-12 con `source_id=ahierro_dolar_blue`, filas 2011-01+ con
+  `source_id=diloretot_dolar_blue` (idénticas a las de `exchange_rate_parallel_monthly.csv`).
+- **source_id**: `ahierro_dolar_blue` (extensión) / `diloretot_dolar_blue` (parte 2011+,
+  reutilizado)
+- **trust**: B
+
+### 15. `ahierro/ipc_csv_processor` — tipo de cambio oficial diario (solo validación, sin extensión)
+
+- Mismo repo y commit que la fuente 14. Archivo `tipo_de_cambio.csv` (6032 filas,
+  2002-01-11 → 2026-08-21, cierre vendedor BCRA "Evolución de una moneda"). **No se generó
+  ningún CSV nuevo con esto**: la fuente arranca en 2002, más tarde que
+  `exchange_rate_official_monthly.csv` (que ya cubre desde 1992 vía DiLoretoT/BCRA), así que
+  no hay período nuevo que aportar hacia atrás. Se usó únicamente como **validación
+  cruzada**: fin de mes de `tipo_de_cambio.csv` vs. `exchange_rate_official_monthly.csv`
+  existente, 296 meses en común (2002-01 → 2026-08): diferencia absoluta media **0.0021 %**,
+  máxima 0.63 % (2026-08). Ver `consistency.md` → sección 5. Confirma que ambas fuentes
+  (BCRA vía DiLoretoT, y BCRA vía este repo) están midiendo lo mismo.
+- **trust**: — (no genera archivo; solo validación)
+
+### 16. `unbalancedparentheses/forex-centuries` — Clio Infra: inflación y tipo de cambio 1879-1960
+
+- **Repo**: `https://github.com/unbalancedparentheses/forex-centuries`
+- **Commit clonado**: `f79a85bf6ae0dbad8d79ea56902caef43c7bd947` (2026-02-26)
+- **Origen declarado**: mirror/compilación de 27 fuentes académicas/institucionales de datos
+  monetarios de larga duración (ver tabla de fuentes en su `README.md`); los archivos
+  usados acá vienen de **Clio Infra** (`https://clio-infra.eu/`, proyecto de historia
+  cuantitativa de la Universidad de Utrecht/IISH), formato ancho `year, <país>, <país>, ...`,
+  documentado en el propio README (`data/sources/clio_infra/`: "All Clio Infra files share
+  the same wide format: first column is `year`, remaining columns are country names. Values
+  are yearly averages."). Con columnas y unidades declaradas por archivo:
+  `clio_infra_inflation.csv` = "Annual % change"; `clio_infra_exchange_rates.csv` = "Local
+  currency per 1 USD".
+- **Licencia**: repo bajo MIT (`LICENSE`); el propio README aclara que "Most Clio Infra and
+  IISG datasets are CC0 (public domain)".
+- **Fecha de clonado**: 2026-09-15
+- **sha256**:
+  - `data/sources/clio_infra/clio_infra_inflation.csv`:
+    `e9752dfed4bf1c09d827506bf4da8a840c13d9b72d950865523f8c91a405c5f6`
+  - `data/sources/clio_infra/clio_infra_exchange_rates.csv`:
+    `48f7eca8ecd71cf96c1e9c0a33db1de79b6f1acfa4d6025d3131eec92c555636`
+- **Transformación — inflación**: columna `Argentina` de `clio_infra_inflation.csv` tiene un
+  tramo continuo sin huecos de **1915 a 2010** (se verificó fila a fila: sin años faltantes
+  en ese rango). Se tomó **1915-1960** (anterior al arranque de
+  `inflation_cpi_annual.csv`, que es 1961) y se antepuso, sin modificar el archivo
+  existente, a una copia literal de `inflation_cpi_annual.csv` (1961-2023,
+  `source_id=wb_inflation_cpi` preservado) para dar una serie continua 1915-2023 en un
+  archivo nuevo. → `inflation_cpi_annual_linked.csv` (109 filas): 1915-1960 con
+  `source_id=forexcenturies_clio_cpi`, 1961-2023 con `source_id=wb_inflation_cpi`. Esto
+  cubre el pedido explícito de "inflación histórica anual 1943-1960" y bastante más atrás.
+  No se pudo ir más atrás de 1915 de forma continua: antes hay huecos año a año (ver huecos
+  listados en `coverage.md`), y no se interpola/rellena un hueco sin dato.
+- **Transformación — tipo de cambio**: columna `Argentina` de `clio_infra_exchange_rates.csv`
+  tiene valores desde 1879. **Se usó solo 1879-1951**: a partir de 1952 la serie de este
+  mirror muestra artefactos claros — valores exactamente `0.0` entre 1952 y 1961, y valores
+  del orden de `1e-11` a `1e-9` entre 1962 y 1974 (matemáticamente imposibles como "pesos
+  por dólar" de esa época) — que reflejan, casi con certeza, un problema de escala no
+  resuelto por Clio Infra al cruzar las múltiples redenominaciones del peso argentino (peso
+  moneda nacional → peso ley 18.188 en 1970 [-2 ceros] → peso argentino en 1983 [-4 ceros]
+  → austral en 1985 [-3 ceros] → peso convertible en 1992 [-4 ceros]). No se intentó
+  "corregir" la escala (eso sería inventar un factor de conversión no documentado por la
+  fuente); se **excluyó** 1952 en adelante en vez de reinterpretarlo. → `exchange_rate_annual.csv`
+  (51 filas, 1879-1951, `source_id=forexcenturies_clio_fx`). Cubre el pedido de "tipo de
+  cambio histórico anual 1914+" y la brecha 1810-1991 que `coverage.md` marcaba como
+  faltante (parcialmente: 1879-1951 de 1810-1991).
+- **source_id**: `forexcenturies_clio_cpi` (inflación 1915-1960) /
+  `forexcenturies_clio_fx` (tipo de cambio 1879-1951)
+- **trust**: B (compilación académica de terceros, con metodología y fuente primaria
+  citadas por Clio Infra, pero sin el detalle fila-a-fila de cada dato primario)
+
+### 17. `ronnywang/worldbank` — deflactor del PIB (World Bank WDI, mirror histórico)
+
+- **Repo**: `https://github.com/ronnywang/worldbank`
+- **Commit clonado**: `dff56f37f6cc8b763d767fe9c55f9cdb9d40054d` (2013-12-21)
+- **Origen declarado**: mirror estático de "World Bank Open Data" (README: "World Bank Open
+  Data"), archivos WDI parseados en `WDI_bundle/parsed/`, un CSV por indicador con el mismo
+  layout ancho que usa el Banco Mundial (`Country Name, Country Code, Indicator Name,
+  Indicator Code, 1960, 1961, ...`). El archivo usado es
+  `WDI_bundle/parsed/NY.GDP.DEFL.KD.ZG_WDI.csv` — el **código de indicador coincide
+  exactamente** con el pedido (`NY.GDP.DEFL.KD.ZG`, deflactor del PIB, % anual), a diferencia
+  de `datasets/inflation/inflation-gdp.csv` (fuente 5, más arriba) que se probó primero y
+  **no tenía ninguna fila para Argentina**.
+- **Licencia**: no hay `LICENSE` en el repo; dato de origen es World Bank Open Data (de
+  acceso libre).
+- **Fecha de clonado**: 2026-09-15
+- **sha256** (`WDI_bundle/parsed/NY.GDP.DEFL.KD.ZG_WDI.csv`):
+  `56491bf9a372bd8b1769b8cd1c9e8d6ff497f414afafa0ab39d3e4a036b059b5`
+- **Transformación**: filtrado `Country Name == "Argentina"`, columnas de año 1961-2013;
+  valores no vacíos solo hasta 2006 (2007-2013 vienen vacíos para Argentina en este
+  snapshot de 2013) → `gdp_deflator_annual.csv`, 1961-2006, 46 filas. Nota: este snapshot es
+  de diciembre de 2013, así que no tiene revisiones posteriores del dato ni años recientes;
+  se documenta como tal en `coverage.md`.
+- **source_id**: `wb_gdp_deflator_mirror`
+- **trust**: A (snapshot de un indicador oficial del Banco Mundial con código exacto
+  declarado; la limitación es cobertura temporal del snapshot, no el origen del dato)
+
 ---
 
 ## Resumen de `trust` por serie tidy
@@ -295,6 +453,15 @@ Ninguno de los dos aporta filas a ningún CSV de este directorio.
 | `unemployment.csv` | `diloretot_tasa_desocupacion` | A | 2003–2026 |
 | `poverty.csv` | `diloretot_tasa_pobreza` | A | 2003–2026 |
 | `public_debt.csv` | `diloretot_deuda_total` | A | 1992–2025 |
+| `inflation_cpi_quarterly.csv` | `matuteiglesias_ipc_quarterly` | B | 2000 T1–2025 T2 |
+| `exchange_rate_parallel_monthly_linked.csv` | `ahierro_dolar_blue` / `diloretot_dolar_blue` | B | 2008–2026 |
+| `inflation_cpi_annual_linked.csv` | `forexcenturies_clio_cpi` / `wb_inflation_cpi` | B / A | 1915–2023 |
+| `exchange_rate_annual.csv` | `forexcenturies_clio_fx` | B | 1879–1951 |
+| `gdp_deflator_annual.csv` | `wb_gdp_deflator_mirror` | A | 1961–2006 |
 
-No se generaron (ver `coverage.md` → Faltantes): `inflation_deflator_annual.csv`,
-`exchange_rate_annual.csv` (1810–1991, previo a la cobertura BCRA).
+No se generaron (ver `coverage.md` → Faltantes): `inflation_deflator_annual.csv` (reemplazado
+por `gdp_deflator_annual.csv`, ver fuente 17), tipo de cambio 1810–1878 y 1952–1991 (ver
+fuente 16 — el hueco 1952–1991 es un artefacto de escala en la fuente disponible, no una
+fuente no buscada), `inflation_cpi_monthly_linked.csv` (no se encontró ningún mirror en
+GitHub de la serie Cavallo–Bertolotto 1943–2016 ni del IPC histórico INDEC 1943/1960/1974/1988
+citado por `datos.gob.ar`, bloqueado desde este entorno — ver `coverage.md`).
