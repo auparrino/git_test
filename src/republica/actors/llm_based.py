@@ -20,6 +20,7 @@ from republica.ai.tracing import DecisionTrace
 from republica.engine.actions import Action, ActionType
 from republica.engine.perception import Perception
 from republica.engine.permissions import load_permissions
+from republica.governance import ActorGovernance
 
 _ACTOR_DECISION_SCHEMA = ActorDecision.model_json_schema()
 
@@ -45,12 +46,21 @@ class LLMActor:
         temperature: float = 0.4,
         seed_base: int = 0,
         permissions: dict[str, set[ActionType]] | None = None,
+        governance: ActorGovernance | None = None,
     ) -> None:
         self.sheet = sheet
         self.backend = backend
         self.temperature = temperature
         self.seed_base = seed_base
         self._permissions = permissions if permissions is not None else load_permissions()
+        #: Hallazgo #6 de REVIEW_002: `governance.yaml` (ADR 007 secc. 6),
+        #: para que el prompt liste solo las acciones que este actor puede
+        #: REALMENTE intentar -- interseccion de la matriz de rol y
+        #: `write|execute` de su ficha de gobernanza (`ActorGovernance.
+        #: allows_type`), no solo la matriz de rol. `None` (default, ningun
+        #: llamador existente lo pasaba) = sin gobernanza, mismo
+        #: comportamiento que antes de este fix.
+        self._governance = governance
         #: Paridad de interfaz con `RuleBasedActor.last_score` (ADR 003
         #: secc. 11 punto 27): `engine/scheduler.py` lo lee con `getattr`,
         #: siempre `None` aca (un `LLMActor` no calcula un `ScoreBreakdown`).
@@ -61,14 +71,20 @@ class LLMActor:
         #: `actions_denied`/`consequences` todavia sin completar (eso solo
         #: se sabe despues de `authorize_all`/`apply_consequences`).
         self.last_trace: DecisionTrace | None = None
-        #: `ActorDecision.negotiation_reply`/`counter_concession` de la
-        #: ultima llamada (ADR 005 secc. 2/deliverable 4), leidos por
-        #: `engine/negotiation.py` si este actor pidio `NEGOTIATE` este mes:
-        #: `None` (default, o si `decide()` nunca corrio -- rol sin
-        #: propuesta, parseo fallido, etc.) hace que la negociacion caiga a
-        #: la formula de aceptacion por reglas, igual que un `RuleBasedActor`.
+        #: `ActorDecision.negotiation_reply` de la ultima llamada (ADR 005
+        #: secc. 2/deliverable 4), leido por `engine/negotiation.py` si este
+        #: actor pidio `NEGOTIATE` este mes: `None` (default, o si `decide()`
+        #: nunca corrio -- rol sin propuesta, parseo fallido, etc.) hace que
+        #: la negociacion caiga a la formula de aceptacion por reglas, igual
+        #: que un `RuleBasedActor`. `ActorDecision.counter_concession` (el
+        #: `decision` valida, si el LLM lo declaro) nunca se reenvia a
+        #: `engine/negotiation.py`: "alcance minimo" documentado en ADR 005
+        #: secc. 8 punto 13 (no hay una segunda llamada al LLM para las
+        #: rondas 2/3 de contraoferta; siempre caen a la formula por reglas,
+        #: igual que `RuleBasedActor`) -- por eso no hay un `self.
+        #: last_counter_concession` (hallazgo #7 de REVIEW_002: existia
+        #: antes como efecto de lado que nada leia, codigo muerto).
         self.last_negotiation_reply: str | None = None
-        self.last_counter_concession: str | None = None
 
     @property
     def brain_name(self) -> str:
@@ -84,7 +100,10 @@ class LLMActor:
         correria un paso de mas respecto de una corrida `rules` pura, y
         divergirian a partir del segundo mes (ver Notas de implementacion)."""
         actor = self.sheet
-        allowed_types = sorted(self._permissions.get(actor.role, set()), key=lambda t: t.value)
+        role_types = self._permissions.get(actor.role, set())
+        if self._governance is not None:
+            role_types = {t for t in role_types if self._governance.allows_type(t)}
+        allowed_types = sorted(role_types, key=lambda t: t.value)
         system = render_system(actor)
         user = render_user(perception, allowed_types)
         seed = _derive_call_seed(self.seed_base, perception.month)
@@ -122,9 +141,6 @@ class LLMActor:
             actions = to_actions(decision, actor)
 
         self.last_negotiation_reply = decision.negotiation_reply if decision else None
-        self.last_counter_concession = (
-            decision.counter_concession.value if decision and decision.counter_concession else None
-        )
 
         self.last_trace = DecisionTrace(
             run_id="",  # lo completa engine/scheduler.py (conoce el run_id de la corrida)

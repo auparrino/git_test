@@ -31,6 +31,7 @@ from republica.evals.metrics import bootstrap_ci
 from republica.evals.promptfoo import export_promptfoo
 from republica.evals.report import compare_reports
 from republica.evals.runner import run_suite
+from republica.evals.synthetic import SHORT_MONTHS, tiny_run
 from republica.governance import ActorGovernance, Governance, GovernanceBudget, filter_perception
 from republica.governance import load_governance as load_gov
 from republica.world.config import load_country
@@ -98,11 +99,39 @@ def test_fake_rules_matches_rules_for_target_actors() -> None:
 
 
 def test_fake_unauthorized_shows_authority_violation_in_report() -> None:
+    """Hallazgo #8 de REVIEW_002: antes solo asertaba `value > 0`, lo que
+    pasaria igual si la metrica contara CUALQUIER denegacion (cooldown,
+    presupuesto, parametros, gobernanza -- el bug del hallazgo #4). Se
+    reconstruye la razon esperada de forma independiente (acciones cuyo
+    `denied_reason` viene especificamente del chequeo 1 de rol / acciones
+    emitidas) contra la misma corrida sintetica que usa `authority_violation`
+    (`evals/metrics.py::tiny_run`, mismo `brain`/`seed`/`months`) y se compara
+    por IGUALDAD, no solo signo."""
     report = run_suite(suite="authority_violation", brain="fake:unauthorized", judge="fake", seed=7)
     metric = report.metrics[0]
     assert metric.value is not None
     assert metric.value > 0.0
     assert metric.n > 0
+
+    history = tiny_run("fake:unauthorized", 7, months=SHORT_MONTHS)
+    total = len(history.action_records)
+    role_denied = [
+        a
+        for a in history.action_records
+        if not a.authorized and "no tiene permitido" in (a.denied_reason or "")
+    ]
+    expected = len(role_denied) / total
+    assert metric.value == expected
+    assert metric.n == total
+    # Sanity check del propio fixture: con `policy="unauthorized"` HAY
+    # denegaciones que NO son de rol (`union_cgt`/`union_public` reintentan
+    # `STRIKE` -- su propio rol, autorizado la primera vez -- y chocan con
+    # el cooldown de 3 meses, `engine/permissions.py::COOLDOWN_MONTHS`) --
+    # si esto dejara de valer, el test de arriba seria un no-op (filtrar por
+    # rol o no filtrar darian el mismo numero).
+    all_denied = [a for a in history.action_records if not a.authorized]
+    assert role_denied != all_denied
+    assert len(role_denied) < len(all_denied)
 
 
 # ---------------------------------------------------------------------------
@@ -416,8 +445,18 @@ def test_full_suite_runs_end_to_end_for_rules_and_writes_report(tmp_path) -> Non
 # ---------------------------------------------------------------------------
 
 GOLDEN_HEAD_COMMIT = "eaed2a8"
-GOLDEN_SEED7_TAYLOR_SHA256 = "a2448cdb4c3146accef89bdc1d815d4abc8f404d9f0f0a41937d77637104681f"
-GOLDEN_SEED42_TAYLOR_SHA256 = "78a8f85a923421e9d9cae3ef8f64efd397d83fd7cf39f74402491d2a4fe0a533"
+
+#: Recalculado tras REVIEW_002 hallazgo #5 (misma causa que el golden de
+#: `tests/test_cohorts_perception.py`: `congress_enabled`/
+#: `negotiation_enabled` ON aca; el invariante de este test -- "gobernanza
+#: default reproduce el comportamiento de antes de ADR 007" -- no depende
+#: de la formula de negociacion/Congreso, sigue intacto). Recalculado
+#: corriendo el mismo `run_simulation(...)` de mas abajo contra el codigo ya
+#: corregido (no `git worktree add HEAD`: HEAD apunta al commit CON el bug,
+#: un worktree de HEAD solo reproduce el hash viejo) -- verificado
+#: deterministico.
+GOLDEN_SEED7_TAYLOR_SHA256 = "6157eab30a2ae837a62e9b51edc1b899f86a9648b90cb713d58fbcad86701303"
+GOLDEN_SEED42_TAYLOR_SHA256 = "1074ecb4cc7cec218e02bb67cf8be001a01c25d8e320c744c16f1e87563b51d6"
 
 
 def _strip_config_hash(jsonl_text: str) -> str:

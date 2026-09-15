@@ -321,8 +321,12 @@ def electoral_pressure(in_government: bool | None, perception: Perception) -> fl
 
 
 #: `w_mem` (ADR 006 secc. 1.3, literal): peso del termino de memoria sobre
-#: `score` (`memory_score * 100`, ya escalado -- ver
-#: `ai/memory.py::MemoryStore.score_term`, misma constante).
+#: `score` (`memory_score * 100`, ya escalado -- `memory_score` es
+#: `ai/memory.py::MemoryStore.memory_term(actor.id, month, "president")`
+#: SIN escalar, ver `engine/perception.py::build_perception`; escalar aca en
+#: vez de en `ai/memory.py` evita depender de ese modulo para un solo
+#: numero -- `MemoryStore.score_term`, que hacia exactamente este calculo,
+#: era codigo muerto (hallazgo #7 de REVIEW_002) y se elimino).
 W_MEM = 0.15
 
 
@@ -522,6 +526,18 @@ class RuleBasedActor:
         #: poblado por `note_concession_granted` (`engine/scheduler.py`,
         #: cuando este actor recibe un `GRANT_CONCESSION` autorizado).
         self._concession_cooldowns: dict[str, int] = {}
+
+    def refresh_parties(self, parties: list[Party]) -> None:
+        """Refresca `parties_by_id` (hallazgo #1 de REVIEW_002): construido
+        una sola vez en `__init__`, quedaba apuntando a las bancas/
+        `in_government` de ANTES de la ultima transicion de gobierno para
+        siempre, invirtiendo el signo de `electoral_pressure`/
+        `_impact_reelection`/la distancia editorial de medios (`_in_government`
+        mas abajo, `_decide_media`) durante todo el mandato siguiente.
+        Llamado por `engine/scheduler.py::refresh_decision_actor_parties` en
+        cada `_run_election` (`engine/simulation.py`), pase lo que pase con
+        el partido gobernante (las bancas cambian en toda eleccion)."""
+        self.parties_by_id = {p.id: p for p in parties}
 
     def note_concession_granted(self, concession: str, month: int) -> None:
         """Llamado por `engine/scheduler.py::run_actor_turn` cuando este

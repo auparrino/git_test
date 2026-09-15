@@ -17,6 +17,7 @@ from republica.actors.rule_based import make_actor_rng
 from republica.actors.sheet import load_actors
 from republica.ai.brains import build_decision_actor, parse_brain_spec
 from republica.engine.actions import ActionType
+from republica.engine.permissions import AUTHORITY_VIOLATION_MARKER
 from republica.evals import judge as judge_mod
 from republica.evals.cases import EvalCase, build_actor, build_perception, decide_case
 from republica.evals.judge import FakeJudge, Judge
@@ -168,6 +169,12 @@ def interest_consistency(cases: list[EvalCase], brain: str, seed: int) -> Metric
 # ---------------------------------------------------------------------------
 # 3. authority_violation (ADR secc. 2: "acciones denegadas por rol /
 #    acciones emitidas", del log de authorize -- mecanica).
+#
+# Hallazgo #4 de REVIEW_002: contaba TODA denegacion (cooldown, presupuesto,
+# parametros invalidos, gobernanza), no solo las del chequeo 1 de rol --
+# contradice ADR 007 secc. 2 ("acciones denegadas por rol") y la misma
+# metrica en `cli.py::bench_parse`/`experiments/runner.py::
+# extract_run_metrics`, que ya filtraban por `AUTHORITY_VIOLATION_MARKER`.
 # ---------------------------------------------------------------------------
 
 
@@ -177,7 +184,11 @@ def authority_violation(brain: str, seed: int) -> MetricResult:
         total = len(history.action_records)
         if total == 0:
             return None, 0, []
-        denied = [a for a in history.action_records if not a.authorized]
+        denied = [
+            a
+            for a in history.action_records
+            if not a.authorized and AUTHORITY_VIOLATION_MARKER in (a.denied_reason or "")
+        ]
         worst = [
             WorstCase(
                 case_id=f"{a.month:03d}:{a.actor}:{a.type}",
@@ -394,14 +405,19 @@ def diversity(cases: list[EvalCase], brain: str, seed: int) -> MetricResult:
 # ---------------------------------------------------------------------------
 
 
-def temporal_consistency(brain: str, judge: FakeJudge | Judge, seed: int) -> MetricResult:
+def temporal_consistency(brain: str, _judge: FakeJudge | Judge, seed: int) -> MetricResult:
     """% de reversiones de posicion (`support`<->`oppose` entre
     `ActionRecord` consecutivos del mismo actor, a lo sumo 3 meses de
     diferencia) cuyo `reason` menciona un evento ocurrido entre medio (ADR
     secc. 2, literal, con el fallback de match de strings del ADR --
     `FakeJudge.mentions_event`/`Judge` no aplica aca porque no hay prompt
     "RubricScore" natural para esto: se documenta como desviacion en Notas
-    de implementacion)."""
+    de implementacion).
+
+    `_judge` (hallazgo #7 de REVIEW_002): sin usar a proposito -- se
+    mantiene en la firma solo por uniformidad con las otras 3 metricas de
+    juez (`evals/runner.py::run_suite` llama a las 4 posicionalmente); el
+    prefijo `_` documenta que es intencional, no un olvido."""
     history = tiny_run(
         brain,
         seed,
@@ -449,10 +465,14 @@ def temporal_consistency(brain: str, judge: FakeJudge | Judge, seed: int) -> Met
     )
 
 
-def memory_recall(brain: str, judge: FakeJudge | Judge, seed: int) -> MetricResult:
+def memory_recall(brain: str, _judge: FakeJudge | Judge, seed: int) -> MetricResult:
     """% de memorias `importance >= 0.8` que aparecen (match de strings) en
     el `reason`/`raw_response` de una accion del MISMO actor dentro de los 3
-    turnos siguientes (ADR secc. 2, literal)."""
+    turnos siguientes (ADR secc. 2, literal).
+
+    `_judge` (hallazgo #7 de REVIEW_002): idem `temporal_consistency` --
+    sin usar a proposito, match de strings puro (`judge_mod.mentions_event`),
+    se mantiene por uniformidad con las 4 metricas de juez."""
     history = tiny_run(
         brain,
         seed,

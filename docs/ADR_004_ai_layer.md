@@ -89,7 +89,7 @@ Un `system` por rol y un `user` renderizado desde `Perception` con plantillas Ji
 - **System prompt por rol:** identidad (nombre, rol, provincia/partido), ideología en palabras
   (mapeo de los 4 ejes a frases), personalidad en palabras, y tres reglas: no inventar hechos que no
   estén en el mensaje, no prometer lo que el rol no puede ejecutar, dar una razón concreta.
-- Versionado: `PROMPT_VERSION = "v4.0"` en cada traza; cualquier cambio de plantilla lo incrementa.
+- Versionado: `PROMPT_VERSION = "v4.1"` en cada traza; cualquier cambio de plantilla lo incrementa (v4.1: REVIEW_002 hallazgo #7, texto de `_fmt_memories` sin memorias).
 
 ## 5. Visibilidad por rol (`engine/perception.py`, completa ADR 003 §3)
 

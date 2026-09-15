@@ -26,6 +26,7 @@ from typing import Any
 
 from republica import __version__
 from republica.engine import narrate as narrate_mod
+from republica.engine.permissions import AUTHORITY_VIOLATION_MARKER
 from republica.engine.simulation import run as run_simulation
 from republica.experiments.config import Arm, ExperimentConfig
 
@@ -51,11 +52,13 @@ METRIC_COLUMNS: tuple[str, ...] = (
     "election_turnover",
 )
 
-#: Mismo marcador que `cli.py::_AUTHORITY_VIOLATION_MARKER` (ADR 004 secc.
-#: 8): una denegacion cuya razon viene del chequeo 1 de `authorize()` ("el
-#: rol X no tiene permitido Y") es especificamente una violacion de
-#: autoridad, a diferencia de un cooldown/presupuesto/gobernanza.
-_AUTHORITY_VIOLATION_MARKER = "no tiene permitido"
+#: Alias local (hallazgo #4 de REVIEW_002: constante unica en
+#: `engine/permissions.py::AUTHORITY_VIOLATION_MARKER`, la misma que usan
+#: `cli.py::bench_parse` y `evals/metrics.py::authority_violation`): una
+#: denegacion cuya razon viene del chequeo 1 de `authorize()` ("el rol X no
+#: tiene permitido Y") es especificamente una violacion de autoridad, a
+#: diferencia de un cooldown/presupuesto/gobernanza.
+_AUTHORITY_VIOLATION_MARKER = AUTHORITY_VIOLATION_MARKER
 
 
 def _uses_llm(arm: Arm) -> bool:

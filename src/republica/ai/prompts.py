@@ -18,8 +18,11 @@ from republica.engine.actions import PARAM_SCHEMAS, ActionType
 from republica.engine.perception import Perception
 
 #: Version del prompt (ADR 004 secc. 4): se registra en cada `DecisionTrace`;
-#: cualquier cambio de plantilla la incrementa.
-PROMPT_VERSION = "v4.0"
+#: cualquier cambio de plantilla la incrementa. v4.1 (hallazgo #7 de
+#: REVIEW_002): corrige el texto de `_fmt_memories` sin memorias ("sin
+#: memorias todavia -- llega en una fase futura", desactualizado desde que
+#: Fase 6/ADR 006 agrego memoria de verdad).
+PROMPT_VERSION = "v4.1"
 
 ROLE_LABELS: dict[str, str] = {
     "president": "presidente/a",
@@ -227,7 +230,15 @@ def _fmt_relationships(perception: Perception) -> str:
 
 def _fmt_memories(perception: Perception) -> str:
     if not perception.memories:
-        return "(sin memorias todavia -- llega en una fase futura)"
+        # Hallazgo #7 de REVIEW_002: el texto original ("sin memorias
+        # todavia -- llega en una fase futura") describia Fase 4 (ADR 004),
+        # antes de que Fase 6 (ADR 006) agregara memoria de verdad. Con
+        # `features.memory = True` esta rama ahora significa "sin memorias
+        # RELEVANTES para este actor todavia" (`MemoryStore.retrieve` vacio
+        # -- actor nuevo, o ninguna memoria `about=president`/del `kind` de
+        # la situacion); con `features.memory = False` (o un `MemoryStore`
+        # sin memoria_enabled) simplemente no hay memoria en absoluto.
+        return "(sin memorias relevantes todavia)"
     return "\n".join(f"- {m}" for m in perception.memories)
 
 

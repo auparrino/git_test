@@ -282,6 +282,38 @@ def _private_social_bloc(
     return values
 
 
+#: Instrumento dominante de la `PolicyProposal` de este mes -> `kind` de
+#: `ai/memory.py::MemoryEvent` topicamente relacionado (hallazgo #7 de
+#: REVIEW_002: `retrieve(situation_kind=...)` nunca se pasaba, quedaba
+#: `None` siempre). Solo los instrumentos con un `kind` de memoria analogo
+#: tienen entrada: una propuesta de `fx_intervention` es del mismo tema que
+#: una memoria `forced_devaluation` (crisis cambiaria); una propuesta fiscal
+#: (`tax_rate`/`primary_spending`/`provincial_transfers`) es del mismo tema
+#: que una memoria `concession_received` (las concesiones negociadas de ADR
+#: 005 secc. 2 son todas fiscales -- `restore_transfers`->
+#: `provincial_transfers`, `tax_exemption`->`tax_rate`, ver `data/
+#: concessions.yaml`). `interest_rate_target` no tiene un `kind` analogo en
+#: `MEMORY_DEFAULTS` (`ai/memory.py`): queda sin mapear, mismo
+#: comportamiento que antes (`situation_kind=None`, sin boost de relevancia
+#: por `kind`).
+_INSTRUMENT_SITUATION_KIND: dict[str, str] = {
+    "fx_intervention": "forced_devaluation",
+    "tax_rate": "concession_received",
+    "primary_spending": "concession_received",
+    "provincial_transfers": "concession_received",
+}
+
+
+def _proposal_situation_kind(proposal: PolicyProposal | None) -> str | None:
+    """`situation_kind` (ADR 006 secc. 1.2: `relevance = 0.5` con memorias
+    del mismo `kind` que "la situacion") derivado del instrumento dominante
+    (mayor `|delta|`) de la `PolicyProposal` de este mes."""
+    if proposal is None or not proposal.delta:
+        return None
+    dominant = max(proposal.delta.items(), key=lambda kv: abs(kv[1]))[0]
+    return _INSTRUMENT_SITUATION_KIND.get(dominant)
+
+
 def build_perception(
     actor: ActorSheet,
     state: WorldState,
@@ -368,7 +400,12 @@ def build_perception(
         if "president" in relationships_view:
             relationships_view = dict(relationships_view)
             relationships_view["president"] = round(memory_store.trust_president(actor.id, month))
-        memories = memory_store.retrieve(actor.id, month, relevant_actors={"president"})
+        memories = memory_store.retrieve(
+            actor.id,
+            month,
+            relevant_actors={"president"},
+            situation_kind=_proposal_situation_kind(policy_proposal),
+        )
         memory_score = memory_store.memory_term(actor.id, month, "president")
 
     return Perception(

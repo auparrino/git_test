@@ -17,11 +17,22 @@ from republica.actors.rule_based import (
 )
 from republica.actors.sheet import load_actors
 from republica.ai.memory import MemoryEvent, MemoryStore, extract_promise
-from republica.engine.perception import Perception
+from republica.engine.perception import (
+    Perception,
+    PolicyProposal,
+    build_perception,
+    build_provinces_table,
+)
 from republica.engine.policy import TaylorPolicy
-from republica.engine.simulation import advance_month, new_simulation, run
-from republica.world.cohorts import init_cohort_state, load_cohorts
+from republica.engine.simulation import (
+    advance_month,
+    compute_months_to_election,
+    new_simulation,
+    run,
+)
+from republica.world.cohorts import Cohort, CohortState, init_cohort_state, load_cohorts
 from republica.world.config import Party, load_country
+from republica.world.economy import Aux
 from republica.world.elections import (
     LoyaltyTable,
     compute_regional_bonus,
@@ -253,6 +264,17 @@ def test_extract_promise_detects_commitment_verbs() -> None:
 
 
 def test_uniform_ideology_and_no_loyalty_gives_near_uniform_vote_share() -> None:
+    """Hallazgo #8 de REVIEW_002: el test original solo prueba una entrada
+    simetrica por construccion (5 partidos IDENTICOS) contra una salida
+    ~uniforme -- eso pasaria igual con un `v_ideo` roto que ignorara la
+    ideologia por completo (todas las entradas siguen siendo iguales entre
+    si). Se agrega un caso de contraste: una cohorte con `econ_pref` fijo y
+    dos partidos que SI difieren en `economic` (uno cerca, uno lejos), sin
+    `discipline`/loyalty/campana/bancas de por medio (`compute_vote_
+    intention` a bajo nivel, ninguno de los dos partidos gobierna: la unica
+    diferencia entre ambos es `v_ideo`). Si `v_ideo` respondiera a
+    `|c.econ_pref - p.economic|` como declara ADR 006 secc. 2.2, el partido
+    mas cercano debe llevarse una mayoria clara del share."""
     cohorts = load_cohorts()
     cohort_state = init_cohort_state(cohorts, COUNTRY.initial_state)
     parties = [
@@ -280,6 +302,47 @@ def test_uniform_ideology_and_no_loyalty_gives_near_uniform_vote_share() -> None
     )
     for pct in result.first_round.values():
         assert 17.0 <= pct <= 23.0  # 20% +- 3pp (ADR literal)
+
+    # Contraste (hallazgo #8): mismo mecanismo, entrada deliberadamente NO
+    # simetrica -- confirma que `v_ideo` esta realmente atado a la distancia
+    # ideologica, no que la funcion sea un no-op que da uniforme siempre.
+    contrast_cohort = Cohort(
+        id="c_left",
+        name="Cohorte izquierda",
+        pop_share=1.0,
+        income=1.0,
+        u_offset=0.0,
+        s_pi=0.0,
+        s_u=0.0,
+        s_w=0.0,
+        s_tr=0.0,
+        s_tax=0.0,
+        s_crime=0.0,
+        trust=50.0,
+        econ_pref=-1.0,
+        bloc_actor=None,
+    )
+    contrast_state = {
+        contrast_cohort.id: CohortState(
+            approval=50.0, sentiment=0.0, perceived_inflation=0.0, perceived_unemployment=0.0
+        )
+    }
+    party_close = Party(
+        id="left", name="Left", seats=10, economic=-1.0, social=0.0, in_government=False
+    )
+    party_far = Party(
+        id="right", name="Right", seats=10, economic=1.0, social=0.0, in_government=False
+    )
+    contrast_shares = compute_vote_intention(
+        [contrast_cohort],
+        contrast_state,
+        [party_close, party_far],
+        government_approval=50.0,
+        loyalty=LoyaltyTable(),
+        delta_real_wage_pct_12m=0.0,
+        delta_unemployment_12m=0.0,
+    )[contrast_cohort.id]
+    assert contrast_shares[party_close.id] > contrast_shares[party_far.id] + 0.5
 
 
 # ---------------------------------------------------------------------------
@@ -436,12 +499,165 @@ def test_transition_after_defeat_changes_president_keeps_memories_clears_agreeme
 
 
 # ---------------------------------------------------------------------------
+# 6.bis. Hallazgo #1 de REVIEW_002: `parties_by_id` de CADA `decision_actor`
+# refleja las bancas/`in_government` de la eleccion recien corrida -- antes
+# quedaba con las de ANTES de la transicion todo el mandato siguiente
+# (`_in_government()` invertia el signo de `electoral_pressure`/
+# `_impact_reelection`/la distancia editorial de medios).
+# ---------------------------------------------------------------------------
+
+
+def test_parties_by_id_refreshed_on_every_decision_actor_after_transition() -> None:
+    taylor = TaylorPolicy(
+        COUNTRY.default_policy,
+        COUNTRY.taylor,
+        COUNTRY.structure.r_neutral,
+        COUNTRY.policy_ranges["interest_rate_target"],
+    )
+    sim = new_simulation(
+        seed=7,
+        policy_rule=taylor,
+        forced_shocks=None,
+        country=COUNTRY,
+        shocks_enabled=True,
+        exogenous_noise=True,
+        actors_enabled=True,
+        rule_based_president=True,
+        congress_enabled=True,
+        negotiation_enabled=True,
+        cohorts_enabled=True,
+        media_enabled=True,
+        memory_enabled=True,
+        elections_enabled=True,
+    )
+    sim.country = sim.country.model_copy(update={"months": 48})
+    for _ in range(48):
+        advance_month(sim)
+
+    assert len(sim.election_records) == 1
+    result = sim.election_records[0]
+    assert result.winner != result.incumbent_party  # seed=7/taylor: cambia de gobierno
+
+    # Cada decision_actor por reglas quedo con la MISMA tabla de partidos
+    # que `sim.country.parties` (la de la eleccion recien corrida), no la de
+    # `build_actor_engine` al principio de la corrida.
+    expected_parties_by_id = {p.id: p for p in sim.country.parties}
+    assert expected_parties_by_id[result.winner].in_government is True
+    for actor_id, decision_actor in sim.actor_engine.decision_actors.items():
+        assert decision_actor.parties_by_id == expected_parties_by_id, actor_id
+
+    # Un gobernador del partido ganador: `electoral_pressure` (via
+    # `compute_score`, el mismo camino que corre `decide()`) ahora da
+    # positivo cerca de SU proxima eleccion con aprobacion > 50 -- antes del
+    # fix, `parties_by_id` seguia diciendo que este partido NO gobernaba
+    # (el oficialismo saliente), invirtiendo el signo.
+    winner_governor_id = next(
+        aid
+        for aid, sheet in sim.actor_engine.actors.items()
+        if sheet.role == "governor" and sheet.party == result.winner
+    )
+    winner_governor = sim.actor_engine.actors[winner_governor_id]
+    decision_actor = sim.actor_engine.decision_actors[winner_governor_id]
+    agg = ShockAggregate()
+    aux = Aux(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    table = build_provinces_table(sim.state, sim.last_effective_policy, sim.country.provinces, agg)
+    high_approval_state = sim.state.model_copy(update={"government_approval": 65.0})
+    perception = build_perception(
+        winner_governor,
+        high_approval_state,
+        aux,
+        PolicyProposal(delta={}, label="test"),
+        [],
+        [],
+        sim.month,
+        2,  # months_to_election: cerca de la proxima eleccion (proximity > 0)
+        table,
+        sim.country.parties,
+        policy=sim.last_effective_policy,
+    )
+    decision_actor.decide(perception, random.Random(0))
+    assert decision_actor.last_score is not None
+    assert decision_actor.last_score.elec > 0
+
+
+# ---------------------------------------------------------------------------
+# Hallazgo #3 de REVIEW_002: `months_to_election` real (`term_length`), no
+# el placeholder de Fase 3 (`country.months − month + 1`, que cuenta hasta
+# el FIN DE LA CORRIDA). En una corrida de 96 meses (`term_length=48`)
+# nadie sentia presion electoral antes del mes 48 con el placeholder.
+# ---------------------------------------------------------------------------
+
+
+def test_months_to_election_uses_term_length_not_total_run_length() -> None:
+    term_length = COUNTRY.term_length
+    assert term_length == 48
+    # Mes 50 (segundo mandato, arranca en el 49): faltan 46 para la proxima
+    # eleccion (mes 96), no 96 - 50 + 1 = 47 del placeholder ni algo que
+    # dependa de `total_months` en absoluto.
+    assert compute_months_to_election(50, 96, term_length, elections_enabled=True) == 46
+    # Mes de la eleccion misma: 0 meses para la proxima (arranca el conteo
+    # del mandato siguiente).
+    assert compute_months_to_election(48, 96, term_length, elections_enabled=True) == 0
+    assert compute_months_to_election(96, 96, term_length, elections_enabled=True) == 0
+    # `elections_enabled=False`: el placeholder de siempre, SIN tocar (golden
+    # hashes de corridas sin elecciones intactos).
+    assert compute_months_to_election(50, 96, term_length, elections_enabled=False) == 47
+
+
+def test_seed7_taylor_96_months_elec_score_nonzero_before_first_election() -> None:
+    taylor = TaylorPolicy(
+        COUNTRY.default_policy,
+        COUNTRY.taylor,
+        COUNTRY.structure.r_neutral,
+        COUNTRY.policy_ranges["interest_rate_target"],
+    )
+    sim = new_simulation(
+        seed=7,
+        policy_rule=taylor,
+        forced_shocks=None,
+        country=COUNTRY,
+        shocks_enabled=True,
+        exogenous_noise=True,
+        actors_enabled=True,
+        rule_based_president=True,
+        congress_enabled=True,
+        negotiation_enabled=True,
+        cohorts_enabled=True,
+        media_enabled=True,
+        memory_enabled=True,
+        elections_enabled=True,
+    )
+    sim.country = sim.country.model_copy(update={"months": 96})
+    for _ in range(46):
+        advance_month(sim)
+    assert sim.month == 46
+
+    # Con el placeholder viejo (`96 - 46 + 1 = 51`), `proximity` (`clamp(1 -
+    # months_to_election/12, 0, 1)`) saturaba a 0 y `elec` daba SIEMPRE 0
+    # para cualquier partido/gobernador, sin importar aprobacion/signo. Con
+    # el fix (`months_to_election = 2`, `is_election_month(48, 48)`),
+    # `elec != 0` para el partido de gobierno.
+    gov_party_id = next(p.id for p in sim.country.parties if p.in_government)
+    party_actor_id = f"party_{gov_party_id}"
+    scores = sim.actor_engine.decision_actors[party_actor_id].last_score
+    assert scores is not None
+    assert scores.elec != 0.0
+
+
+# ---------------------------------------------------------------------------
 # 7. `run --months 96` completa dos mandatos, 2 `election` records (ADR 006
 #    secc. 3 item 7)
 # ---------------------------------------------------------------------------
 
 
 def test_two_terms_in_96_months_produce_two_election_records() -> None:
+    """Hallazgo #8 de REVIEW_002: la version original solo contaba
+    registros (`len(...) == 2`, meses `[48, 96]`) sin mirar su CONTENIDO --
+    eso pasaria igual aunque las dos elecciones dieran resultados
+    incoherentes entre si (p.ej. el `incumbent_party` de la segunda sin
+    relacion con el `winner` de la primera, o bancas que no suman el total).
+    Se agregan invariantes de continuidad entre mandatos y de las bancas de
+    CADA eleccion."""
     taylor = TaylorPolicy(
         COUNTRY.default_policy,
         COUNTRY.taylor,
@@ -466,6 +682,23 @@ def test_two_terms_in_96_months_produce_two_election_records() -> None:
     assert history.outcome in ("reelected", "defeated", "collapse", "hyperinflation")
     jsonl = history.to_jsonl()
     assert jsonl.count('"kind": "election"') == 2
+
+    party_ids = {p.id for p in COUNTRY.parties}
+    total_seats = sum(p.seats for p in COUNTRY.parties)
+    first, second = history.election_records
+    # Continuidad entre mandatos: quien gana la primera eleccion es el
+    # oficialismo saliente que la segunda evalua (`in_government` se
+    # actualiza en la transicion, `_run_election` en `engine/simulation.py`).
+    assert second.incumbent_party == first.winner
+    for election in (first, second):
+        assert election.winner in party_ids
+        assert election.incumbent_party in party_ids
+        assert set(election.seats) == party_ids
+        assert sum(election.seats.values()) == total_seats
+        assert all(s >= 0 for s in election.seats.values())
+        reelected = election.winner == election.incumbent_party
+        expected_outcome_type = "reelected" if reelected else "defeated"
+        assert election.outcome_type == expected_outcome_type
 
 
 # ---------------------------------------------------------------------------
@@ -591,6 +824,58 @@ def test_economic_vote_moves_incumbent_share_at_least_6pp() -> None:
     assert good - bad >= 6.0, f"good={good:.2f} bad={bad:.2f} diff={good - bad:.2f}"
 
 
+def test_negative_cohort_memories_lower_incumbent_share() -> None:
+    """Hallazgo #2 de REVIEW_002: `v_evt * recent_events_c` (`world/
+    elections.py::compute_vote_intention`) se sumaba FUERA del `if
+    p.in_government`, un termino IDENTICO para todos los partidos de la
+    cohorte -- constante aditiva que el softmax cancela exactamente (no
+    mueve ningun `share`). Con memorias, sin memorias: shares byte a byte
+    iguales. Aplicado solo al oficialismo (como `v_econ`/`v_appr`), 5
+    memorias negativas recientes de una cohorte (`shock_hit`/
+    `forced_devaluation`, ADR 006 secc. 2.2) deben bajar el `share` del
+    oficialismo en esa cohorte."""
+    cohorts = load_cohorts()
+    cohort_state = init_cohort_state(cohorts, COUNTRY.initial_state)
+    loyalty = load_loyalty()
+    incumbent = next(p.id for p in COUNTRY.parties if p.in_government)
+    cohort_id = cohorts[0].id
+
+    store = MemoryStore()
+    for i in range(5):
+        store.add(
+            MemoryEvent(
+                turn=44 + i,
+                actor=cohort_id,
+                kind="shock_hit",
+                summary=f"shock {i}",
+                importance=0.7,
+                sentiment=-0.5,
+            )
+        )
+
+    common = dict(
+        cohorts=cohorts,
+        cohort_state=cohort_state,
+        parties=COUNTRY.parties,
+        government_approval=50.0,
+        loyalty=loyalty,
+        delta_real_wage_pct_12m=0.0,
+        delta_unemployment_12m=0.0,
+        now_turn=48,
+    )
+    share_without = compute_vote_intention(**common, memory_store=None)
+    share_with = compute_vote_intention(**common, memory_store=store)
+    # Sin memorias/con memorias positivas o fuera de ventana, `share` no
+    # deberia moverse en absoluto para NINGUNA cohorte SIN memorias (el
+    # termino sigue siendo 0 ahi, `recent_events_term` devuelve 0.0 sin
+    # eventos): confirma que el fix no introduce ruido en cohortes
+    # no afectadas.
+    other_cohort_ids = [c.id for c in cohorts if c.id != cohort_id]
+    for other_id in other_cohort_ids:
+        assert share_with[other_id] == share_without[other_id]
+    assert share_with[cohort_id][incumbent] < share_without[cohort_id][incumbent]
+
+
 def test_regional_bonus_favors_governing_party_in_its_province() -> None:
     """Meta 4 del encargo de calibracion: `regional_bonus_c,p` (ADR 006
     secc. 2.2, antes fijo en 0 -- nota de implementacion #10) ahora es real.
@@ -711,7 +996,22 @@ def test_seed7_taylor_month48_no_longer_near_uniform_and_incumbent_loses() -> No
 
 GOLDEN_HEAD_COMMIT = "21f9cf67c842b6e0437ad486857e1c96c1af9a93"
 GOLDEN_SEED7_SHA256 = "8db63af02a867ad3c519a8c32bd0fce1750c7f653b8ea05015503cd7e4d12a9c"
-GOLDEN_SEED42_TAYLOR_SHA256 = "617bf9b425bacee08638bed963aaebee0ed8404777b0dd8309a8569e97a87f7a"
+
+#: Recalculado tras REVIEW_002 hallazgo #5 (misma causa que los golden de
+#: `tests/test_cohorts_perception.py`/`tests/test_evals_governance.py`:
+#: `congress_enabled`/`negotiation_enabled` ON con `policy=taylor` produjo
+#: al menos una concesion sin ley honrada en el mismo mes de un `Bill`,
+#: cambiando ese voto; el invariante de este test -- "elecciones apagadas
+#: reproduce el comportamiento de antes de ADR 006" -- no depende de la
+#: formula de negociacion/Congreso, sigue intacto). El `seed=7`/
+#: `ConstantPolicy` de arriba (`GOLDEN_SEED7_SHA256`) no cambio: verificado
+#: recalculandolo igual, mismo hash -- esa corrida en particular no llega a
+#: tener una concesion honrada-en-el-mes-del-bill en 48 meses. Recalculado
+#: corriendo el mismo `run(...)` de mas abajo contra el codigo ya corregido
+#: (no `git worktree add HEAD`: HEAD apunta al commit CON el bug, un
+#: worktree de HEAD solo reproduce el hash viejo) -- verificado
+#: deterministico.
+GOLDEN_SEED42_TAYLOR_SHA256 = "1e25a3e9077d7b47e698f3f0cdb2a622dc926f10f276a1bcfba86e4090124675"
 
 
 def _strip_config_hash(jsonl_text: str) -> str:

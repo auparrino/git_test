@@ -43,7 +43,7 @@ from republica.engine.permissions import (
     to_record_dict,
 )
 from republica.governance import filter_perception
-from republica.world.config import Country
+from republica.world.config import Country, Party
 from republica.world.economy import Aux
 from republica.world.events import ShockAggregate
 
@@ -235,6 +235,34 @@ def build_actor_engine(
         run_id=make_run_id(seed, country.config_hash),
         congress_rng=make_actor_rng(seed, "congress"),
     )
+
+
+def refresh_decision_actor_parties(engine: ActorEngine, parties: list[Party]) -> None:
+    """Refresca `parties_by_id` de cada `decision_actor` (hallazgo #1 de
+    REVIEW_002): `build_actor_engine` arma cada `RuleBasedActor`/`LLMActor`
+    UNA sola vez, al principio de la corrida, con la `country.parties` de
+    ese momento. `run_actor_turn` ya arma un `parties_by_id` fresco cada mes
+    para `AuthContext`/`ConsequenceContext` (no tenia este problema), pero
+    el `parties_by_id` cacheado DENTRO de cada `RuleBasedActor` (usado por
+    `_in_government`, `compute_score`/`_decide_media`) y el que arma
+    `FakeBackend(policy="rules")` (via `load_country()`, un nivel mas abajo
+    de un `LLMActor`) no se enteraban de una transicion de gobierno: se
+    llama desde `engine/simulation.py::_run_election`, SIEMPRE que hay una
+    eleccion (las bancas cambian en toda eleccion, haya o no cambio de
+    partido gobernante)."""
+    for decision_actor in engine.decision_actors.values():
+        refresh = getattr(decision_actor, "refresh_parties", None)
+        if refresh is not None:
+            refresh(parties)
+            continue
+        # `LLMActor` no tiene `parties_by_id` propio, pero puede envolver un
+        # `FakeBackend(policy="rules")` (directo o cacheado por un
+        # `CachedBackend.inner`) que si arma `RuleBasedActor` internos.
+        backend = getattr(decision_actor, "backend", None)
+        backend = getattr(backend, "inner", backend)
+        backend_refresh = getattr(backend, "refresh_parties", None)
+        if backend_refresh is not None:
+            backend_refresh(parties)
 
 
 def run_actor_turn(

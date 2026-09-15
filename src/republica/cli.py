@@ -21,6 +21,7 @@ from republica.engine.advisor import advise
 from republica.engine.dilemmas import compute_aux_vars, render_text
 from republica.engine.game import MONTHLY_CAPS, Game
 from republica.engine.narrate import EVENT_LABELS, annualized_inflation
+from republica.engine.permissions import AUTHORITY_VIOLATION_MARKER
 from republica.engine.policy import ConstantPolicy, PassivePolicy, PolicyRule, TaylorPolicy
 from republica.engine.simulation import History
 from republica.engine.simulation import run as run_simulation
@@ -852,13 +853,15 @@ def play(
     _render_final(console, game)
 
 
-#: Denegaciones cuya `reason` viene del chequeo 1 de `authorize()`
-#: (`engine/permissions.py::authorize`, "el rol X no tiene permitido Y"):
-#: eso es especificamente un `authority_violation` (ADR 004 secc. 8,
-#: metrica de Fase 7), a diferencia de un `invalid_params`/cooldown/
-#: presupuesto (que tambien deniegan pero no son "el modelo pidio algo
-#: fuera de su rol").
-_AUTHORITY_VIOLATION_MARKER = "no tiene permitido"
+#: Alias local (hallazgo #4 de REVIEW_002: constante unica en
+#: `engine/permissions.py::AUTHORITY_VIOLATION_MARKER`, reusada tambien por
+#: `evals/metrics.py::authority_violation` y `experiments/runner.py::
+#: extract_run_metrics`). Denegaciones cuya `reason` viene del chequeo 1 de
+#: `authorize()` ("el rol X no tiene permitido Y"): eso es especificamente
+#: un `authority_violation` (ADR 004 secc. 8, metrica de Fase 7), a
+#: diferencia de un `invalid_params`/cooldown/presupuesto/gobernanza (que
+#: tambien deniegan pero no son "el modelo pidio algo fuera de su rol").
+_AUTHORITY_VIOLATION_MARKER = AUTHORITY_VIOLATION_MARKER
 
 
 @app.command("bench-parse")

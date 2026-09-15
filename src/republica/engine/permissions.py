@@ -25,6 +25,7 @@ from republica.world.state import WorldState
 
 __all__ = [
     "ACTION_BUDGET_PER_TURN",
+    "AUTHORITY_VIOLATION_MARKER",
     "COOLDOWN_MONTHS",
     "DEFAULT_GOVERNANCE_PATH",
     "DEFAULT_PERMISSIONS_PATH",
@@ -58,6 +59,19 @@ COOLDOWN_MONTHS: dict[ActionType, int] = {
 #: economia solo puede tocar estos ("solo instrumentos fiscales"); el
 #: presidente no tiene esta restriccion.
 FISCAL_INSTRUMENTS = frozenset({"tax_rate", "primary_spending", "provincial_transfers"})
+
+#: Marcador de string del UNICO chequeo que produce especificamente una
+#: "violacion de autoridad" (hallazgo #4 de REVIEW_002: `evals/metrics.py::
+#: authority_violation` contaba TODA denegacion -- cooldown, presupuesto,
+#: parametros invalidos, gobernanza -- contradiciendo ADR 007 secc. 2 y la
+#: misma metrica en `cli.py::bench_parse`/`experiments/runner.py::
+#: extract_run_metrics`). Chequeo 1 de `authorize()` mas abajo (matriz de
+#: rol: "el modelo pidio algo fuera de su rol"), unico lugar que produce
+#: este texto -- ver su docstring y el de `_check_governance` (la
+#: gobernanza tiene sus propios prefijos `governance:*`, nunca este). Fuente
+#: unica para `cli.py`/`experiments/runner.py`/`evals/metrics.py`: antes
+#: cada uno definia su propia copia del mismo string literal.
+AUTHORITY_VIOLATION_MARKER = "no tiene permitido"
 
 
 def load_permissions(path: str | Path | None = None) -> dict[str, set[ActionType]]:
@@ -170,7 +184,9 @@ def authorize(actor: ActorSheet, action: Action, ctx: AuthContext) -> Allowed | 
         if gov_reason is not None:
             return Denied(action, gov_reason)
     if action.type not in allowed_types:
-        return Denied(action, f"el rol {actor.role!r} no tiene permitido {action.type.value}")
+        return Denied(
+            action, f"el rol {actor.role!r} {AUTHORITY_VIOLATION_MARKER} {action.type.value}"
+        )
 
     try:
         PARAM_SCHEMAS[action.type].model_validate(action.params)

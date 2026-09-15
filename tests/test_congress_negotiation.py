@@ -13,7 +13,7 @@ import pytest
 
 from republica.actors.sheet import load_actors
 from republica.engine.actions import Action, ActionType
-from republica.engine.congress import Bill, requires_law, vote
+from republica.engine.congress import CONCESSION_BONUS, Bill, requires_law, vote
 from republica.engine.consequences import Relationships
 from republica.engine.negotiation import (
     Agreement,
@@ -58,17 +58,61 @@ def test_discipline_one_votes_as_a_bloc() -> None:
     (`yes_prob >= 0.5` -> todas si; si no, ninguna) -- nunca una cantidad
     fraccionaria intermedia (ADR 005 secc. 1.2: `discipline * [yes_prob >=
     0.5] + (1 - discipline) * yes_prob`, que con `discipline = 1` colapsa al
-    primer termino)."""
-    party = next(p for p in COUNTRY.parties if p.id == "frente_federal").model_copy(
+    primer termino).
+
+    Hallazgo #8 de REVIEW_002: la version original solo asertaba `yes_seats
+    in (0, seats)`, invariante que la aritmetica de la formula garantiza
+    SIEMPRE para `discipline = 1.0` (`seats * bloc` con `bloc` binario) sin
+    importar si el resto esta bien implementado -- el test no podia fallar.
+    Se compara contra `discipline = 0.0` (voto proporcional) con el MISMO
+    `rng`: `score`/`pressure`/`yes_prob` no dependen de `discipline`, asi que
+    ambas corridas ven el mismo `yes_prob` -- si la formula ignorara
+    `discipline` por completo, ambas darian el mismo `yes_seats` entero; con
+    el fix, difieren (38 vs 23 bancas para este partido/bill/seed)."""
+    party_bloc = next(p for p in COUNTRY.parties if p.id == "frente_federal").model_copy(
         update={"discipline": 1.0}
     )
+    party_proportional = party_bloc.model_copy(update={"discipline": 0.0})
     relationships = Relationships.from_actors(ACTORS)
     bill = Bill(id="b_bloc", month=1, policy_delta={"tax_rate": 1.0})
-    rec = vote(
-        bill, [party], ACTORS, [], COUNTRY.initial_state, relationships, [], 24, random.Random(3)
+
+    rec_bloc = vote(
+        bill,
+        [party_bloc],
+        ACTORS,
+        [],
+        COUNTRY.initial_state,
+        relationships,
+        [],
+        24,
+        random.Random(3),
     )
-    pv = rec.parties[0]
-    assert pv.yes_seats in (0, party.seats)
+    rec_proportional = vote(
+        bill,
+        [party_proportional],
+        ACTORS,
+        [],
+        COUNTRY.initial_state,
+        relationships,
+        [],
+        24,
+        random.Random(3),
+    )
+    pv_bloc = rec_bloc.parties[0]
+    pv_proportional = rec_proportional.parties[0]
+
+    assert pv_bloc.yes_prob == pytest.approx(pv_proportional.yes_prob)
+    # Caso borde del fixture, no de la formula: si `yes_prob` cayera
+    # exactamente en {0, 1} el test de abajo seria trivial (bloc y
+    # proporcional darian el mismo entero de casualidad).
+    assert 0.0 < pv_bloc.yes_prob < 1.0
+
+    expected_bloc_seats = party_bloc.seats if pv_bloc.yes_prob >= 0.5 else 0
+    assert pv_bloc.yes_seats == expected_bloc_seats
+    assert pv_proportional.yes_seats == round(party_proportional.seats * pv_proportional.yes_prob)
+    # El punto del hallazgo: para el MISMO `yes_prob`, bloc y proporcional
+    # dan resultados distintos -- si `discipline` se ignorara, coincidirian.
+    assert pv_bloc.yes_seats != pv_proportional.yes_seats
 
 
 def test_bill_fails_then_passes_with_agreement_and_lobby() -> None:
@@ -233,6 +277,82 @@ def test_non_law_agreement_executes_immediately_and_is_honored() -> None:
     assert engine.relationships.get(actor.id, "president") == pytest.approx(
         min(100.0, rel_before + 8.0)
     )
+
+
+def test_honored_agreement_this_month_still_earns_concession_bonus() -> None:
+    """Hallazgo #5 de REVIEW_002: una concesion sin ley (como `cabinet_seat`,
+    ver el test anterior) se ejecuta de inmediato y pasa a `honored` en el
+    MISMO mes en que se otorga -- antes, `_concession_bonus_for_party`
+    (`engine/congress.py`) solo miraba `status == "vigente"`, asi que esa
+    concesion nunca llegaba a comprar el voto por el que se negocio (22 de
+    56 acuerdos en una corrida de 96 meses, ver docs/REVIEW_002_fases_4-7.md
+    hallazgo #5). Un `honored` otorgado ESTE mes suma el mismo
+    `concession_bonus_p = +25` que un `vigente`; uno de un mes anterior ya
+    "cobro" su voto (o nunca lo iba a cobrar) y no debe seguir sumando."""
+    relationships = Relationships.from_actors(ACTORS)
+    bill = Bill(id="b_seat", month=5, policy_delta={"provincial_transfers": -2.0})
+    party = next(p for p in COUNTRY.parties if p.id == "alianza_provincial")
+
+    def pressure_for(agreements: list[Agreement]) -> float:
+        rec = vote(
+            bill,
+            [party],
+            ACTORS,
+            [],
+            COUNTRY.initial_state,
+            relationships,
+            agreements,
+            30,
+            random.Random(1),
+        )
+        return rec.parties[0].pressure
+
+    no_agreement = pressure_for([])
+    vigente = pressure_for(
+        [
+            Agreement(
+                actor_id="party_alianza_provincial",
+                concession="cabinet_seat",
+                in_exchange="vote_yes",
+                scale=1.0,
+                granted_month=4,
+                law_required=True,
+                status="vigente",
+            )
+        ]
+    )
+    honored_this_month = pressure_for(
+        [
+            Agreement(
+                actor_id="party_alianza_provincial",
+                concession="cabinet_seat",
+                in_exchange="vote_yes",
+                scale=1.0,
+                granted_month=bill.month,
+                law_required=False,
+                status="honored",
+                executed=True,
+            )
+        ]
+    )
+    honored_last_month = pressure_for(
+        [
+            Agreement(
+                actor_id="party_alianza_provincial",
+                concession="cabinet_seat",
+                in_exchange="vote_yes",
+                scale=1.0,
+                granted_month=bill.month - 1,
+                law_required=False,
+                status="honored",
+                executed=True,
+            )
+        ]
+    )
+
+    assert vigente == pytest.approx(no_agreement + CONCESSION_BONUS)
+    assert honored_this_month == pytest.approx(no_agreement + CONCESSION_BONUS)
+    assert honored_last_month == pytest.approx(no_agreement)
 
 
 def test_law_required_agreement_breaks_by_government_after_grace_period() -> None:

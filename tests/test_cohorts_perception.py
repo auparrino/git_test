@@ -11,10 +11,14 @@ from unittest import mock
 
 import pytest
 
+import republica.engine.simulation as simulation_mod
+from republica.actors.llm_based import LLMActor
+from republica.actors.sheet import load_actors
+from republica.ai.backends import FakeBackend
 from republica.engine.emergence import detect
 from republica.engine.narrate import load_jsonl
 from republica.engine.policy import TaylorPolicy
-from republica.engine.simulation import History, run
+from republica.engine.simulation import History, advance_month, new_simulation, run
 from republica.world.cohorts import Cohort, load_cohorts
 from republica.world.config import load_country
 from republica.world.perception import (
@@ -27,6 +31,7 @@ from republica.world.perception import (
 )
 
 COUNTRY = load_country()
+ACTORS = load_actors()
 
 
 # ---------------------------------------------------------------------------
@@ -296,6 +301,91 @@ def test_audience_drift_stays_within_bounds() -> None:
         assert 0.05 <= influence <= 0.6
 
 
+def test_publish_story_twice_same_month_accumulates_both_frames(monkeypatch) -> None:
+    """Hallazgo #6 de REVIEW_002 (parte 2): `engine/simulation.py` armaba
+    `frame_by_outlet = {ma.outlet_id: ma.frame for ma in media_actions}` --
+    un medio que publica DOS `PUBLISH_STORY` el mismo mes (frames
+    distintos) solo drifteaba audiencia con el ULTIMO frame, el primero se
+    perdia sin efecto. Se espia `drift_audience` (via `simulation_mod`, el
+    modulo que lo importa) durante una corrida real de 1 mes donde
+    `media_nacional` esta guionado (`fake:scripted`) para publicar
+    `crisis` y despues `recovery` en el mismo mes: con el fix, `drift_
+    audience` se llama UNA VEZ POR HISTORIA (2 veces), encadenadas (el
+    `influence_public` de la segunda llamada es el resultado de la
+    primera) -- antes se llamaba una sola vez, solo con `recovery`."""
+    calls: list[tuple[str, float, float]] = []
+    real_drift_audience = simulation_mod.drift_audience
+
+    def spy_drift_audience(frame, influence_public, cohorts, cohort_state):
+        result = real_drift_audience(frame, influence_public, cohorts, cohort_state)
+        calls.append((frame, influence_public, result))
+        return result
+
+    monkeypatch.setattr(simulation_mod, "drift_audience", spy_drift_audience)
+
+    taylor = TaylorPolicy(
+        COUNTRY.default_policy,
+        COUNTRY.taylor,
+        COUNTRY.structure.r_neutral,
+        COUNTRY.policy_ranges["interest_rate_target"],
+    )
+    sim = new_simulation(
+        seed=7,
+        policy_rule=taylor,
+        forced_shocks=None,
+        country=COUNTRY,
+        shocks_enabled=True,
+        exogenous_noise=True,
+        actors_enabled=True,
+        rule_based_president=True,
+        cohorts_enabled=True,
+        media_enabled=True,
+    )
+    outlet_id = "media_nacional"
+    scripted = {
+        (outlet_id, 1): {
+            "position": "neutral",
+            "intensity": 0.5,
+            "public_message": "",
+            "private_strategy": "wait",
+            "actions": [
+                {
+                    "type": "PUBLISH_STORY",
+                    "params": {"frame": "crisis", "target_bloc": "all"},
+                    "target": None,
+                },
+                {
+                    "type": "PUBLISH_STORY",
+                    "params": {"frame": "recovery", "target_bloc": "all"},
+                    "target": None,
+                },
+            ],
+            "confidence": 0.7,
+            "reasoning": "test",
+        }
+    }
+    sim.actor_engine.decision_actors[outlet_id] = LLMActor(
+        sim.actor_engine.actors[outlet_id],
+        FakeBackend(policy="scripted", scripted=scripted),
+        seed_base=0,
+    )
+
+    advance_month(sim)
+
+    # Buscar el par encadenado "crisis" -> "recovery" (la segunda llamada
+    # arranca del resultado de la primera): con el fix DEBE existir; con el
+    # bug viejo `drift_audience` se llamaba una sola vez por outlet (solo
+    # "recovery", desde la influencia ORIGINAL, sin una llamada "crisis"
+    # previa que encadenar).
+    chained_pair_found = any(
+        calls[i][0] == "crisis"
+        and calls[i + 1][0] == "recovery"
+        and calls[i + 1][1] == pytest.approx(calls[i][2])
+        for i in range(len(calls) - 1)
+    )
+    assert chained_pair_found, calls
+
+
 # ---------------------------------------------------------------------------
 # 6. Corrida completa: 48 meses x 29 actores con todos los features
 # (ADR 005 secc. 7 item 5)
@@ -398,8 +488,22 @@ def test_emergence_over_20_seeds_runs(tmp_path) -> None:
 #: country.json` para agregar `features.cohorts`/`media` cambia
 #: `config_hash` inevitablemente, no el resto del JSONL).
 HEAD_COMMIT_BEFORE_THIS_COMMIT = "1bdc33f9e4be62a07577bbb264a260d85f524b15"
+
+#: Recalculado tras REVIEW_002 hallazgo #5 (`congress_enabled`/
+#: `negotiation_enabled` estan ON en esta config: `cohorts`/`media` son los
+#: unicos "apagados" que da nombre al test -- el invariante que guarda
+#: (byte a byte estable salvo por cambios deliberados en Congreso/
+#: negociacion) sigue intacto). Antes, una concesion sin ley se ejecutaba y
+#: pasaba a `honored` en el mismo mes en que se otorgaba, asi que nunca
+#: compraba el voto por el que se negocio (`engine/congress.py::
+#: _concession_bonus_for_party` solo miraba `status == "vigente"`); el fix
+#: mueve votos de Congreso en esta corrida de 48 meses. Recalculado
+#: corriendo el mismo `run(...)` de mas abajo contra el codigo ya corregido
+#: (no `git worktree add HEAD`: HEAD todavia apunta al commit CON el bug de
+#: REVIEW_002, asi que un worktree de HEAD solo hubiera reproducido el
+#: mismo hash viejo) -- verificado deterministico (dos corridas identicas).
 GOLDEN_SEED7_TAYLOR_COHORTS_MEDIA_OFF_SHA256 = (
-    "738f4675cf83e7d21e960026cb76ddfd5a6be113425b5ed7cce69ca2c43f70ea"
+    "9d247690f81bf6e0553a582e8f4b97786f69806ee86ca5514702f6fd26d08282"
 )
 
 

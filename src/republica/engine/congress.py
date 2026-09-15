@@ -131,12 +131,26 @@ def _pressure(
 
 
 def _concession_bonus_for_party(
-    party: Party, actors: dict[str, ActorSheet], agreements: list[Any]
+    party: Party, actors: dict[str, ActorSheet], agreements: list[Any], month: int
 ) -> float:
     """+25 si hay un acuerdo vigente con un actor de este partido (ADR 005
-    secc. 1.2: "gobernador" o el actor-partido mismo)."""
+    secc. 1.2: "gobernador" o el actor-partido mismo).
+
+    Hallazgo #5 de REVIEW_002: una concesion que NO requiere ley se ejecuta
+    de inmediato y pasa a `honored` en el mismo mes en que se otorgo
+    (`engine/negotiation.py::run_month_negotiations`) -- antes, como esta
+    funcion solo miraba `status == "vigente"`, esa concesion nunca llegaba a
+    comprar el voto por el que se negocio (22 de 56 acuerdos en una corrida
+    de 96 meses). Un acuerdo `honored` cuenta igual que uno `vigente` SOLO
+    si se otorgo este mismo `month` (el mes del `Bill`/`derive_congress_
+    support` que se esta votando): un `honored` de un mes anterior ya
+    "cobro" su voto (o nunca lo iba a cobrar, si nunca hubo Congreso ese
+    mes) y no debe seguir sumando presion para siempre."""
     for agreement in agreements:
-        if getattr(agreement, "status", None) != "vigente":
+        status = getattr(agreement, "status", None)
+        granted_month = getattr(agreement, "granted_month", None)
+        honored_this_month = status == "honored" and granted_month == month
+        if status != "vigente" and not honored_this_month:
             continue
         actor = actors.get(agreement.actor_id)
         if actor is None:
@@ -248,8 +262,9 @@ def vote(
 
     `actions_this_month`: `ActionRecord`-like (atributos `actor`, `type`,
     `params`) autorizados del mes, para extraer los `LOBBY_CONGRESS`.
-    `agreements`: acuerdos vigentes (`engine/negotiation.py::Agreement`),
-    para `concession_bonus_p`."""
+    `agreements`: acuerdos vigentes o recien `honored` este mismo mes
+    (`engine/negotiation.py::Agreement`, hallazgo #5 de REVIEW_002), para
+    `concession_bonus_p`."""
     weights = weights if weights is not None else load_weights()
     signatures = signatures if signatures is not None else load_signatures()
     interests_cfg = interests_cfg if interests_cfg is not None else load_interests_config()
@@ -259,7 +274,7 @@ def vote(
     yes_total = 0
     for party in parties:
         party_actor = _party_actor(party, actors)
-        bonus = _concession_bonus_for_party(party, actors, agreements)
+        bonus = _concession_bonus_for_party(party, actors, agreements, bill.month)
         pressure = _pressure(party, actors, lobby_actions, state, relationships, bonus)
         if party_actor is None:
             score = 0.0
@@ -314,6 +329,7 @@ def derive_congress_support(
     state: WorldState,
     relationships: Relationships,
     agreements: list[Any],
+    month: int,
     months_to_election: int,
     rng: random.Random,
     *,
@@ -323,14 +339,18 @@ def derive_congress_support(
 ) -> float:
     """`congress_support' = Sigma seats_p * yes_prob_p(bill generico de gasto
     +1)` (ADR 005 secc. 1.3): reemplaza la formula de v0.1 cuando
-    `features.congress` esta activo (ver `engine/simulation.py`)."""
+    `features.congress` esta activo (ver `engine/simulation.py`).
+
+    `month` (hallazgo #5 de REVIEW_002): mes de ESTE `congress_support`
+    generico, para que `_concession_bonus_for_party` acepte tambien un
+    acuerdo `honored` otorgado este mismo mes (ver su docstring)."""
     weights = weights if weights is not None else load_weights()
     signatures = signatures if signatures is not None else load_signatures()
     interests_cfg = interests_cfg if interests_cfg is not None else load_interests_config()
     total = 0.0
     for party in parties:
         party_actor = _party_actor(party, actors)
-        bonus = _concession_bonus_for_party(party, actors, agreements)
+        bonus = _concession_bonus_for_party(party, actors, agreements, month)
         pressure = _pressure(party, actors, [], state, relationships, bonus)
         if party_actor is None:
             score = 0.0

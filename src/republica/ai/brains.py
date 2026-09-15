@@ -149,4 +149,10 @@ def build_decision_actor(
         backend,
         temperature=temperature,
         seed_base=actor_seed(seed, sheet.id),
+        # Hallazgo #6 de REVIEW_002: mismo criterio que `RuleBasedActor`
+        # arriba -- el actor necesita SU PROPIA ficha de gobernanza (`gov.
+        # for_actor(sheet.id)`), no el objeto `Governance` completo, para
+        # intersecar `write|execute` con la matriz de rol al armar el
+        # prompt (`LLMActor.decide`).
+        governance=governance.for_actor(sheet.id) if governance is not None else None,
     )

@@ -51,9 +51,6 @@ CONSOLIDATION_IMPORTANCE_MAX = 0.5
 #: Ninguna memoria con `importance >= 0.8` se resume nunca (secc. 1.4, literal).
 NEVER_SUMMARIZE_IMPORTANCE = 0.8
 
-#: `w_mem` (secc. 1.3, literal).
-W_MEM = 0.15
-
 
 class MemoryEvent(BaseModel):
     """`MemoryEvent` (ADR 006 secc. 1.1, literal). `actor` es el DUEÑO de la
@@ -200,12 +197,6 @@ class MemoryStore:
                 continue
             total += e.sentiment * e.importance * recency(now_turn, e.turn)
         return total
-
-    def score_term(self, owner: str, now_turn: int, about: str = "president") -> float:
-        """El termino que se SUMA al `score` de ADR 003 secc. 6
-        (`w_mem * Σ... * 100`, secc. 1.3: "rango [-100,100] tras escalar por
-        100")."""
-        return W_MEM * self.memory_term(owner, now_turn, about) * 100.0
 
     def trust_president(
         self, owner: str, now_turn: int, base: float = 50.0, scale: float = 30.0

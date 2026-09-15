@@ -283,13 +283,21 @@ def compute_vote_intention(
             if p.in_government:
                 u += WEIGHTS["v_econ"] * econ
                 u += WEIGHTS["v_appr"] * (government_approval - 50.0) / 50.0
+                # Hallazgo #2 de REVIEW_002: `v_evt · recent_events_c` es un
+                # castigo al oficialismo (memorias de cohorte de
+                # `shock_hit`/`forced_devaluation`, ADR 006 secc. 2.2), igual
+                # que `v_econ`/`v_appr` arriba. Sumado FUERA del `if
+                # p.in_government` era el mismo valor de `evt` para todos los
+                # partidos de la cohorte -> constante aditiva que el softmax
+                # cancela (no cambia ningun `share`): las memorias negativas
+                # no afectaban el voto en absoluto.
+                u += WEIGHTS["v_evt"] * evt
             u += WEIGHTS["v_ideo"] * (1.0 - abs(c.econ_pref - p.economic))
             loy = loyalty.get_loyalty(c.id, p.id) + loyalty_adjustments.get((c.id, p.id), 0.0)
             u += WEIGHTS["v_loy"] * loy
             u += WEIGHTS["v_reg"] * regional_bonus.get((c.id, p.id), 0.0)
             camp = campaign_state.get(p.id, {})
             u += WEIGHTS["v_camp"] * (camp.get(c.id, 0.0) + camp.get("all", 0.0))
-            u += WEIGHTS["v_evt"] * evt
             util[p.id] = u
         m = max(util.values())
         exps = {pid: math.exp((v - m) / TAU_SHARE) for pid, v in util.items()}

@@ -15,6 +15,7 @@ import pydantic
 import pytest
 from typer.testing import CliRunner
 
+import republica.actors.llm_based as llm_based_mod
 from republica.actors.llm_based import LLMActor
 from republica.actors.rule_based import make_actor_rng
 from republica.actors.sheet import load_actors
@@ -26,6 +27,7 @@ from republica.engine.actions import ActionType
 from republica.engine.perception import PolicyProposal, build_perception, build_provinces_table
 from republica.engine.permissions import load_permissions
 from republica.engine.simulation import run
+from republica.governance import ActorGovernance
 from republica.world.config import load_country
 from republica.world.events import ShockAggregate
 from republica.world.state import WorldState
@@ -376,6 +378,54 @@ def test_llm_actor_decide_matches_rule_based_actor_interface() -> None:
     assert llm_actor.last_trace is not None
     assert llm_actor.last_trace.actor_id == "gov_norte"
     assert llm_actor.last_trace.brain == "llm:fake:rules"
+
+
+def test_llm_actor_prompt_intersects_role_matrix_with_governance(monkeypatch) -> None:
+    """Hallazgo #6 de REVIEW_002: `LLMActor.decide` listaba las acciones
+    disponibles solo desde la matriz de rol (`data/permissions.yaml`), sin
+    intersecar `write|execute` de la ficha de gobernanza del actor -- un
+    actor con gobernanza restringida (`--governance-override`, o cualquier
+    `governance.yaml` no generado 1:1 desde la matriz de rol) veia un prompt
+    que le ofrecia acciones que `authorize()` le iba a denegar igual. `data/
+    governance.yaml` por default espeja la matriz de rol (sin actor
+    restringido de fabrica), asi que se arma una `ActorGovernance` a mano
+    sin `SET_RATE` en `execute` para `central_bank` (que la matriz de rol SI
+    permite) y se espia `render_user` (via `llm_based_mod`, el modulo que lo
+    importa) para ver la lista de acciones que efectivamente se le ofrece."""
+    captured: dict[str, list[ActionType]] = {}
+    real_render_user = llm_based_mod.render_user
+
+    def spy_render_user(perception, allowed_actions):
+        captured["allowed_actions"] = list(allowed_actions)
+        return real_render_user(perception, allowed_actions)
+
+    monkeypatch.setattr(llm_based_mod, "render_user", spy_render_user)
+
+    role_types = load_permissions()["central_bank"]
+    assert ActionType.SET_RATE in role_types  # la matriz de rol SI lo permite
+
+    sheet = ACTORS["central_bank"]
+    _, perception = _perception("central_bank")
+    backend = FakeBackend(policy="unauthorized")  # la respuesta no importa aca
+
+    # Sin gobernanza (default `None`, ningun llamador existente lo pasaba):
+    # comportamiento de siempre, la lista completa de la matriz de rol.
+    llm_actor_unrestricted = LLMActor(sheet, backend, seed_base=1)
+    llm_actor_unrestricted.decide(perception, make_actor_rng(7, "central_bank"))
+    assert ActionType.SET_RATE in captured["allowed_actions"]
+
+    # Con gobernanza restringida (`SET_RATE` fuera de `write`/`execute`):
+    # la interseccion lo saca de la lista, aunque la matriz de rol lo
+    # permita.
+    restricted_gov = ActorGovernance(
+        actor_id="central_bank",
+        write=("PUBLIC_STATEMENT", "NO_ACTION", "RECOMMEND_RATE", "SUPPORT_POLICY"),
+        execute=(),
+    )
+    llm_actor_restricted = LLMActor(sheet, backend, seed_base=1, governance=restricted_gov)
+    llm_actor_restricted.decide(perception, make_actor_rng(7, "central_bank"))
+    assert ActionType.SET_RATE not in captured["allowed_actions"]
+    assert ActionType.PUBLIC_STATEMENT in captured["allowed_actions"]
 
 
 # CLI: bench-parse --brain fake:rules imprime parse_rate 1.0 ----------------

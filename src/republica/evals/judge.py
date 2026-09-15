@@ -10,7 +10,6 @@ contra el `brain` del actor evaluado y aborta (`ValueError`) si coinciden.
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from typing import Literal
@@ -242,7 +241,3 @@ def dump_perception_numbers(perception_dict: dict) -> list[float]:
             except (TypeError, ValueError):
                 continue
     return out
-
-
-def perception_numbers_json(perception_dict: dict) -> str:
-    return json.dumps(dump_perception_numbers(perception_dict))

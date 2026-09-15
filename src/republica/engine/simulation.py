@@ -26,7 +26,13 @@ from republica.engine.negotiation import (
     sum_queue_delta,
 )
 from republica.engine.policy import ConstantPolicy, PolicyRule
-from republica.engine.scheduler import ActionRecord, ActorEngine, build_actor_engine, run_actor_turn
+from republica.engine.scheduler import (
+    ActionRecord,
+    ActorEngine,
+    build_actor_engine,
+    refresh_decision_actor_parties,
+    run_actor_turn,
+)
 from republica.world.cohorts import (
     Cohort,
     CohortState,
@@ -563,6 +569,12 @@ def _run_election(
     sim.country = country.model_copy(
         update={"parties": new_parties, "coalition_seats": new_coalition_seats}
     )
+    # Hallazgo #1 de REVIEW_002: refresca `parties_by_id` de cada
+    # `decision_actor` con las `new_parties` recien calculadas -- SIEMPRE,
+    # no solo cuando cambia el partido gobernante (las bancas cambian en
+    # toda eleccion). Sin esto, `_in_government()` seguia viendo el partido
+    # pre-transicion todo el mandato siguiente.
+    refresh_decision_actor_parties(sim.actor_engine, new_parties)
 
     changed = result.winner != result.incumbent_party
     if changed:
@@ -594,6 +606,24 @@ def _run_election(
         }
     sim.campaign_state = {}
     return clamped, result
+
+
+def compute_months_to_election(
+    month: int, total_months: int, term_length: int, elections_enabled: bool
+) -> int:
+    """`months_to_election` (hallazgo #3 de REVIEW_002, antes inline en
+    `advance_month`): con `elections_enabled`, la presion electoral real de
+    ESTE mandato (`term_length`) -- `T = term_length;
+    ((month−1)//T + 1)·T − month` -- en vez del placeholder de ADR 003
+    secc. 11 punto 7 (`total_months − month + 1`, que cuenta hasta el FIN DE
+    LA CORRIDA, no hasta la proxima eleccion: en una corrida de 96 meses
+    nadie sentia presion electoral antes del mes 48). Sin
+    `elections_enabled` (o `term_length <= 0`), el placeholder de siempre
+    (golden hashes de corridas sin elecciones intactos: ver docs/
+    REVIEW_002_fases_4-7.md hallazgo #3)."""
+    if elections_enabled and term_length > 0:
+        return ((month - 1) // term_length + 1) * term_length - month
+    return max(total_months - month + 1, 0)
 
 
 def advance_month(sim: Simulation) -> MonthRecord:
@@ -652,10 +682,11 @@ def advance_month(sim: Simulation) -> MonthRecord:
     #: `{party_id: aprobo}` del `Bill` de este mes, si hubo uno (ADR 006
     #: secc. 1.1, ver mas abajo). Vacio sin Congreso o sin `Bill` este mes.
     vote_party_results: dict[str, bool] = {}
-    #: Igual que en ADR 003 secc. 11 punto 7: placeholder de elecciones.
-    # Se calcula siempre (no solo con actores) porque `derive_congress_support`
-    # (mas abajo) tambien la necesita.
-    months_to_election = max(country.months - month + 1, 0)
+    #: Se calcula siempre (no solo con actores) porque `derive_congress_support`
+    #: (mas abajo) tambien la necesita.
+    months_to_election = compute_months_to_election(
+        month, country.months, country.term_length, sim.elections_enabled
+    )
     #: `ActionRecord` de este mes (vacio sin actores), para el sesgo de
     #: medios (ADR 005 secc. 4, mas abajo, pasos 8-9): se extrae de aca en
     #: vez de cambiar la firma de `run_actor_turn` para devolver los
@@ -826,7 +857,10 @@ def advance_month(sim: Simulation) -> MonthRecord:
         if bill is not None:
             assert sim.congress_enabled
             allowed_actions_this_month = [ar for ar in action_records if ar.authorized]
-            vigente_agreements = [a for a in sim.actor_engine.agreements if a.status == "vigente"]
+            # Hallazgo #5 de REVIEW_002: se pasan TODOS los acuerdos, no
+            # solo los `vigente` -- `_concession_bonus_for_party`
+            # (`engine/congress.py`) ya filtra por `vigente` o por
+            # `honored` otorgado este mismo `bill.month`.
             vote_record = congress_vote(
                 bill,
                 country.parties,
@@ -834,7 +868,7 @@ def advance_month(sim: Simulation) -> MonthRecord:
                 allowed_actions_this_month,
                 sim.state,
                 sim.actor_engine.relationships,
-                vigente_agreements,
+                sim.actor_engine.agreements,
                 months_to_election,
                 sim.actor_engine.congress_rng,
             )
@@ -928,13 +962,21 @@ def advance_month(sim: Simulation) -> MonthRecord:
             )
         gap = compute_perception_gap(sim.cohorts, sim.cohort_state, econ_state.inflation)
         if sim.media_enabled and media_actions:
-            frame_by_outlet = {ma.outlet_id: ma.frame for ma in media_actions}
-            for outlet_id, frame in frame_by_outlet.items():
-                current = sim.outlet_influence.get(outlet_id)
+            # Hallazgo #6 de REVIEW_002: antes se armaba `{outlet_id: frame}`
+            # (un dict por outlet), asi que un medio que publica DOS
+            # `PUBLISH_STORY` el mismo mes (con frames distintos, p.ej. uno
+            # `all` y otro dirigido a un `target_bloc`) solo drifteaba
+            # audiencia con el ULTIMO -- el primero se perdia sin efecto.
+            # Ahora se recorre `media_actions` sin deduplicar: cada historia
+            # de este mes aplica su propio `drift_audience` en secuencia
+            # (compuesto sobre la influencia ya actualizada por la historia
+            # anterior del mismo medio), acumulando todos los frames.
+            for ma in media_actions:
+                current = sim.outlet_influence.get(ma.outlet_id)
                 if current is None:
                     continue
-                sim.outlet_influence[outlet_id] = drift_audience(
-                    frame, current, sim.cohorts, sim.cohort_state
+                sim.outlet_influence[ma.outlet_id] = drift_audience(
+                    ma.frame, current, sim.cohorts, sim.cohort_state
                 )
         sim.perception_records.append(
             PerceptionRecord(
@@ -1006,13 +1048,15 @@ def advance_month(sim: Simulation) -> MonthRecord:
     # el fallback con `features.congress = False`).
     if sim.actors_enabled and sim.congress_enabled:
         assert sim.actor_engine is not None
-        vigente_agreements = [a for a in sim.actor_engine.agreements if a.status == "vigente"]
+        # Hallazgo #5 de REVIEW_002: idem `congress_vote` arriba, se pasan
+        # TODOS los acuerdos (`_concession_bonus_for_party` filtra).
         derived_support = derive_congress_support(
             country.parties,
             sim.actor_engine.actors,
             full_state,
             sim.actor_engine.relationships,
-            vigente_agreements,
+            sim.actor_engine.agreements,
+            month,
             months_to_election,
             sim.actor_engine.congress_rng,
         )

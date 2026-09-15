@@ -27,9 +27,12 @@ import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from republica.engine.perception import Perception
+
+if TYPE_CHECKING:
+    from republica.world.config import Party
 
 #: Timeout de red (ADR 004 secc. 2, literal: "Timeout 60 s").
 DEFAULT_TIMEOUT_SECONDS = 60.0
@@ -299,6 +302,18 @@ class FakeBackend:
         )
         self._rule_actors[actor_id] = rule_actor
         return rule_actor
+
+    def refresh_parties(self, parties: list[Party]) -> None:
+        """Refresca `parties_by_id` de cada `RuleBasedActor` cacheado en
+        `_rule_actors` (hallazgo #1 de REVIEW_002): `_rule_actor_for` los
+        arma con `load_country().parties` -- SIEMPRE la config de disco, ni
+        siquiera la de la corrida -- la primera vez que se le pide una
+        decision a cada actor, y los cachea para el resto de la corrida.
+        Sin este refresco, `fake:rules` nunca se enteraba de una transicion
+        de gobierno (llamado por `engine/scheduler.py::
+        refresh_decision_actor_parties` en cada `_run_election`)."""
+        for rule_actor in self._rule_actors.values():
+            rule_actor.refresh_parties(parties)
 
     def _rules_payload(
         self, actor_id: str, perception: Perception | None, rng: random.Random | None
