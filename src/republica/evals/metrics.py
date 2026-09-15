@@ -403,8 +403,12 @@ def temporal_consistency(brain: str, judge: FakeJudge | Judge, seed: int) -> Met
     "RubricScore" natural para esto: se documenta como desviacion en Notas
     de implementacion)."""
     history = tiny_run(
-        brain, seed, months=LONG_MONTHS, memory_enabled=True,
-        congress_enabled=True, negotiation_enabled=True,
+        brain,
+        seed,
+        months=LONG_MONTHS,
+        memory_enabled=True,
+        congress_enabled=True,
+        negotiation_enabled=True,
     )
     by_actor: dict[str, list[Any]] = {}
     for a in history.action_records:
@@ -450,8 +454,12 @@ def memory_recall(brain: str, judge: FakeJudge | Judge, seed: int) -> MetricResu
     el `reason`/`raw_response` de una accion del MISMO actor dentro de los 3
     turnos siguientes (ADR secc. 2, literal)."""
     history = tiny_run(
-        brain, seed, months=LONG_MONTHS, memory_enabled=True,
-        congress_enabled=True, negotiation_enabled=True,
+        brain,
+        seed,
+        months=LONG_MONTHS,
+        memory_enabled=True,
+        congress_enabled=True,
+        negotiation_enabled=True,
     )
     important = [m for m in history.memory_records if m.importance >= 0.8]
     if not important:
@@ -476,9 +484,7 @@ def memory_recall(brain: str, judge: FakeJudge | Judge, seed: int) -> MetricResu
     for mem in important:
         owner_texts = texts_by_actor_month.get(mem.actor, {})
         window = [
-            text
-            for m in range(mem.turn + 1, mem.turn + 4)
-            for text in owner_texts.get(m, [])
+            text for m in range(mem.turn + 1, mem.turn + 4) for text in owner_texts.get(m, [])
         ]
         found = any(judge_mod.mentions_event(t, [mem.summary]) for t in window)
         samples.append(1.0 if found else 0.0)

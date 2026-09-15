@@ -231,9 +231,7 @@ def load_governance(
     raw = {actor_id: dict(entry or {}) for actor_id, entry in raw.items()}
     for dotted_key, value in (overrides or {}).items():
         _apply_override(raw, dotted_key, value)
-    actors = {
-        actor_id: _parse_actor_governance(actor_id, entry) for actor_id, entry in raw.items()
-    }
+    actors = {actor_id: _parse_actor_governance(actor_id, entry) for actor_id, entry in raw.items()}
     return Governance(actors=actors)
 
 
@@ -357,9 +355,7 @@ def filter_perception(
     `data/governance.yaml`) esta funcion es un no-op -- reproduce
     exactamente la `Perception` de antes de ADR 007."""
     allowed = set(gov.read)
-    public = (
-        dict(perception.public_indicators) if "economic_indicators" in allowed else {}
-    )
+    public = dict(perception.public_indicators) if "economic_indicators" in allowed else {}
     private = {
         k: v
         for k, v in perception.private_indicators.items()

@@ -299,9 +299,7 @@ class Game:
         `GRANT_CONCESSION` ya decidido (`sim.pending_grant_override`, ver
         `set_grant_decisions`): se EXTIENDE en vez de pisarse, para no
         perder concesiones/negociaciones ya fijadas este mismo turno."""
-        approved = [
-            a for a in self.pending_human_approvals if a.actor_id in approved_actor_ids
-        ]
+        approved = [a for a in self.pending_human_approvals if a.actor_id in approved_actor_ids]
         if not approved:
             return
         self.sim.pending_grant_override = list(self.sim.pending_grant_override or []) + approved

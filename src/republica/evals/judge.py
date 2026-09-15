@@ -206,8 +206,10 @@ def build_judge(spec: str, *, actor_brain: str) -> FakeJudge | Judge:
         return FakeJudge()
     judge_kind, _ = parse_brain_spec(spec)
     actor_kind, _ = parse_brain_spec(actor_brain)
-    if judge_kind == "llm" and actor_kind == "llm" and _judge_model_name(spec) == _judge_model_name(
-        actor_brain
+    if (
+        judge_kind == "llm"
+        and actor_kind == "llm"
+        and _judge_model_name(spec) == _judge_model_name(actor_brain)
     ):
         raise ValueError(
             f"juez invalido: --judge {spec!r} usa el MISMO modelo que --brain {actor_brain!r} "

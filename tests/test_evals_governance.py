@@ -73,9 +73,7 @@ def test_ideological_and_interest_cases_pass_100pct_against_rules() -> None:
 
 def _authorized_key(records, actor_id: str) -> list:
     return [
-        (r.month, r.type, r.authorized, r.denied_reason)
-        for r in records
-        if r.actor == actor_id
+        (r.month, r.type, r.authorized, r.denied_reason) for r in records if r.actor == actor_id
     ]
 
 

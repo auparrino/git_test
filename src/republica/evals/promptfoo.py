@@ -39,10 +39,7 @@ def _case_to_test(case: EvalCase) -> dict:
         "assert": [
             {
                 "type": "javascript",
-                "value": (
-                    "JSON.parse(output).position === "
-                    f"{case.expected.position!r}"
-                ),
+                "value": (f"JSON.parse(output).position === {case.expected.position!r}"),
             }
         ],
     }

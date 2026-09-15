@@ -1101,8 +1101,7 @@ def eval_main(
     report = run_suite(suite=suite, brain=brain, judge=judge, seed=seed)
     paths = report.write(out_dir)
     console.print(
-        f"[green]OK[/green] suite={suite} brain={brain} judge={judge} -> "
-        f"{paths[0].parent}"
+        f"[green]OK[/green] suite={suite} brain={brain} judge={judge} -> {paths[0].parent}"
     )
 
 
@@ -1142,9 +1141,9 @@ def eval_compare(
 
 @eval_app.command("export-promptfoo")
 def eval_export_promptfoo(
-    out: Annotated[
-        Path, typer.Option("--out", help="Directorio de salida.")
-    ] = Path("evals/promptfoo"),
+    out: Annotated[Path, typer.Option("--out", help="Directorio de salida.")] = Path(
+        "evals/promptfoo"
+    ),
 ) -> None:
     """Genera `evals/promptfoo/promptfooconfig.yaml` + `cases.yaml` desde los
     mismos casos de `data/evals/cases/` (ADR 007 secc. 4). Promptfoo no es
