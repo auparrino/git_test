@@ -215,9 +215,22 @@ def backtest(
     from republica.backtest.__main__ import main as backtest_main
 
     args = [
-        "--country", country_id, "--calibration", calibration_run_id, "--run-id", run_id,
-        "--from", str(from_year), "--to", str(to_year), "--horizons", horizons,
-        "--seeds", str(seeds), "--workers", str(workers),
+        "--country",
+        country_id,
+        "--calibration",
+        calibration_run_id,
+        "--run-id",
+        run_id,
+        "--from",
+        str(from_year),
+        "--to",
+        str(to_year),
+        "--horizons",
+        horizons,
+        "--seeds",
+        str(seeds),
+        "--workers",
+        str(workers),
     ]
     if resume:
         args.append("--resume")
@@ -225,3 +238,125 @@ def backtest(
 ```
 
 Sin identificadores de modelos de IA en el repo (regla del proyecto).
+
+## Resultados (corrida `b1_a5b`, calibración `a5b_macro`)
+
+Corrida completa 1916–2022, `--calibration a5b_macro --seeds 30 --workers 3` (se dejó 1 CPU libre
+para la validación `a6_macro` del otro agente, en paralelo). **Tiempo de pared real: 477.1 s (≈ 8.0
+min)** — muy por debajo del umbral de 60 min; no hizo falta bajar a 15 semillas. 321 ventanas, 2042
+filas ventana-objetivo-brazo en `windows.csv` (`data/countries/argentina/backtest/b1_a5b/`).
+
+**N de ventanas puntuadas por objetivo** (suma de los dos brazos, `507+507+364+19+507+138 = 2042`):
+
+| Objetivo | N | Acierto global | Aurora | Calibrado |
+|---|---:|---:|---:|---:|
+| Dirección de la inflación | 507 | 46.2 % | 47.4 % (N=321) | 44.1 % (N=186) |
+| Magnitud de la inflación | 507 | 30.4 % | 21.2 % (N=321) | **46.2 %** (N=186) |
+| Régimen | 364 | 72.5 % | 72.5 % (N=182) | 72.5 % (N=182) |
+| Elección | 19 | 52.6 % | 66.7 % (N=3) | 50.0 % (N=16) |
+| Crisis | 507 | 64.3 % | 63.9 % (N=321) | 65.1 % (N=186) |
+| Golpe (1916–1983) | 138 | 58.0 % | 58.0 % (N=69) | 58.0 % (N=69) |
+
+El único objetivo donde el brazo calibrado le gana con claridad a Aurora en el agregado es
+**magnitud de la inflación** (+25 pp): tiene más sentido de lo que parece, porque es justo lo que
+`a5b_macro` optimizó (RMSE de `inflation` contra la serie real, ADR 012/011 §7). En **dirección de
+la inflación** Aurora le gana por poco (47.4 % vs 44.1 %); en **régimen**/**golpe** las tasas son
+IDÉNTICAS entre brazos (72.5 %/72.5 % y 58.0 %/58.0 %) — coincidencia exacta esperable: `regime`/
+`coup` sólo se puntúan en ventanas mensuales, donde `backtest_regime_calendar` (nunca fuerza golpe)
+y `regimes.csv` (real) son los mismos para los dos brazos; lo único que cambia entre brazos son los
+coeficientes ECONÓMICOS, que no entran en `world/regime.py`.
+
+### Hallazgo: `OverflowError` sistemático del brazo calibrado en modo anual (1916–1960)
+
+Corriendo la corrida completa se encontró (y se corrigió la propagación, no la causa raíz — ver
+"Notas de implementación" más arriba) un desborde numérico real: **las 135 ventanas de modo anual
+(los 45 orígenes 1916–1960 × 3 horizontes) tienen el brazo `calibrated` con el 100 % de sus semillas
+descartadas por `OverflowError`** (4050 = 135 × 30 semillas, exactamente todas; 0 semillas del brazo
+`aurora` fallaron; 0 ventanas se descartaron enteras — el `try/except` por semilla de
+`runner.py::run_annual_arm`/`run_monthly_arm` contuvo el problema, ver "Notas de implementación").
+Causa: `world/annual.py` usa SIEMPRE el motor legacy (`step_economy`, nunca `step_macro_economy`),
+pero la función objetivo de `a5b_macro` (`features.macro_regime=True`) nunca ejercita `step_economy`
+para puntuar nada — así que el grupo de `Coefficients` "viejo" que SÍ usa el modo anual quedó sin
+señal útil de la calibración y CMA-ES lo dejó en una zona donde `(1 + g_m/100)**12` desborda un
+`float`. **Consecuencia para la lectura de esta corrida: el brazo calibrado NO tiene ningún dato
+para 1916–1960** (`N calibrado = 0` en la tabla "Calibrado vs. Aurora por década" para 1910s–1950s);
+toda comparación calibrado-vs-Aurora de este backtest es, de hecho, solo sobre 1961–2022. Esto es un
+límite real de la calibración `a5b_macro`, no un bug de este backtest -- documentado para quien
+recalibre después: el espacio de parámetros de `calibration/parameters.py` debería excluir del
+`lambda_reg`/bounds los coeficientes legacy que la función objetivo con macro activo no ejercita, o
+el modo anual debería tener su propio grupo de coeficientes calibrado por separado.
+
+### Las 3 reglas del árbol en lenguaje llano (objetivo: magnitud de la inflación)
+
+Elegido porque es el único objetivo donde el brazo calibrado gana con claridad, y conecta con el
+resultado de dispersión de abajo. N=507, tasa base de acierto 30.4 %, CV por década (12 grupos):
+accuracy media 63.6 % (rango 60–70 %, muy por encima de la tasa base — las reglas SÍ generalizan
+entre décadas, no describen solo la muestra):
+
+1. Con dispersión entre semillas (IQR) ≤ 0.21, inflación mensual inicial > 0.25 % y `fx_regime =
+   float`: se acierta el 0 % (184 ventanas-objetivo) — el caso más común (float, inflación baja,
+   semillas de acuerdo entre sí) es también el que más falla.
+2. Con IQR > 0.21, poliarquía V-Dem ≤ 0.80 y tendencia de inflación previa (12 m) > −0.58 %: se
+   acierta el 0 % (89 ventanas-objetivo) — regímenes menos democráticos con inflación en ascenso.
+3. Con IQR ≤ 0.21, inflación mensual inicial ≤ 0.25 % y años desde el último default ≤ 40.5: se
+   acierta el 0 % (50 ventanas-objetivo).
+
+Nota de lectura: "se acierta el X %" es la tasa de acierto DENTRO de esa hoja (qué fracción de esas
+ventanas tuvo `hit=1`), no la exactitud del árbol como clasificador — las tres hojas con más
+muestras son, precisamente, las que MENOS aciertan (el árbol las separa de las hojas minoritarias
+con mejor tasa, que no entran en el top-3 por tamaño); la importancia por permutación (`iqr_seeds`
+0.065, `fx_regime=float` 0.041, `inflation_now` 0.027) confirma que la dispersión entre semillas es
+la variable más informativa para este objetivo.
+
+### Tabla estratificada más informativa: Régimen por `regime_mode_initial`
+
+| régimen inicial (real) | N | acierto |
+|---|---:|---:|
+| coup | 18 | **0.0 %** |
+| restricted_democracy | 24 | **0.0 %** |
+| dictatorship | 72 | 36.1 % |
+| democracy | 250 | **95.2 %** |
+
+El modelo predice bien la continuidad cuando arranca en democracia (95.2 %) pero falla el 100 % de
+las veces cuando arranca en un mes de golpe o de democracia restringida: son transiciones (el
+régimen real cambia de modo poco después de `t0` en la mayoría de esos casos, ver ADR 011 §3) y el
+modelo tiende a persistir el régimen inicial en vez de anticipar el cambio. Coincide con la
+importancia por permutación del árbol de régimen (`years_since_last_default` domina con 0.363 —
+la regla dominante es literalmente "si pasaron ≤ 45 años desde el último default, no acierta",
+238/364 ventanas) y con la nota de "Qué no se puede concluir": el modo anual sesga esta tabla hacia
+arriba (0 filas de régimen ahí, todas las 364 filas son mensuales, 1961+).
+
+### Dispersión entre semillas como señal
+
+**Spearman(IQR entre semillas, error de magnitud de inflación) = 0.433 (N=507).** Correlación
+positiva y no trivial: el modelo *sabe cuándo no sabe* — cuando las 30 semillas de una ventana
+discrepan mucho en la inflación que producen, el error contra la serie real tiende a ser mayor. No
+es una correlación fuerte (0.433, no > 0.7), así que sirve como señal de alerta razonable, no como
+sustituto de una medición de error real.
+
+### Calibrado vs. Aurora por década
+
+Resumen (tabla completa en `data/countries/argentina/backtest/b1_a5b/report.md`): **1910s–1950s sin
+dato calibrado** (el `OverflowError` de arriba). Desde 1960s: en **magnitud de la inflación** el
+calibrado gana en TODAS las décadas con dato (+34 pp en 1960s, +33 en 1970s, +50 en 1980s, +30 en
+1990s, +23 en 2000s, +40 en 2010s, +22 en 2020s) — la calibración cumple lo que optimizó. En
+**dirección de la inflación** el resultado es mixto y con más años en contra que a favor (−2 en
+1960s, −10 en 1970s, +10 en 1980s, **−33 en 1990s**, −23 en 2000s, −10 en 2010s, 0 en 2020s) — la
+calibración de RMSE no garantiza acertar el SIGNO del cambio. En **crisis** el calibrado gana en casi
+todas las décadas con datos (+57 pp en 1990s, +47 en 2000s, +40 en 2010s), salvo 2020s (empate). En
+**régimen**/**golpe** las diferencias por década son 0.0 pp en TODAS las décadas con dato (mismo
+razonamiento que en la tabla agregada de arriba: esos dos objetivos no dependen de los coeficientes
+económicos).
+
+### Qué hace funcionar una predicción (párrafo citable)
+
+La calibración `a5b_macro` ayuda de verdad, pero solo en lo que optimizó: la magnitud de la
+inflación mejora en TODAS las décadas con dato (+22 a +50 pp sobre Aurora) y la dispersión entre
+semillas predice el error (Spearman 0.433) — el modelo puede señalar sus propias ventanas de mayor
+incertidumbre. Fuera de eso, el panorama es más flojo: la dirección del cambio de inflación pierde
+contra Aurora en más décadas de las que gana, y régimen/golpe/elección dependen casi enteramente del
+punto de partida (democracia real → 95 % de acierto; golpe o democracia restringida real → 0 %) y no
+de qué brazo se use, porque esos objetivos no leen los coeficientes económicos calibrados. Y hay un
+límite estructural: **para 1916–1960 no hay ningún dato del brazo calibrado** (el modo anual legacy
+desborda numéricamente con estos coeficientes), así que cualquier lectura de "calibrado vs. Aurora"
+de este backtest es, en los hechos, una lectura de 1961–2022, no de 1916–2022.

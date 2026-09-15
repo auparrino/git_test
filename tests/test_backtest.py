@@ -409,3 +409,38 @@ def test_annual_forced_exogenous_shock_does_not_crash(monkeypatch) -> None:
     assert len(runs) == 1
     # modo anual: un registro por AÑO, no por mes (`years = window.h // 12`).
     assert runs[0].months_run == window.h // 12
+
+
+def test_numerical_overflow_in_one_seed_does_not_crash_the_window(monkeypatch) -> None:
+    """Regresion de un fallo real de la corrida completa (b1_a5b, ADR 014
+    "Resultados"): `world/economy.py::step_economy` puede desbordar
+    (`OverflowError`) con ciertos coeficientes calibrados en modo anual
+    (legacy). Una semilla que desborda se descarta, no tira abajo la
+    ventana entera."""
+
+    def _boom(*args, **kwargs):
+        raise OverflowError("(34, 'Numerical result out of range')")
+
+    monkeypatch.setattr(runner, "run_annual", _boom)
+    ws = windows.generate_windows(1950, 1950, (12,))
+    window = ws[0]
+    runs = runner.run_annual_arm(window, "aurora", CALIBRATION_RUN_ID, seeds=3, seed_base=1)
+    assert runs == []  # las 3 semillas fallaron, la funcion no propaga la excepcion
+
+
+def test_process_window_never_raises_even_on_unexpected_failure(monkeypatch) -> None:
+    """Red de seguridad de ultima instancia: si `run_window` revienta con
+    CUALQUIER excepcion, `process_window` devuelve 0 filas en vez de
+    propagar (para que `ProcessPoolExecutor` no tire abajo toda la
+    corrida, ADR 014 "Resultados")."""
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("algo totalmente inesperado")
+
+    monkeypatch.setattr(runner, "run_window", _boom)
+    ws = windows.generate_windows(2000, 2000, (12,))
+    window = ws[0]
+    key, rows, wall = runner.process_window(window, CALIBRATION_RUN_ID, seeds=1, seed_base=1)
+    assert key == window.key
+    assert rows == []
+    assert wall >= 0.0

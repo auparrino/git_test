@@ -44,6 +44,26 @@ from republica.world.regime import RegimeCalendar, coup_propensity_by_decade
 
 ARMS: tuple[str, str] = ("calibrated", "aurora")
 
+#: Hallazgo real, encontrado corriendo el backtest completo por primera vez
+#: (b1_a5b, calibracion `a5b_macro`): con coeficientes calibrados contra el
+#: objetivo MACRO (ADR 012), el grupo de `Coefficients` "viejo" (sin macro)
+#: puede quedar sin restriccion util (la funcion objetivo con
+#: `features.macro_regime=True` nunca ejercita `step_economy`, solo
+#: `step_macro_economy` -- ver `calibration/objective.py`) y terminar en
+#: valores que, usados en el motor LEGACY (`world/annual.py`, que SIEMPRE
+#: usa `step_economy`, nunca el macro), producen un crecimiento mensual
+#: `g_m` tan grande que `(1+g_m/100)**12` desborda un `float` de Python
+#: (`OverflowError`). Una sola semilla con esta patologia numerica no debe
+#: tirar abajo las otras 29 ni las demas 320 ventanas: se descarta esa
+#: semilla (se loguea, `n_seeds` de esa ventana/brazo queda mas chico) en
+#: vez de propagar la excepcion. Documentado en el ADR ("Resultados").
+_NUMERIC_FAILURE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    OverflowError,
+    ValueError,
+    ZeroDivisionError,
+    ArithmeticError,
+)
+
 
 def backtest_regime_calendar(pack_dir: Path, y0: int, m0: int, months: int) -> RegimeCalendar:
     """`RegimeCalendar` con `forced_coup_months` SIEMPRE vacio (ADR 014
@@ -133,33 +153,49 @@ def run_monthly_arm(
     forced = {k: list(v) for k, v in window.forced_plan.forced.items()} or None
 
     outcomes: list[SeedOutcome] = []
+    n_failed = 0
     for i in range(seeds):
         seed = seed_base + i
-        history = run_simulation(
-            seed=seed,
-            months=window.h,
-            policy_rule=policy_rule,
-            forced_shocks=forced,
-            country=country,
-            actors_enabled=features_flags.get("actors", True),
-            actors=era_actors,
-            congress_enabled=features_flags.get("congress", True),
-            negotiation_enabled=features_flags.get("negotiation", True),
-            cohorts_enabled=features_flags.get("cohorts", True),
-            media_enabled=features_flags.get("media", True),
-            memory_enabled=features_flags.get("memory", True),
-            elections_enabled=features_flags.get("elections", True),
-            loyalty_table=era_loyalty_table,
-            governance_overrides=gov_overrides,
-            regime_calendar=pack.regime_calendar,
-            bimonetary_coefficients=bimonetary,
-            historical_exogenous=exogenous,
-            macro_coefficients=macro,
-            macro_x0=pack.macro_x0 if macro is not None else None,
-            macro_m0=pack.macro_m0 if macro is not None else None,
-            fx_regime=pack.fx_regime_auto if macro is not None else None,
-        )
+        try:
+            history = run_simulation(
+                seed=seed,
+                months=window.h,
+                policy_rule=policy_rule,
+                forced_shocks=forced,
+                country=country,
+                actors_enabled=features_flags.get("actors", True),
+                actors=era_actors,
+                congress_enabled=features_flags.get("congress", True),
+                negotiation_enabled=features_flags.get("negotiation", True),
+                cohorts_enabled=features_flags.get("cohorts", True),
+                media_enabled=features_flags.get("media", True),
+                memory_enabled=features_flags.get("memory", True),
+                elections_enabled=features_flags.get("elections", True),
+                loyalty_table=era_loyalty_table,
+                governance_overrides=gov_overrides,
+                regime_calendar=pack.regime_calendar,
+                bimonetary_coefficients=bimonetary,
+                historical_exogenous=exogenous,
+                macro_coefficients=macro,
+                macro_x0=pack.macro_x0 if macro is not None else None,
+                macro_m0=pack.macro_m0 if macro is not None else None,
+                fx_regime=pack.fx_regime_auto if macro is not None else None,
+            )
+        except _NUMERIC_FAILURE_EXCEPTIONS as exc:
+            n_failed += 1
+            print(
+                f"[backtest] {window.t0} h={window.h} arm={arm} seed={seed}: "
+                f"{type(exc).__name__}: {exc} -- semilla descartada.",
+                flush=True,
+            )
+            continue
         outcomes.append(_history_to_outcome(seed, history))
+    if n_failed:
+        print(
+            f"[backtest] {window.t0} h={window.h} arm={arm}: {n_failed}/{seeds} semillas "
+            f"descartadas por falla numerica ({len(outcomes)} usables).",
+            flush=True,
+        )
     return outcomes
 
 
@@ -196,18 +232,34 @@ def run_annual_arm(
     forced = {k: list(v) for k, v in window.forced_plan.forced.items()} or None
 
     outcomes: list[SeedOutcome] = []
+    n_failed = 0
     for i in range(seeds):
         seed = seed_base + i
-        history = run_annual(
-            seed=seed,
-            years=years,
-            country=country,
-            policy_rule=policy_rule,
-            start_year=year0,
-            annual_regime=regime_lookup,
-            forced_shocks=forced,
-        )
+        try:
+            history = run_annual(
+                seed=seed,
+                years=years,
+                country=country,
+                policy_rule=policy_rule,
+                start_year=year0,
+                annual_regime=regime_lookup,
+                forced_shocks=forced,
+            )
+        except _NUMERIC_FAILURE_EXCEPTIONS as exc:
+            n_failed += 1
+            print(
+                f"[backtest] {window.t0} h={window.h} arm={arm} seed={seed}: "
+                f"{type(exc).__name__}: {exc} -- semilla descartada.",
+                flush=True,
+            )
+            continue
         outcomes.append(_annual_history_to_outcome(seed, history))
+    if n_failed:
+        print(
+            f"[backtest] {window.t0} h={window.h} arm={arm}: {n_failed}/{seeds} semillas "
+            f"descartadas por falla numerica ({len(outcomes)} usables).",
+            flush=True,
+        )
     return outcomes
 
 
@@ -223,11 +275,27 @@ def process_window(
 ) -> tuple[str, list[dict], float]:
     """Funcion de un solo argumento-por-proceso (picklable, para
     `ProcessPoolExecutor`): corre, calcula caracteristicas, puntua, y
-    devuelve `(window.key, filas, segundos de pared)`."""
+    devuelve `(window.key, filas, segundos de pared)`.
+
+    Red de seguridad de ULTIMA instancia (ademas del try/except por semilla
+    de `run_monthly_arm`/`run_annual_arm`): si algo imprevisto revienta la
+    ventana ENTERA (los dos brazos, o `compute_window_features`/
+    `score_window`), esa ventana queda con 0 filas puntuadas y el resto de
+    la corrida (320 ventanas restantes) sigue -- una ventana rota no puede
+    tirar abajo 6-8 minutos de computo ya hecho. Se loguea igual, para que
+    no quede en silencio."""
     t0 = time.perf_counter()
-    runs_by_arm = run_window(window, calibration_run_id, seeds, seed_base)
-    features = compute_window_features(window, calibration_run_id)
-    rows = score_window(window, features, runs_by_arm)
+    try:
+        runs_by_arm = run_window(window, calibration_run_id, seeds, seed_base)
+        features = compute_window_features(window, calibration_run_id)
+        rows = score_window(window, features, runs_by_arm)
+    except Exception as exc:  # noqa: BLE001 - red de seguridad deliberada, ver docstring
+        print(
+            f"[backtest] {window.t0} h={window.h}: ventana DESCARTADA entera "
+            f"({type(exc).__name__}: {exc}).",
+            flush=True,
+        )
+        return window.key, [], time.perf_counter() - t0
     return window.key, rows, time.perf_counter() - t0
 
 
