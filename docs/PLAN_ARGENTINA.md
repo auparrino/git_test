@@ -113,3 +113,21 @@ ganado. Detalle completo, incluida la lectura mecánica de por qué, en
 
 Estos resultados describen el comportamiento de República Artificial calibrada con datos de
 Argentina; no son evidencia sobre lo que hubiera pasado.
+
+## 7. Estado al cierre de la segunda iteración (ADR 012–014) y qué sigue
+
+Hecho: ADR 012 (macro con régimen, 6/6 tests), ADR 013 (tres épocas de partidos/actores/lealtades;
+LLA no gana en el modelo: test en `xfail` con diagnóstico), A5 (`a5b_macro`, tras descartar `a5_macro`
+por el bug del objetivo), A6 (V1–V4) y ADR 014 (backtest 1916–2022, `b1_a5b`).
+
+| Hallazgo de esta ronda | Qué sigue |
+|---|---|
+| El calibrado no supera a persistencia ni en train ni en holdout | Calibrar por regímenes (peg / float / control) o por época, no un solo vector para 32 años |
+| Desde 2019-12 el calibrado colapsa (100 %) antes de la elección de 2023 | Revisar la terminación por `collapse` y la recuperación §5 del ADR 012 con datos de aprobación reales (no hay serie) |
+| Brazo calibrado sin dato 1916–1960: los `Coefficients` legacy no reciben señal del objetivo macro y desbordan en modo anual | Excluirlos del vector cuando macro está activo, o dar al modo anual su propio grupo de coeficientes |
+| Régimen: 0 % de acierto cuando la ventana arranca en golpe o democracia restringida | El modelo persiste el régimen inicial; falta un mecanismo de transición endógeno (ADR 011 solo lo tiene por calendario) |
+| Holdout sin tipo de cambio mensual antes de 1992 | Serie anual/mensual 1960–1991 (script local o mirror), interpolada como se hizo con inflación |
+| Fase 4 con Ollama y APIs oficiales: bloqueadas también desde la sesión en la nube | Correr `scripts/fase4_ollama.sh` y `scripts/fetch_argentina_local.py` desde una red sin proxy |
+
+Estos resultados describen el comportamiento de República Artificial calibrada con datos de
+Argentina; no son evidencia sobre lo que hubiera pasado.

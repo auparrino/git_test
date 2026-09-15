@@ -197,6 +197,25 @@ crece con el descontento y la desconfianza — el único mecanismo por el que pu
 "Notas de implementación", para lo medido y lo que sigue pendiente). Ejemplo:
 `republica run --country argentina --start 2019-12 --months 48 --fx-regime auto`.
 
+Segunda ronda (ADR 012 → 014). El motor ganó un bloque macro con régimen detrás de un flag
+(expectativas con persistencia que sube con la inflación pasada, señoreaje sobre demanda de dinero,
+régimen cambiario efectivo con salida forzada del `peg`, balance de pagos): con él, la hiperinflación
+desde 1988-06 y la salida de la convertibilidad desde 1998-01 son alcanzables sin forzarlas (tests de
+`docs/ADR_012_argentine_macro.md` §7). Al recalibrar sobre 1992–2023 con holdout 1983–1991 y pérdida de
+cola pesada se descubrió que la función objetivo premiaba las corridas que terminaban antes del horizonte
+(`a5_macro`, descartada y documentada); corregida, `a5b_macro` queda a la par de persistencia en train y
+en holdout mejora mucho a Aurora y a la calibración anterior, pero sigue detrás de persistencia. La
+revalidación V1–V4 (`a6_macro`, 50 semillas) cumple solo V2 (default/colapso 1998–2002: 56 %); en
+2019-12→2023 ninguna semilla llega a la elección porque el modelo colapsa antes (mediana mes 25), así
+que la pregunta "¿gana LLA?" sigue sin denominador. El backtest rodante 1916–2022 (107 orígenes × 3
+horizontes × 30 semillas × 2 brazos, 8 min) dice en qué condiciones el modelo predice: la calibración
+solo mejora la magnitud de la inflación (+25 pp de acierto), el régimen se acierta 95 % si la ventana
+arranca en democracia y 0 % si arranca en golpe (el modelo persiste el régimen inicial), y la
+dispersión entre semillas correlaciona con el error (Spearman 0,43: sabe cuándo no sabe). Detalle y
+lo que no se puede concluir: [`docs/ADR_014_rolling_backtest.md`](docs/ADR_014_rolling_backtest.md),
+[`docs/CALIBRATION_LOG.md`](docs/CALIBRATION_LOG.md) y
+[`data/countries/argentina/backtest/b1_a5b/report.md`](data/countries/argentina/backtest/b1_a5b/report.md).
+
 ## Lo que viene
 
 - **Fase 9, lo que falta** ([`ADR_009`](docs/ADR_009_surrogate_ui.md), resultados en
