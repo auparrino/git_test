@@ -154,6 +154,26 @@ interesante: bajar la durabilidad de todos los bienes no impide que aparezca din
 es que no exista ningún bien sin utilidad directa.
 [`experiments/results/core_hito1/main/report.md`](experiments/results/core_hito1/main/report.md).
 
+## Proyecto paralelo: Argentina
+
+Aurora es el laboratorio; Argentina es el banco de pruebas contra la realidad. Un "paquete de país"
+(`data/countries/argentina/`) sobre el mismo motor, con reglas de honestidad estrictas: ningún número
+histórico se inventa, cada serie tiene URL, licencia, hash y grado de confianza, y lo que no se pudo
+descargar queda como faltante con un script para cargarlo desde tu máquina.
+
+Lo que ya hay: 23 series reales (PIB per cápita desde 1820 vía Maddison; Banco Mundial 1961+; inflación
+anual enlazada 1915–2023; IPC, dólar oficial y blue, reservas, tasa, salario real, desempleo, pobreza y
+deuda mensuales desde los 90 y 2000 vía snapshots públicos del INDEC, BCRA y MECON; V-Dem 1789–2025) con
+cruces de consistencia documentados; y una cronología política 1810–2023 (217 eventos, régimen por año
+cruzado con V-Dem con 16,9 % de desacuerdo argumentado, 14 elecciones con escrutinios descargados,
+partidos por época, provincias con censo 2022) verificada por un revisor independiente que dejó por
+escrito lo que sigue sin fuente. Plan y diseño: [`docs/PLAN_ARGENTINA.md`](docs/PLAN_ARGENTINA.md),
+[`docs/ADR_011_country_pack_argentina.md`](docs/ADR_011_country_pack_argentina.md).
+
+En curso: el paquete de país (estado inicial por fecha, modo de régimen con golpes y dictaduras, shocks
+históricos, sector externo bimonetario con default y FMI), la calibración con período de holdout y tres
+validaciones con hipótesis registradas antes de correr (1988→1990, 1998→2002, 2016→2023).
+
 ## Lo que viene
 
 - **Fase 9, lo que falta** ([`ADR_009`](docs/ADR_009_surrogate_ui.md), resultados en
