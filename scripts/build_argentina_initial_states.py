@@ -409,9 +409,7 @@ def build_entry(date: str, aurora: dict[str, float]) -> dict[str, Any]:
         "fiscal_balance": rule_nearest_direct(
             y, m, fiscal, aurora["fiscal_balance"], "fiscal_balance", max_months=12
         ),
-        "poverty": rule_nearest_direct(
-            y, m, poverty, aurora["poverty"], "poverty", max_months=12
-        ),
+        "poverty": rule_nearest_direct(y, m, poverty, aurora["poverty"], "poverty", max_months=12),
         "government_approval": rule_government_approval(date, aurora["government_approval"]),
         "institutional_confidence": rule_vdem_scaled(
             y,

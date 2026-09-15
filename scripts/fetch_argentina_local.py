@@ -19,6 +19,7 @@ función fue escrita contra la documentación pública de cada API al 2026-09,
 pero conviene revisar el JSON de respuesta la primera vez que se corre, por si
 alguna API cambió de forma.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -35,9 +36,7 @@ BCRA_CAMBIARIAS = (
     "https://api.bcra.gob.ar/estadisticascambiarias/v1.0/Cotizaciones/{moneda}"
     "?fechadesde={desde}&fechahasta={hasta}&limit=5000"
 )
-MECON_DEUDA = (
-    "https://www.argentina.gob.ar/sites/default/files/deuda_publica_{dd}-{mm}-{yyyy}.xlsx"
-)
+MECON_DEUDA = "https://www.argentina.gob.ar/sites/default/files/deuda_publica_{dd}-{mm}-{yyyy}.xlsx"
 # Microdatos EPH, series historicas (sin API, hay que descargar a mano):
 INDEC_EPH_BASE = "https://www.indec.gob.ar/ftp/cuadros/sociedad/"
 
@@ -68,12 +67,14 @@ def fetch_inflation_deflator_annual():
         if entry.get("value") is None:
             continue
         year = int(entry["date"])
-        rows.append((
-            f"{year:04d}-01-01",
-            float(entry["value"]),
-            "% anual (deflactor del PIB, World Bank NY.GDP.DEFL.KD.ZG)",
-            "wb_inflation_deflator",
-        ))
+        rows.append(
+            (
+                f"{year:04d}-01-01",
+                float(entry["value"]),
+                "% anual (deflactor del PIB, World Bank NY.GDP.DEFL.KD.ZG)",
+                "wb_inflation_deflator",
+            )
+        )
     _write_tidy(OUT_DIR / "inflation_deflator_annual.csv", rows)
 
 
@@ -96,17 +97,21 @@ def fetch_exchange_rate_annual_pre1992():
     data = r.json()
     rows = []
     for det in data.get("results", {}).get("detalle", []):
-        rows.append((
-            det["fecha"][:7] + "-01",
-            det["tipoCotizacion"],
-            "ARS/USD (BCRA cotizaciones historicas)",
-            "bcra_cambiarias_pre1992",
-        ))
+        rows.append(
+            (
+                det["fecha"][:7] + "-01",
+                det["tipoCotizacion"],
+                "ARS/USD (BCRA cotizaciones historicas)",
+                "bcra_cambiarias_pre1992",
+            )
+        )
     if not rows:
-        print("BCRA solo publica cotizaciones desde ~1992 vía esta API; para 1810-1991 "
-              "hace falta digitalizar series históricas (CEPAL, 'Series históricas del "
-              "Banco Central', o Della Paolera & Taylor 'Straining at the Anchor'). "
-              "No se escribe ningún archivo -- no hay endpoint oficial descargable.")
+        print(
+            "BCRA solo publica cotizaciones desde ~1992 vía esta API; para 1810-1991 "
+            "hace falta digitalizar series históricas (CEPAL, 'Series históricas del "
+            "Banco Central', o Della Paolera & Taylor 'Straining at the Anchor'). "
+            "No se escribe ningún archivo -- no hay endpoint oficial descargable."
+        )
         return
     _write_tidy(OUT_DIR / "exchange_rate_annual.csv", rows)
 
@@ -118,10 +123,12 @@ def fetch_unemployment_pre2003():
     históricos de INDEC, sin API; hay que descargar los cuadros XLS de
     'Series históricas EPH puntual' a mano.
     """
-    print("La EPH puntual (1974-2003) no tiene API: descargar manualmente los cuadros "
-          "de 'Mercado de trabajo. Principales indicadores' en "
-          f"{INDEC_EPH_BASE} y normalizar a mano. No hay endpoint que este script "
-          "pueda pegarle automáticamente.")
+    print(
+        "La EPH puntual (1974-2003) no tiene API: descargar manualmente los cuadros "
+        "de 'Mercado de trabajo. Principales indicadores' en "
+        f"{INDEC_EPH_BASE} y normalizar a mano. No hay endpoint que este script "
+        "pueda pegarle automáticamente."
+    )
 
 
 def fetch_datos_gob_ar_series(series_id: str, out_name: str, unit: str, source_id: str):
@@ -157,9 +164,11 @@ def fetch_public_debt_breakdown():
     r.raise_for_status()
     xls = pd.ExcelFile(io.BytesIO(r.content))
     print("Hojas disponibles:", xls.sheet_names)
-    print("Buscar la hoja 'A.2.5' (o el nombre vigente) y parsear a mano; "
-          "el formato del Excel cambia de tanto en tanto. Repetir por cada "
-          "fecha de publicación (trimestral) para tener la serie completa.")
+    print(
+        "Buscar la hoja 'A.2.5' (o el nombre vigente) y parsear a mano; "
+        "el formato del Excel cambia de tanto en tanto. Repetir por cada "
+        "fecha de publicación (trimestral) para tener la serie completa."
+    )
 
 
 SERIES = {

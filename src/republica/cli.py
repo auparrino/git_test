@@ -228,9 +228,7 @@ def run(
     ] = None,
     start: Annotated[
         str | None,
-        typer.Option(
-            "--start", help="Fecha de arranque YYYY-MM (obligatoria con --country)."
-        ),
+        typer.Option("--start", help="Fecha de arranque YYYY-MM (obligatoria con --country)."),
     ] = None,
     annual_mode: Annotated[
         bool | None,

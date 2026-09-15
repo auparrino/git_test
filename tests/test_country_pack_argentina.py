@@ -103,9 +103,7 @@ def test_cli_run_with_country_argentina(tmp_path: Path) -> None:
 #: nuevos de A2 (`regime_calendar`/`bimonetary_coefficients`/
 #: `historical_exogenous`) quedan en su default `None`: este test verifica
 #: que agregarlos a `run()` no cambio un solo byte del camino existente.
-GOLDEN_SEED7_NO_COUNTRY_SHA256 = (
-    "b4bbfe09e6bb0a6b0b7e66306e0dc99b664592411a613d62947581b342e5013a"
-)
+GOLDEN_SEED7_NO_COUNTRY_SHA256 = "b4bbfe09e6bb0a6b0b7e66306e0dc99b664592411a613d62947581b342e5013a"
 
 
 def _strip_config_hash(jsonl_text: str) -> str:
@@ -252,9 +250,7 @@ def test_elections_allowed_and_congress_active_by_mode() -> None:
 
 def _unstable_state() -> WorldState:
     base = load_country().initial_state
-    return base.model_copy(
-        update={"political_stability": 10.0, "institutional_confidence": 10.0}
-    )
+    return base.model_copy(update={"political_stability": 10.0, "institutional_confidence": 10.0})
 
 
 def test_endogenous_coup_never_fires_with_zero_propensity() -> None:
@@ -312,9 +308,7 @@ def _aurora_with_argentina_shocks():
 
 def test_sovereign_default_forced_stays_active_24_months() -> None:
     country = _aurora_with_argentina_shocks()
-    history = run(
-        seed=5, months=30, country=country, forced_shocks={1: ["sovereign_default"]}
-    )
+    history = run(seed=5, months=30, country=country, forced_shocks={1: ["sovereign_default"]})
     active_by_month = {r.month_index: r.shocks_active for r in history.records}
     new_by_month = {r.month_index: r.shocks_new for r in history.records}
     # `duration=24`: activo (en `shocks_active`) los meses 1-23; en el mes 24
@@ -435,7 +429,11 @@ def test_annual_mode_runs_fast_and_produces_50_records_with_regime_mode() -> Non
     policy_rule = PassivePolicy(country.default_policy, country.structure.r_neutral, rate_range)
     t0 = time.perf_counter()
     history = run_annual(
-        seed=1, years=50, country=country, policy_rule=policy_rule, start_year=1880,
+        seed=1,
+        years=50,
+        country=country,
+        policy_rule=policy_rule,
+        start_year=1880,
         annual_regime=regime_lookup,
     )
     elapsed = time.perf_counter() - t0
@@ -452,7 +450,11 @@ def test_annual_mode_covers_1930_coup_as_dictatorship() -> None:
     rate_range = country.policy_ranges["interest_rate_target"]
     policy_rule = PassivePolicy(country.default_policy, country.structure.r_neutral, rate_range)
     history = run_annual(
-        seed=1, years=6, country=country, policy_rule=policy_rule, start_year=1928,
+        seed=1,
+        years=6,
+        country=country,
+        policy_rule=policy_rule,
+        start_year=1928,
         annual_regime=regime_lookup,
     )
     by_year = {r.year: r.regime_mode for r in history.records}

@@ -22,12 +22,27 @@ from pydantic import BaseModel, Field, ValidationError
 POLITICS_DIR = Path(__file__).resolve().parents[1] / "data" / "countries" / "argentina" / "politics"
 
 EVENT_KINDS = {
-    "presidency_start", "presidency_end", "coup", "election_presidential",
-    "election_legislative", "constitutional_reform", "default", "imf_agreement",
-    "hyperinflation", "crisis_banking", "war", "pandemic", "currency_regime_change", "other",
+    "presidency_start",
+    "presidency_end",
+    "coup",
+    "election_presidential",
+    "election_legislative",
+    "constitutional_reform",
+    "default",
+    "imf_agreement",
+    "hyperinflation",
+    "crisis_banking",
+    "war",
+    "pandemic",
+    "currency_regime_change",
+    "other",
 }
 REGIME_MODES = {
-    "democracy", "restricted_democracy", "coup", "dictatorship", "transition",
+    "democracy",
+    "restricted_democracy",
+    "coup",
+    "dictatorship",
+    "transition",
     "civil_war_or_state_building",
 }
 HOW_SELECTED_VALUES = {"election", "coup", "succession", "congress", "junta"}
@@ -35,8 +50,13 @@ CONFIDENCE_VALUES = {"high", "medium", "low"}
 DATE_PRECISION_VALUES = {"day", "month", "year"}
 
 PARTY_ERAS = [
-    "1916-1930", "1946-1955", "1958-1966", "1973-1976",
-    "1983-2001", "2003-2015", "2015-2023",
+    "1916-1930",
+    "1946-1955",
+    "1958-1966",
+    "1973-1976",
+    "1983-2001",
+    "2003-2015",
+    "2015-2023",
 ]
 
 
@@ -49,6 +69,7 @@ def read_csv(name: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 # events.csv
 # ---------------------------------------------------------------------------
+
 
 class EventModel(BaseModel):
     date: date
@@ -121,6 +142,7 @@ def test_every_presidency_start_has_matching_end_or_is_current() -> None:
 # regimes.csv
 # ---------------------------------------------------------------------------
 
+
 def test_regimes_csv_one_row_per_year_1810_2023() -> None:
     rows = read_csv("regimes.csv")
     years = [int(r["year"]) for r in rows]
@@ -147,7 +169,11 @@ def test_regimes_csv_values_well_formed() -> None:
 
 VDEM_CSV = (
     Path(__file__).resolve().parents[1]
-    / "data" / "countries" / "argentina" / "history" / "vdem_argentina.csv"
+    / "data"
+    / "countries"
+    / "argentina"
+    / "history"
+    / "vdem_argentina.csv"
 )
 
 # Years for which V-Dem carries *some* usable regime signal. Before 1900
@@ -177,18 +203,10 @@ def _vdem_years_with_regime_signal() -> set[int]:
 def test_regimes_vdem_regime_filled_for_every_year_vdem_covers() -> None:
     rows = read_csv("regimes.csv")
     covered = _vdem_years_with_regime_signal()
-    missing = [
-        int(r["year"])
-        for r in rows
-        if int(r["year"]) in covered and not r["vdem_regime"]
-    ]
+    missing = [int(r["year"]) for r in rows if int(r["year"]) in covered and not r["vdem_regime"]]
     assert not missing, f"vdem_regime empty for years V-Dem covers: {missing}"
     # and nothing is filled in where V-Dem has nothing to say
-    invented = [
-        int(r["year"])
-        for r in rows
-        if r["vdem_regime"] and int(r["year"]) not in covered
-    ]
+    invented = [int(r["year"]) for r in rows if r["vdem_regime"] and int(r["year"]) not in covered]
     assert not invented, f"vdem_regime filled where V-Dem has no value: {invented}"
     # the pre-1900 fills must declare that they are derived, not native
     for r in rows:
@@ -211,8 +229,7 @@ def test_regime_mode_vs_vdem_disagreement_rate_1900_2023(capsys) -> None:
     what V-Dem calls an electoral autocracy (elections held, not free or fair).
     """
     rows = [
-        r for r in read_csv("regimes.csv")
-        if r["vdem_regime"] and 1900 <= int(r["year"]) <= 2023
+        r for r in read_csv("regimes.csv") if r["vdem_regime"] and 1900 <= int(r["year"]) <= 2023
     ]
     assert len(rows) == 124, "expected full 1900-2023 coverage"
     disagreeing = [
@@ -228,8 +245,7 @@ def test_regime_mode_vs_vdem_disagreement_rate_1900_2023(capsys) -> None:
             f"years: {disagreeing}"
         )
     assert rate < MAX_DISAGREEMENT_RATE, (
-        f"disagreement rate {rate:.1%} >= {MAX_DISAGREEMENT_RATE:.0%}; "
-        f"years: {disagreeing}"
+        f"disagreement rate {rate:.1%} >= {MAX_DISAGREEMENT_RATE:.0%}; years: {disagreeing}"
     )
 
 
@@ -237,14 +253,21 @@ def test_regime_mode_vs_vdem_disagreement_rate_1900_2023(capsys) -> None:
 # provinces.csv / regions.csv
 # ---------------------------------------------------------------------------
 
+
 def test_provinces_csv_has_24_jurisdictions() -> None:
     rows = read_csv("provinces.csv")
     assert len(rows) == 24
     ids = [r["id"] for r in rows]
     assert len(ids) == len(set(ids))
     valid_regions = {
-        "CABA", "GBA", "Pampeana", "Córdoba–Santa Fe",
-        "NOA", "NEA", "Cuyo", "Patagonia",
+        "CABA",
+        "GBA",
+        "Pampeana",
+        "Córdoba–Santa Fe",
+        "NOA",
+        "NEA",
+        "Cuyo",
+        "Patagonia",
     }
     for r in rows:
         assert r["region"] in valid_regions, r
@@ -273,6 +296,7 @@ def test_regions_csv_aggregates_provinces() -> None:
 # shocks_calendar.csv
 # ---------------------------------------------------------------------------
 
+
 def test_shocks_calendar_csv_well_formed() -> None:
     rows = read_csv("shocks_calendar.csv")
     assert len(rows) >= 10
@@ -287,6 +311,7 @@ def test_shocks_calendar_csv_well_formed() -> None:
 # ---------------------------------------------------------------------------
 # parties/<era>.json — pydantic validation
 # ---------------------------------------------------------------------------
+
 
 class PartyModel(BaseModel):
     id: str
@@ -317,8 +342,13 @@ def test_party_era_files_exist_and_validate(era: str) -> None:
 
 def test_party_era_invalid_axis_is_rejected() -> None:
     bad = {
-        "id": "x", "name": "x", "economic": 5.0, "social": 0.0,
-        "assessment": "analyst", "federalism": 0.0, "in_government": False,
+        "id": "x",
+        "name": "x",
+        "economic": 5.0,
+        "social": 0.0,
+        "assessment": "analyst",
+        "federalism": 0.0,
+        "in_government": False,
     }
     with pytest.raises(ValidationError):
         PartyModel(**bad)
@@ -327,6 +357,7 @@ def test_party_era_invalid_axis_is_rejected() -> None:
 # ---------------------------------------------------------------------------
 # README / PENDING_FACTCHECK presence
 # ---------------------------------------------------------------------------
+
 
 def test_readme_and_pending_factcheck_exist() -> None:
     assert (POLITICS_DIR / "README.md").exists()

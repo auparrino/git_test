@@ -1463,9 +1463,7 @@ def run(
             regime_result = step_regime(regime_state, sim.state, sim.rng, forced_coup, propensity)
             sim.state = regime_effects_on_state(sim.state, regime_result.repression)
             sim.congress_enabled = base_congress_enabled and congress_active(regime_result.mode)
-            sim.elections_enabled = base_elections_enabled and elections_allowed(
-                regime_result.mode
-            )
+            sim.elections_enabled = base_elections_enabled and elections_allowed(regime_result.mode)
 
         advance_month(sim)
 

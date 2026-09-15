@@ -84,9 +84,7 @@ def _parse_start(start: str) -> tuple[int, int]:
         raise CountryPackError(f"--start invalido: {start!r} (formato esperado YYYY-MM).") from exc
 
 
-def _select_initial_state(
-    initial_states: dict[str, dict], start: str
-) -> dict[str, float]:
+def _select_initial_state(initial_states: dict[str, dict], start: str) -> dict[str, float]:
     entry = initial_states.get(start)
     if entry is None:
         raise CountryPackError(
@@ -217,9 +215,7 @@ def load_country_pack(
         )
     y, m = _parse_start(start)
     flat_initial_state = _select_initial_state(raw_country["initial_states"], start)
-    term_length, reelection_allowed = term_length_months_for(
-        pack_dir / "constitutions.csv", start
-    )
+    term_length, reelection_allowed = term_length_months_for(pack_dir / "constitutions.csv", start)
 
     effective_country_json = dict(raw_country)
     effective_country_json.pop("initial_states", None)

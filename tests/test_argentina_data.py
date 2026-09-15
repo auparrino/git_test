@@ -11,6 +11,7 @@ Reglas verificadas (ver docs/PLAN_ARGENTINA.md §0 y §3):
   - los valores son numéricos (float parseable) en todas las columnas de dato;
   - cada `source_id` usado en algún CSV aparece documentado en SOURCES.md.
 """
+
 from __future__ import annotations
 
 import csv
