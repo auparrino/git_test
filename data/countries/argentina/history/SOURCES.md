@@ -429,6 +429,165 @@ pública, igual criterio que para `thomasriveros/BCRA_Data` en la fuente 10.
 - **trust**: A (snapshot de un indicador oficial del Banco Mundial con código exacto
   declarado; la limitación es cobertura temporal del snapshot, no el origen del dato)
 
+### 18. `thomasriveros/BCRA_Data` — IPC mensual histórico 1943-03 → hoy (variable 27), snapshot 2026-09-15
+
+- **Repo**: `https://github.com/thomasriveros/BCRA_Data` (mismo repo que la fuente 10, clonado de
+  nuevo con `git clone --depth 1` el 2026-09-15).
+- **Commit clonado**: `5a394b232aa583462c1eca0617bf0b7ad15ac25e` (2026-09-15 15:37 UTC).
+- **Origen declarado en el README**: descarga diaria (GitHub Actions) de las 35 "Principales
+  Variables" de la API oficial de Estadísticas Monetarias del BCRA v4.0
+  (`https://api.bcra.gob.ar/estadisticas/v4.0/Monetarias/<id>`; el README enlaza el catálogo
+  oficial `principales-variables-v4.pdf`). La variable **`id_variable=27` "Inflación mensual"**
+  es la serie mensual de variación del IPC que el BCRA publica empalmada hacia atrás con las
+  bases históricas de INDEC (arranca en **1943-03-31**), es decir, el "IPC histórico —
+  empalme" que `coverage.md` buscaba en `datos.gob.ar` (bloqueado), servido por el BCRA.
+- **Licencia**: no hay `LICENSE` en el repo; el dato de origen (BCRA/INDEC) es información
+  pública.
+- **Fecha de clonado**: 2026-09-15
+- **sha256** (`data/bcra_monetary.csv`, 26.8 MB, 197.360 observaciones, 36 variables):
+  `f0cf86bce5fc967b32a919817319226e2efba9f84a74f9101fd7cdf7d8dea441`
+- **Extracto crudo guardado en el repo**: `raw/bcra_data/bcra_monetary_id27_inflacion_mensual.csv`
+  (solo las 1002 filas de `id_variable=27`, mismas columnas), sha256
+  `d7ccecc1bd8faad0f6fb76eb00e5a174dc2f45d8cadcd7294ebb0f17f613e0c7`.
+- **Transformación** (`scripts/build_argentina_history_from_mirrors.py`): 1002 observaciones
+  mensuales 1943-03 → 2026-08, **sin ningún mes faltante ni duplicado** (verificado). Fecha
+  `YYYY-MM-último día` → `YYYY-MM-01`. Se tomaron los **647 meses 1943-03 → 1997-01**
+  (anteriores al arranque de `inflation_cpi_monthly.csv`) con `source_id=bcra_data_inflacion_mensual`
+  y se antepusieron, sin modificar el archivo existente, a una copia literal de
+  `inflation_cpi_monthly.csv` (1997-02 → 2026-08, `source_id=jmtelechea_ipc_nacional`
+  preservado) → `inflation_cpi_monthly_linked.csv` (1002 filas, 1943-03 → 2026-08).
+- **Validación del solapamiento** (355 meses 1997-02 → 2026-08, ver `consistency.md` sección
+  8): 1997–2006 diferencia absoluta media **0.023 pp**, ningún mes con más de 0.1 pp (las dos
+  fuentes miden lo mismo); 2007–2015 **0.88 pp** con 104 de 108 meses por encima de 0.1 pp,
+  siempre con el BCRA por debajo — la serie del BCRA reproduce el **IPC oficial de INDEC
+  intervenido** de esos años, mientras que `inflation_cpi_monthly.csv` usa índices
+  provinciales; 2016+ 0.12 pp (los desvíos se concentran en ene–abr 2016, cuando INDEC no
+  publicó IPC nacional). Por eso el tramo 2007–2015 del `_linked` sigue siendo el de
+  jmtelechea (no se pisa el archivo base) y el tramo BCRA es solo 1943–1997-01.
+- **También verificado en este snapshot, sin generar archivo nuevo**: `id 5` tipo de cambio
+  mayorista de referencia Com. A3500 (2002-03 →) contra `exchange_rate_official_monthly.csv`
+  (`consistency.md` sección 10, diferencia media 0.17 %); `id 1` reservas e `id 7` BADLAR
+  contra `reserves_monthly.csv`/`policy_rate_monthly.csv` (idénticos salvo la revisión del
+  último mes). La **tasa de política monetaria** oficial (`id 160`, 2015-12 → 2025-07) figura
+  en el catálogo `data/bcra_all_variables.csv` del mirror pero **no** en `bcra_monetary.csv`
+  (el mirror solo replica la categoría "Principales Variables"), así que no se pudo cargar.
+  No se usó `id 28` "Inflación interanual" (redundante con la composición de `id 27`).
+- **source_id**: `bcra_data_inflacion_mensual` (1943-03 → 1997-01) / `jmtelechea_ipc_nacional`
+  (1997-02 →, reutilizado)
+- **trust**: A para el tramo BCRA (serie oficial publicada por el BCRA con id de variable
+  exacto; la limitación conocida es que 2007–2015 en la serie del BCRA es el IPC oficial de la
+  época, tramo que este archivo **no** toma del BCRA); el archivo `_linked` en conjunto es B
+  (empalme de dos fuentes con método documentado).
+
+### 19. `argendatafundar/data` — pobreza 1974-2025 (CEDLAS "Indicadores Sociales de Argentina")
+
+- **Repo**: `https://github.com/argendatafundar/data` (Fundar, proyecto Argendata; "salida del
+  proceso semi automatizado de reproductibilidad (ETL)" `https://github.com/argendata/etl`).
+- **Commit clonado**: `90787c25bcfcbcfa134e02b33ce4caa2fa9d9e95` (2026-09-01). ETL:
+  `argendata/etl` commit `82d8a7eefe6bc22376404ddc8f4d2e58108a8bde` (2026-02-12), clonado
+  solo para leer cómo se producen las tablas.
+- **Licencia**: **CC BY-NC-SA 4.0** (`LICENSE` en la raíz del repo de datos y del ETL). Uso no
+  comercial con atribución a Fundar/Argendata y a CEDLAS.
+- **Origen declarado**: `POBREZ/README.md` ("Fuente: Indicadores Sociales de Argentina
+  (CEDLAS)", `https://www.cedlas.econo.unlp.edu.ar/wp/en/estadisticas/isa/`). Los scripts del
+  ETL `scripts/subtopicos/POBREZ/{5,6,23}_ISA_pobreza_monetaria_it{1,2,3}.R` leen con
+  `readxl` las fuentes crudas `R148C0`, `R149C0` y `R150C0`, que
+  `scripts/descarga_fuentes/descarga_cedlas_isa_pobreza.R` baja de
+  `https://www.cedlas.econo.unlp.edu.ar/wp/wp-content/uploads/...` (Excel de CEDLAS); las
+  `aclaraciones` de cada `write_output` describen cada tabla ("Porcentaje de Hogares Pobres.
+  Gran Buenos Aires, 1974-1989"; "Porcentaje de Personas Pobres. Gran Buenos Aires,
+  1988-2003"; "Porcentaje de Personas por debajo de la linea de pobreza y de indigencia. Total
+  Nacional, 1992-2023").
+- **Fecha de clonado**: 2026-09-15
+- **Archivos usados** (copiados tal cual a `raw/argendata/`) y **sha256**:
+  - `POBREZ/ISA_pobreza_monetaria_it1.csv`:
+    `1d00a376e9d89ce72272aac620610486affc5ab28a9aa82a57e8d8cd17a76d53`
+  - `POBREZ/ISA_pobreza_monetaria_it2.csv`:
+    `a94b147762a024eabd331f3bdbf0062ea686e0d854efb3159d88c245512a7539`
+  - `POBREZ/ISA_pobreza_monetaria_it3.csv`:
+    `8786770087fa9d1674f34b916dba3a8d065a7df624d272b8d50d91715f20c0bf`
+- **Convención de fechas** (la que ya usa `poverty.csv`, verificada valor a valor en
+  `consistency.md` sección 11): onda mensual de la EPH puntual → día 1 del mes
+  (`1992-05-01`, `1992-10-01`); semestre de la EPH continua → **cierre** del semestre
+  (1er semestre 2003 → `2003-07-01`, 2do semestre 2003 → `2004-01-01`).
+- **Transformaciones** (`scripts/build_argentina_history_from_mirrors.py`):
+  - `it2`, filas `region=national, survey=EPH-Puntual` (5 ondas: 2001-05, 2001-10, 2002-05,
+    2002-10, 2003-05; % de personas, total aglomerados urbanos, INDEC) → antepuestas, sin
+    modificar el archivo existente, a una copia literal de `poverty.csv` (2003-07 →,
+    `source_id=diloretot_tasa_pobreza` preservado) → **`poverty_linked.csv`** (33 filas,
+    2001-05 → 2026-01). Los 8 semestres nacionales 2003–2006 de la misma tabla coinciden
+    **exactamente** (0.00 pp) con `poverty.csv`, lo que confirma que `it2` reproduce la serie
+    oficial de INDEC y que la convención de fechas es la misma.
+  - `it2`, filas `region=GBA` (EPH puntual mayo/octubre 1988-05 → 2003-05 y EPH continua
+    semestral 2003 S1 → 2006 S2; % de personas, Gran Buenos Aires) → **`poverty_gba.csv`**
+    (39 filas, 1988-05 → 2007-01). Geografía distinta a `poverty.csv` (solo GBA), por eso va
+    en un archivo aparte y no se empalma.
+  - `it1` (% de **hogares** pobres, GBA, 1974–1989, dos estimaciones académicas distintas
+    identificadas por la fuente como `beccaria` y `arakaki`; no coinciden en los años en
+    común, p. ej. 1974: 3.2 vs 4.6) → **`poverty_gba_households_beccaria.csv`** (6 filas:
+    1974–1976, 1980, 1982, 1983) y **`poverty_gba_households_arakaki.csv`** (9 filas: 1974,
+    1980–1982, 1985–1989). Fecha `YYYY-01-01`. Las celdas vacías de la fuente se omiten (no
+    se interpola).
+  - `it3` (serie **homogénea** de CEDLAS, total nacional, 1992-05 → 2025 S1, % de personas,
+    líneas `pobreza` e `indigencia`; celdas vacías 2015 S2 y 2016 S1 omitidas) →
+    **`poverty_cedlas_homogeneous.csv`** e **`indigence_cedlas_homogeneous.csv`** (65 filas
+    cada uno). **No es la serie oficial de INDEC**: en 2003–2006 está ~10 pp por encima de
+    `poverty.csv` (p. ej. 2003 S2: 57.7 vs 47.8) y desde 2016 S2 coincide exactamente con la
+    oficial — consistente con una re-estimación hacia atrás con la canasta/metodología INDEC
+    2016 (ver `consistency.md` sección 11). Se carga como serie separada, sin empalmar.
+- **source_id**: `argendata_cedlas_isa_pobreza_nacional` (`poverty_linked.csv`, tramo
+  2001–2003) / `argendata_cedlas_isa_pobreza_gba` / `argendata_cedlas_isa_pobreza_gba_hogares_beccaria`
+  / `argendata_cedlas_isa_pobreza_gba_hogares_arakaki` / `argendata_cedlas_isa_pobreza_homogenea`
+  / `argendata_cedlas_isa_indigencia_homogenea`
+- **trust**: B (compilación de terceros con origen documentado; el tramo `it2` nacional se
+  validó exacto contra la serie oficial ya cargada, el resto no tiene contraste independiente
+  desde este entorno).
+
+### 20. `argendatafundar/data` — desempleo anual modelado OIT (Banco Mundial `SL.UEM.TOTL.ZS`)
+
+- **Repo / commit / licencia / fecha**: los mismos de la fuente 19.
+- **Origen declarado**: `INFDES/tasa_desempleo_arg_mundial_modelada.json` (`fuentes: R109C0`)
+  y el ETL `scripts/subtopicos/INFDES/11_tasa_desempleo_arg_mundial_modelada.R`
+  (`fuente1 <- "R109C0" # SL.UEM.TOTL.ZS`) / `fuentes_INFDES.R` ("Unemployment, total (% of
+  total labor force) (modeled ILO estimate)"): indicador del Banco Mundial
+  `SL.UEM.TOTL.ZS`, estimación modelada de la OIT, filtrado a `anio > 1990`.
+- **Archivo usado** (copiado a `raw/argendata/`) y **sha256**:
+  `INFDES/tasa_desempleo_arg_mundial_modelada.csv`:
+  `121ae2e840fc3e1589d19411abcc16e416bcc7edde6f6440f4f4aa5bc164ffcf`
+- **Transformación**: filas `geocodigoFundar == "ARG"`; la fuente trae la tasa como proporción
+  (`0.0544`) → ×100 (aritmética decimal exacta) → `5.44` %. **Se excluyó 2023**: el campo
+  `aclaraciones` del `.json` declara que ese valor "fue corregido a mano, utilizando el valor
+  de INDEC" porque la API del Banco Mundial no respondía — no es el dato de la fuente
+  declarada. → `unemployment_annual_modelled.csv` (32 filas, 1991–2022).
+- **Validación**: contra el promedio anual de `unemployment.csv` (EPH trimestral, INDEC) en
+  2004–2022 la diferencia absoluta media es 0.03 pp (0.13 pp incluyendo 2003, único año con
+  1.8 pp de desvío) — ver `consistency.md` sección 12. Es decir, desde 2004 la OIT toma la EPH
+  tal cual; 1991–2002 es el tramo que agrega (modelado, no medido).
+- **source_id**: `argendata_wb_ilo_desempleo`
+- **trust**: B (estimación modelada de un organismo internacional, vía mirror; no es la EPH
+  puntual pedida en `coverage.md`, que sigue faltando).
+
+### 21. Candidatos evaluados y **NO usados** en esta pasada (2026-09-15)
+
+- **`argendatafundar/data` `CRECIM/pib_corriente_constante.csv`** (sha256
+  `7b0fa5da9a10ff2c7ac8428460439a88b5f93d9a4b1e0d4fe08ea2c485c1c28e`): se probó derivar el
+  deflactor del PIB como variación del cociente `pib_corriente / pib_constante`. Contra
+  `gdp_deflator_annual.csv` (Banco Mundial `NY.GDP.DEFL.KD.ZG`) da una diferencia media de
+  **200 pp** en 1961–2006 (1989: −35 % vs 3058 %): las dos columnas están en **dólares** (PIB
+  a US$ corrientes y a US$ constantes), no en pesos, así que el cociente mide tipo de cambio
+  real, no el deflactor. Descartado (`consistency.md` sección 13). El hueco 2007+ del
+  deflactor sigue abierto.
+- **`argendatafundar/data` `PRECIO/3_tasa_de_inflacion_anual_argentina_1935_2022.csv`**
+  (sha256 `89b0d90b66769e551da3550133bde0f58cdcffd985b165d554a58b95e23896dc`, inflación
+  interanual a diciembre 1935–2023): solo se usó como contraste de la composición dic/dic
+  de la serie mensual del BCRA (`consistency.md` sección 9); no se ingirió porque
+  `inflation_cpi_annual_linked.csv` ya cubre 1915+ y la convención (dic/dic vs promedio
+  anual) es distinta.
+- **`argendatafundar/data` `INFDES/tasa_desempleo_eph_niveled.csv`**: desocupación por nivel
+  educativo, pero solo 2003+ (EPH continua) — no cubre 1974–2002.
+- **`argendata/etl`** y **`datos-Fundar/argendata`**: solo código/documentación, sin series
+  adicionales.
+
 ---
 
 ## Resumen de `trust` por serie tidy
@@ -458,10 +617,21 @@ pública, igual criterio que para `thomasriveros/BCRA_Data` en la fuente 10.
 | `inflation_cpi_annual_linked.csv` | `forexcenturies_clio_cpi` / `wb_inflation_cpi` | B / A | 1915–2023 |
 | `exchange_rate_annual.csv` | `forexcenturies_clio_fx` | B | 1879–1951 |
 | `gdp_deflator_annual.csv` | `wb_gdp_deflator_mirror` | A | 1961–2006 |
+| `inflation_cpi_monthly_linked.csv` | `bcra_data_inflacion_mensual` / `jmtelechea_ipc_nacional` | A / B | 1943-03–2026-08 |
+| `poverty_linked.csv` | `argendata_cedlas_isa_pobreza_nacional` / `diloretot_tasa_pobreza` | B / A | 2001-05–2026-01 |
+| `poverty_gba.csv` | `argendata_cedlas_isa_pobreza_gba` | B | 1988-05–2006 S2 |
+| `poverty_gba_households_beccaria.csv` | `argendata_cedlas_isa_pobreza_gba_hogares_beccaria` | B | 1974–1983 (6 años) |
+| `poverty_gba_households_arakaki.csv` | `argendata_cedlas_isa_pobreza_gba_hogares_arakaki` | B | 1974–1989 (9 años) |
+| `poverty_cedlas_homogeneous.csv` | `argendata_cedlas_isa_pobreza_homogenea` | B | 1992-05–2025 S1 |
+| `indigence_cedlas_homogeneous.csv` | `argendata_cedlas_isa_indigencia_homogenea` | B | 1992-05–2025 S1 |
+| `unemployment_annual_modelled.csv` | `argendata_wb_ilo_desempleo` | B | 1991–2022 |
 
 No se generaron (ver `coverage.md` → Faltantes): `inflation_deflator_annual.csv` (reemplazado
-por `gdp_deflator_annual.csv`, ver fuente 17), tipo de cambio 1810–1878 y 1952–1991 (ver
-fuente 16 — el hueco 1952–1991 es un artefacto de escala en la fuente disponible, no una
-fuente no buscada), `inflation_cpi_monthly_linked.csv` (no se encontró ningún mirror en
-GitHub de la serie Cavallo–Bertolotto 1943–2016 ni del IPC histórico INDEC 1943/1960/1974/1988
-citado por `datos.gob.ar`, bloqueado desde este entorno — ver `coverage.md`).
+por `gdp_deflator_annual.csv`, ver fuente 17; la extensión 2007+ sigue pendiente, la API del
+Banco Mundial da 403 también desde la sesión del 2026-09-15 y el único candidato en mirror se
+descartó, fuente 21), tipo de cambio 1810–1878 y 1952–1991 (ver fuente 16 — el hueco 1952–1991
+es un artefacto de escala en la fuente disponible, no una fuente no buscada), desocupación EPH
+puntual 1974–2002 (solo se consiguió el modelado OIT 1991+, fuente 20), tasa de política
+monetaria oficial del BCRA (fuente 18: no está en el mirror), desglose de deuda pública (MECON,
+403). `inflation_cpi_monthly_linked.csv` **sí** se generó en la pasada del 2026-09-15 (fuente
+18: la serie histórica empalmada 1943-03+ la sirve la API del BCRA, id 27, vía mirror).

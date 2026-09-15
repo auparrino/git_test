@@ -14,10 +14,17 @@ Uso:
     uv run --with requests python scripts/fetch_argentina_local.py \
         --series inflation_deflator_annual
 
-No se corrió nunca contra la red real (bloqueada desde este entorno): cada
-función fue escrita contra la documentación pública de cada API al 2026-09,
-pero conviene revisar el JSON de respuesta la primera vez que se corre, por si
-alguna API cambió de forma.
+Cada función fue escrita contra la documentación pública de cada API al
+2026-09. Primera corrida real: 2026-09-15, desde una sesión remota cuyo proxy
+de egreso también bloquea estos hosts (`CONNECT ... 403 Forbidden` para
+`api.worldbank.org`, `api.bcra.gob.ar`, `www.argentina.gob.ar`,
+`apis.datos.gob.ar`; detalle en `history/coverage.md`), así que **ninguna
+función pudo validarse contra un JSON real todavía**: la primera vez que corra
+desde una red sin bloqueo, revisar la forma de la respuesta.
+
+Lo que sí se pudo cubrir ese día salió de mirrors en GitHub (única red
+alcanzable), con `scripts/build_argentina_history_from_mirrors.py`; las
+funciones de acá siguen siendo el camino para la fuente oficial directa.
 """
 
 from __future__ import annotations
@@ -37,6 +44,7 @@ BCRA_CAMBIARIAS = (
     "?fechadesde={desde}&fechahasta={hasta}&limit=5000"
 )
 MECON_DEUDA = "https://www.argentina.gob.ar/sites/default/files/deuda_publica_{dd}-{mm}-{yyyy}.xlsx"
+DATOS_GOB_EPH_PUNTUAL_DATASET = "sspm-tasa-desocupacion-por-aglomerado-1974-2003"
 # Microdatos EPH, series historicas (sin API, hay que descargar a mano):
 INDEC_EPH_BASE = "https://www.indec.gob.ar/ftp/cuadros/sociedad/"
 
@@ -171,11 +179,77 @@ def fetch_public_debt_breakdown():
     )
 
 
+def fetch_bcra_monetarias(ids: tuple[int, ...] = (1, 5, 27, 160)) -> None:
+    """Variables de la API de Estadísticas Monetarias del BCRA (v4.0) por id:
+    1 = reservas internacionales (USD millones, diaria), 5 = tipo de cambio
+    mayorista de referencia Com. A3500 (ARS/USD, diaria), 27 = inflación
+    mensual IPC (% mensual, desde 1943-03), 160 = tasa de política monetaria
+    (% nominal anual, diaria, desde 2015-12; NO está en el mirror
+    `thomasriveros/BCRA_Data`, que solo replica la categoría "Principales
+    Variables"). Los ids salen del catálogo `bcra_all_variables.csv` de ese
+    mirror (snapshot 2026-09-15 del endpoint `/Monetarias`). Escribe un
+    archivo crudo por id en `history/raw/bcra_api/monetarias_<id>.json`; la
+    conversión a tidy mensual (fin de mes / promedio) se hace después con
+    `build_argentina_history_from_mirrors.py` o a mano, mirando el JSON.
+    Paginación: la API v4 devuelve `results` con `detalle` y acepta
+    `?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&limit=...&offset=...`; sin probar.
+    """
+    import json
+
+    import requests
+
+    raw_dir = OUT_DIR / "raw" / "bcra_api"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    for id_variable in ids:
+        url = BCRA_MONETARIAS.format(id_variable=id_variable) + "&desde=1900-01-01"
+        r = requests.get(url, timeout=60)
+        r.raise_for_status()
+        data = r.json()
+        out = raw_dir / f"monetarias_{id_variable}.json"
+        out.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        detalle = data.get("results", {})
+        n = len(detalle.get("detalle", [])) if isinstance(detalle, dict) else len(detalle)
+        print(f"id {id_variable}: {n} observaciones -> {out}")
+
+
+def fetch_eph_puntual_1974_2003() -> None:
+    """Tasa de desocupación por aglomerado 1974-2003 (EPH puntual, ondas
+    mayo/octubre), dataset `sspm-tasa-desocupacion-por-aglomerado-1974-2003`
+    de datos.gob.ar (distribución 343.1, "Semestral"). Se usa la API CKAN
+    (`package_show`) para encontrar la URL de descarga del CSV en vez de
+    adivinar el nombre del archivo, y se guarda crudo en
+    `history/raw/datos_gob_ar/`. No se tabula acá: hay que mirar las
+    columnas (aglomerados) y decidir qué agregado equivale a la serie
+    nacional de `unemployment.csv` (2003+).
+    """
+    import requests
+
+    api = "https://datos.gob.ar/api/3/action/package_show?id=" + DATOS_GOB_EPH_PUNTUAL_DATASET
+    r = requests.get(api, timeout=60)
+    r.raise_for_status()
+    resources = r.json()["result"]["resources"]
+    raw_dir = OUT_DIR / "raw" / "datos_gob_ar"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    for res in resources:
+        url = res.get("url", "")
+        if not url.lower().endswith(".csv"):
+            continue
+        rr = requests.get(url, timeout=120)
+        rr.raise_for_status()
+        out = raw_dir / url.rsplit("/", 1)[-1]
+        out.write_bytes(rr.content)
+        head = rr.content.decode("utf-8", errors="replace").splitlines()[:2]
+        label = res.get("identifier") or res.get("name")
+        print(f"{label}: {out}\n  columnas: {head[0] if head else '?'}")
+
+
 SERIES = {
     "inflation_deflator_annual": fetch_inflation_deflator_annual,
     "exchange_rate_annual": fetch_exchange_rate_annual_pre1992,
     "unemployment_pre2003": fetch_unemployment_pre2003,
     "public_debt_breakdown": fetch_public_debt_breakdown,
+    "bcra_monetarias": fetch_bcra_monetarias,
+    "eph_puntual_1974_2003": fetch_eph_puntual_1974_2003,
 }
 
 

@@ -184,3 +184,118 @@ cruce 7 **no son dos validaciones independientes** de `inflation_cpi_annual.csv`
 misma comparación vista desde dos vendors distintos. La única validación genuinamente
 independiente de `inflation_cpi_annual.csv` (Banco Mundial) que queda en este directorio es
 el cruce 1 (mensual empalmado, jmtelechea, compuesto a anual).
+
+---
+
+## Pasada del 2026-09-15 (mirrors de GitHub; secciones 8–13)
+
+Cruces corridos con `scripts/check_argentina_history_consistency.py --bcra-data <clon> --argendata <clon>`
+(reproducible: lee solo los CSV tidy de este directorio, `raw/` y los dos clones a los
+commits de `SOURCES.md` fuentes 18–19). Ninguno de estos números se usó para ajustar series.
+
+## 8. IPC mensual del BCRA (variable 27) vs `inflation_cpi_monthly.csv` (jmtelechea)
+
+355 meses en común (1997-02 → 2026-08):
+
+| Período | diferencia absoluta media (pp) | máxima (pp) | meses con > 0.1 pp | n |
+|---|---|---|---|---|
+| 1997–2006 | **0.023** | 0.05 (2002-09) | **0** | 119 |
+| 2007–2015 (INDEC intervenido) | **0.881** | 2.39 (2007-08: 2.99 vs 0.60) | 104 | 108 |
+| 2016–2026 | 0.122 | 2.84 (2016-04: 6.24 vs 3.40) | 14 | 128 |
+| Todo | 0.320 | 2.84 | 118 | 355 |
+
+- 1997–2006: las dos fuentes miden lo mismo (dentro del ±0.1 pp pedido, en los 119 meses).
+- 2007–2015: el BCRA está **siempre por debajo** (los seis peores meses del solapamiento
+  completo son 2007-08, 2008-03, 2008-04, 2013-11 y ene–abr 2016): la serie del BCRA es el
+  **IPC oficial de INDEC de la época**, sin corregir; `inflation_cpi_monthly.csv` usa índices
+  provinciales justamente para evitarlo. Es la firma esperada de la intervención de INDEC,
+  ahora sí visible con una fuente oficial (el cruce 1 no la mostraba porque el IPC anual del
+  Banco Mundial ya venía revisado).
+- ene–abr 2016: INDEC no publicó IPC nacional (emergencia estadística); el BCRA usa otra
+  serie para esos meses y jmtelechea otra. Desvío grande pero acotado a 4 meses.
+- **Decisión**: `inflation_cpi_monthly_linked.csv` toma del BCRA solo 1943-03 → 1997-01 y deja
+  1997-02+ idéntico al archivo existente. El empalme (1997-01: 0.5 % BCRA → 1997-02: 0.38 %
+  jmtelechea) no tiene salto de escala.
+
+## 9. IPC mensual del BCRA compuesto a anual (dic/dic) vs series anuales
+
+Componiendo los 12 meses de cada año (`∏(1+r_m) − 1`):
+
+- Contra `PRECIO/3_tasa_de_inflacion_anual_argentina_1935_2022.csv` de argendata
+  ("inflación interanual a diciembre", INDEC): 79 años en común (1944–2022), diferencia
+  absoluta media 2.0 pp, **máxima 21.3 pp en 2013** (argendata 31.9 % vs BCRA 10.7 %). Fuera
+  de 2007–2015 coinciden al décimo (1959: 101.6 vs 101.8; 1975: 335.0 vs 334.9; 1989: 4923.7
+  vs 4928.6): misma serie histórica de INDEC, y otra vez argendata usa un IPC alternativo en
+  2007–2015 y el BCRA el oficial.
+- Contra `inflation_cpi_annual_linked.csv` (Clio Infra 1915–1960 / Banco Mundial 1961+,
+  ambas **promedio anual**, no dic/dic): 80 años, diferencia media 48 pp; 1959: 101.8 (dic/dic)
+  vs 123.6 (promedio); 1989: 4928.6 vs 3046.1; 1990: 1344.5 vs 2078.3; 2023: 211.2 vs 135.4.
+  No es un error: es la misma diferencia de convención señalada en el cruce 1 (promedio anual
+  vs diciembre-contra-diciembre), que se agranda cuando la inflación acelera o desacelera
+  dentro del año. Confirma que la serie mensual 1943+ del BCRA es consistente con las anuales
+  ya cargadas en los episodios extremos, y que **no hay que mezclar** ambas convenciones en la
+  calibración.
+
+## 10. Snapshot BCRA_Data del 2026-09-15 vs series ya cargadas
+
+- **Tipo de cambio mayorista A3500 (variable 5, último dato de cada mes)** vs
+  `exchange_rate_official_monthly.csv` (DiLoretoT, datos.gob.ar `168.1_T_CAMBIOR_D_0_0_26`):
+  295 meses (2002-03 → 2026-09), diferencia porcentual absoluta media **0.17 %**, máxima 4.9 %
+  en 2002-03 (3.00 vs 2.85, primer mes de la serie A3500, que arranca el 4 de marzo de 2002);
+  25 meses por encima de 0.5 %. Es la misma cotización de referencia con distinto día de
+  cierre; no se generó archivo nuevo (el existente ya cubre desde 1992).
+- **Reservas (variable 1, último dato del mes)** vs `reserves_monthly.csv` (misma fuente,
+  snapshot del 2026-09-14): 369 meses idénticos salvo 2026-09 (50.617 → 50.506 USD millones,
+  un día más de datos). **BADLAR (variable 7, promedio mensual)** vs `policy_rate_monthly.csv`:
+  333 meses idénticos salvo 2026-09 (mismo motivo). No se regeneraron.
+- La **tasa de política monetaria** (variable 160 del catálogo, 2015-12 → 2025-07) no está en
+  el archivo de observaciones del mirror; `policy_rate_monthly.csv` sigue siendo BADLAR
+  (proxy declarado).
+
+## 11. Pobreza: CEDLAS ISA (vía argendata) vs `poverty.csv` (INDEC vía datos.gob.ar)
+
+- **Convención de fechas de `poverty.csv`**: los 8 semestres nacionales 2003 S1 → 2006 S2 de
+  `ISA_pobreza_monetaria_it2.csv` (EPH continua, INDEC) coinciden **exactamente** (0.00 pp) con
+  `poverty.csv` cuando el semestre se fecha a su **cierre** (2003 S1 = 54.0 → `2003-07-01`;
+  2003 S2 = 47.8 → `2004-01-01`; … 2006 S2 = 26.9 → `2007-01-01`). Por lo tanto `poverty.csv`
+  está fechado a cierre de semestre (no a inicio), y los archivos nuevos siguen esa convención.
+- **Empalme `poverty_linked.csv`**: 2003-05 (EPH puntual, 54.7 %) → 2003-07 (EPH continua 1er
+  semestre, 54.0 %): sin salto.
+- **Serie homogénea de CEDLAS (`it3`) vs `poverty.csv`**: 25 fechas en común.
+
+  | Período | diferencia absoluta media (pp) | máxima (pp) | n |
+  |---|---|---|---|
+  | 2003–2006 (fechas en común 2004-01 → 2007-01) | **10.4** | 11.1 (2007-01: 26.9 vs 38.0) | 7 |
+  | 2016 S2 → 2025 S1 | **0.00** | 0.00 | 18 |
+
+  La serie homogénea está ~10 pp por encima de la oficial hasta 2015 y es idéntica a la
+  oficial desde 2016 S2: es una re-estimación hacia atrás con la metodología/canasta 2016 de
+  INDEC (que da niveles más altos que la canasta anterior). **No se empalma** con
+  `poverty.csv`; se carga aparte (`poverty_cedlas_homogeneous.csv`) para quien quiera una
+  serie metodológicamente uniforme 1992–2025, con esta advertencia.
+- **GBA vs nacional** (`poverty_gba.csv` vs `poverty_linked.csv`, 13 fechas 2001-05 → 2007-01):
+  diferencia media 2.3 pp, máxima 3.3 pp (2002-05: nacional 53.0 vs GBA 49.7). No deberían
+  coincidir (geografías distintas); el orden de magnitud y la dirección son los esperados
+  (GBA algo por debajo del total de aglomerados).
+- **Hogares 1974–1989 (`it1`)**: dos estimaciones académicas (Beccaria y Arakaki) que no
+  coinciden entre sí en los años en común (1974: 3.2 vs 4.6; 1980: 7.9 vs 7.1; 1982: 23.6 vs
+  21.6) — por eso van en dos archivos, no se promedian ni se elige una.
+
+## 12. Desempleo modelado OIT (anual) vs `unemployment.csv` (EPH trimestral, promedio anual)
+
+18 años con los 4 trimestres de EPH disponibles (2003–2022, faltan 2015–2016 por el apagón
+estadístico): diferencia absoluta media **0.13 pp**; sin 2003 (EPH 17.2 vs OIT 15.4, único año
+con más de 0.2 pp; en 2003 la EPH cambió de puntual a continua a mitad de año) es **0.03 pp**
+y 16 de 17 años están dentro de ±0.1 pp. Es decir, desde 2004 la estimación "modelada" de la
+OIT es la EPH tal cual; lo que `unemployment_annual_modelled.csv` agrega es el tramo
+**1991–2002** (modelado), que no reemplaza a la EPH puntual 1974–2002 (sigue faltando).
+
+## 13. Deflactor implícito de argendata (`CRECIM/pib_corriente_constante.csv`) — descartado
+
+Variación anual de `pib_corriente / pib_constante` (ARG) vs `gdp_deflator_annual.csv`
+(Banco Mundial `NY.GDP.DEFL.KD.ZG`, 1961–2006): 46 años, diferencia absoluta media **200 pp**,
+máxima 3093 pp en 1989 (implícito −35 % vs deflactor oficial 3058 %). Las dos columnas de
+argendata están en **dólares** (ARG 1960 `pib_corriente = 1.59e10`, escala de US$
+corrientes), así que el cociente es un deflactor en dólares (≈ tipo de cambio real), no el
+deflactor en moneda local que pide el indicador. No se usó; el hueco 2007+ del deflactor sigue
+en `coverage.md`.
