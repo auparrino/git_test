@@ -432,3 +432,25 @@ Notas:
 ## 6. Próximo paso concreto
 
 Fase 0 y el arranque de Fase 1: escribir `docs/SPEC_v0.1.md` (variables con valores iniciales y rangos, fórmulas con coeficientes, 8 provincias, 5 partidos, 12 shocks, reglas de turno) y dejarla aprobada antes de implementar. Esa spec se escribe con el modelo de diseño (Fable 5.1 / Opus 5) en plan mode; la implementación de `world/` y los tests con Sonnet 5.
+
+---
+
+## 7. Estado al cierre de la primera ejecución (septiembre 2026)
+
+| Fase | Estado | Evidencia |
+|---|---|---|
+| 0 Scaffold | ✅ | CI con ruff + pytest |
+| 1 Mundo sin IA | ✅ | `SPEC_v0.1.md`, 5 rondas de calibración documentadas, `batch` 300 semillas |
+| 2 Juego humano | ✅ | `play`, 14 dilemas, contrafáctico; **pendiente del usuario: jugar tres partidas** |
+| 3 Actores por reglas + permisos | ✅ | 29 fichas, catálogo, `authorize()`; Revisión 001 cerrada |
+| 4 Agentes Ollama | ✅ código, ⏳ verificación | Todo probado con `fake:*`; **pendiente del usuario: `bench-parse` con Ollama local** |
+| 5 Negociación, Congreso, medios, cohortes | ✅ | Revisión 002 cerrada; regla de audiencia recalibrada |
+| 6 Memoria y elecciones | ✅ | Calibración electoral (lealtad, τ, bono regional) |
+| 7 Evals, trazas, gobernanza | ✅ parcial | 32 casos generados; **pendiente del usuario: 20 casos `author: human`**; Langfuse sin verificar (sin Docker) |
+| 8 Experimentos | ✅ | BC independiente (50×2), regla fiscal (3×3×20), `brain_comparison` sin brazos Ollama |
+| 9 Sustituto, early-warning, regímenes, UI | ✅ con reservas | Revisión 003: acuerdo del sustituto reportado con baseline; inferencia por lote pendiente (34× más lento que reglas) |
+| 10 CPU social | ✅ hito 1 | ADR 010; `core/` con moneda emergente (H1, H2, H4 cumplidas, H3 refutada); hitos 2–5 sin implementar |
+
+Tres revisiones de código independientes (32 hallazgos verificados, todos cerrados salvo los que
+quedaron como tareas explícitas). Suite: 194 tests (188 rápidos). Ningún resultado se corrió contra
+un LLM real: ese es el primer paso del usuario con el repo en su máquina (`docs/OLLAMA_SETUP.md`).
