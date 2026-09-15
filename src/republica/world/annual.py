@@ -105,13 +105,23 @@ def run_annual(
     coeff = country.coefficients
     structure = country.structure
     rng = random.Random(seed)
-    catalog = ShockCatalog.__new__(ShockCatalog)  # se arma abajo si hace falta
-    catalog.defs = []
-    catalog.by_id = {}
-    if shocks_enabled:
-        from republica.world.events import build_catalog
+    # Bug real encontrado por el backtest (ADR 014): con `shocks_enabled=
+    # False` (el default de este modulo) el catalogo se armaba VACIO
+    # (`by_id={}`), y `ShockCatalog.apply_month` busca CUALQUIER shock
+    # activo -- forzado incluido -- en `by_id`: forzar cualquier
+    # `shock_id` (via `forced_shocks`, el mecanismo que el docstring de
+    # esta funcion ya decia que "funciona") tiraba `KeyError` siempre. El
+    # catalogo COMPLETO (`by_id`) se arma siempre, para que
+    # `apply_month` pueda resolver los efectos de un shock FORZADO; solo
+    # `defs` (la lista que `ShockCatalog.roll` sortea para shocks
+    # ALEATORIOS) queda vacia sin `shocks_enabled=True` -- el
+    # comportamiento de "sin aleatorios por default en modo anual" no
+    # cambia, solo se arregla el forzado.
+    from republica.world.events import build_catalog
 
-        catalog = ShockCatalog(build_catalog(country.shocks))
+    catalog = ShockCatalog.__new__(ShockCatalog)
+    catalog.by_id = {d.id: d for d in build_catalog(country.shocks)}
+    catalog.defs = list(catalog.by_id.values()) if shocks_enabled else []
 
     state = country.initial_state
     exo = country.exogenous
