@@ -1,0 +1,67 @@
+[
+  {
+    "id": "ucr",
+    "name": "Unión Cívica Radical",
+    "economic": -0.2,
+    "social": -0.2,
+    "assessment": "analyst",
+    "federalism": 0.0,
+    "seats_share": 0.45,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": true,
+    "notes": "Gobierna 1916-1930 (Yrigoyen, Alvear, Yrigoyen); reformismo político con Estado moderadamente activo."
+  },
+  {
+    "id": "conservadores",
+    "name": "Partido Conservador / partidos provinciales conservadores",
+    "economic": 0.6,
+    "social": 0.6,
+    "assessment": "analyst",
+    "federalism": 0.7,
+    "seats_share": 0.35,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": false,
+    "notes": "Heredero del PAN; bastiones provinciales (Buenos Aires, Córdoba, etc.)."
+  },
+  {
+    "id": "ps",
+    "name": "Partido Socialista",
+    "economic": -0.7,
+    "social": -0.6,
+    "assessment": "analyst",
+    "federalism": -0.2,
+    "seats_share": 0.08,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": false,
+    "notes": "Fuerte en la Capital Federal; primer diputado socialista electo en América (Alfredo Palacios, 1904)."
+  },
+  {
+    "id": "pdp",
+    "name": "Partido Demócrata Progresista",
+    "economic": 0.2,
+    "social": 0.1,
+    "assessment": "analyst",
+    "federalism": 0.5,
+    "seats_share": 0.07,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": false,
+    "notes": "Liberal-conservador, base en Santa Fe (Lisandro de la Torre)."
+  },
+  {
+    "id": "ucr_antipersonalista",
+    "name": "UCR Antipersonalista",
+    "economic": 0.1,
+    "social": -0.1,
+    "assessment": "analyst",
+    "federalism": 0.1,
+    "seats_share": 0.05,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": false,
+    "notes": "Escisión radical alineada con Alvear frente al yrigoyenismo."
+  }
+]

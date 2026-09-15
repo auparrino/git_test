@@ -1,0 +1,67 @@
+[
+  {
+    "id": "cambiemos_jxc",
+    "name": "Cambiemos / Juntos por el Cambio (PRO + UCR + CC)",
+    "economic": 0.6,
+    "social": 0.1,
+    "assessment": "analyst",
+    "federalism": 0.1,
+    "seats_share": 0.36,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": true,
+    "notes": "Gobierna con Macri 2015-2019; pasa a la oposición 2019-2023."
+  },
+  {
+    "id": "fpv_fdt_pj",
+    "name": "Frente para la Victoria / Frente de Todos (PJ-kirchnerismo)",
+    "economic": -0.5,
+    "social": -0.2,
+    "assessment": "analyst",
+    "federalism": -0.1,
+    "seats_share": 0.35,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": false,
+    "notes": "Oposición 2015-2019; gobierna con Alberto Fernández 2019-2023."
+  },
+  {
+    "id": "fit_u",
+    "name": "Frente de Izquierda y de los Trabajadores - Unidad",
+    "economic": -0.9,
+    "social": -0.7,
+    "assessment": "analyst",
+    "federalism": -0.1,
+    "seats_share": 0.03,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": false,
+    "notes": ""
+  },
+  {
+    "id": "uca_otros_2015",
+    "name": "Bloques provinciales y terceras fuerzas (UNA/Massa, Compromiso Federal, etc.)",
+    "economic": 0.0,
+    "social": 0.0,
+    "assessment": "analyst",
+    "federalism": 0.6,
+    "seats_share": 0.2,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": false,
+    "notes": "Fuerzas no alineadas con las dos grandes coaliciones al inicio de la era."
+  },
+  {
+    "id": "lla",
+    "name": "La Libertad Avanza",
+    "economic": 0.95,
+    "social": 0.4,
+    "assessment": "analyst",
+    "federalism": -0.2,
+    "seats_share": 0.0,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": false,
+    "notes": "Fundado en 2021 (Javier Milei); no existía al inicio de la era (2015). Gana la presidencia en 2023, fuera de esta ventana de gobierno."
+  }
+]

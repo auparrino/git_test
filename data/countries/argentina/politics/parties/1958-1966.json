@@ -1,0 +1,67 @@
+[
+  {
+    "id": "ucri",
+    "name": "Unión Cívica Radical Intransigente",
+    "economic": -0.1,
+    "social": -0.1,
+    "assessment": "analyst",
+    "federalism": 0.0,
+    "seats_share": 0.53,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": true,
+    "notes": "Gobierna con Frondizi (1958-1962) apoyado tácitamente por el voto peronista proscripto; luego Guido/Illia."
+  },
+  {
+    "id": "ucrp",
+    "name": "Unión Cívica Radical del Pueblo",
+    "economic": 0.0,
+    "social": -0.2,
+    "assessment": "analyst",
+    "federalism": 0.1,
+    "seats_share": 0.25,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": false,
+    "notes": "Gobierna con Illia desde 1963; ala radical más moderada/antipersonalista."
+  },
+  {
+    "id": "peronismo_proscripto",
+    "name": "Peronismo (proscripto / neoperonismo)",
+    "economic": -0.4,
+    "social": 0.1,
+    "assessment": "analyst",
+    "federalism": -0.1,
+    "seats_share": 0.0,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": false,
+    "notes": "Proscripto para cargos ejecutivos nacionales; compite bajo siglas neoperonistas en algunos distritos."
+  },
+  {
+    "id": "udelpa",
+    "name": "Unión del Pueblo Argentino (UDELPA)",
+    "economic": 0.5,
+    "social": 0.3,
+    "assessment": "analyst",
+    "federalism": 0.0,
+    "seats_share": 0.03,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": false,
+    "notes": "Vehículo electoral de Aramburu en 1963."
+  },
+  {
+    "id": "pdc",
+    "name": "Partido Demócrata Cristiano",
+    "economic": -0.1,
+    "social": 0.4,
+    "assessment": "analyst",
+    "federalism": 0.1,
+    "seats_share": 0.02,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": false,
+    "notes": ""
+  }
+]

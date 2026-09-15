@@ -1,0 +1,67 @@
+[
+  {
+    "id": "ucr",
+    "name": "Unión Cívica Radical",
+    "economic": -0.1,
+    "social": -0.3,
+    "assessment": "analyst",
+    "federalism": 0.0,
+    "seats_share": 0.51,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": true,
+    "notes": "Gobierna con Alfonsín 1983-1989; luego integra la Alianza con De la Rúa en 1999."
+  },
+  {
+    "id": "pj",
+    "name": "Partido Justicialista",
+    "economic": -0.2,
+    "social": 0.1,
+    "assessment": "analyst",
+    "federalism": -0.1,
+    "seats_share": 0.44,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": false,
+    "notes": "Principal oposición en 1983; gobierna con Menem 1989-1999 (giro hacia el mercado en los 90, no reflejado en estos ejes fijados al inicio de la era)."
+  },
+  {
+    "id": "ucede",
+    "name": "Unión del Centro Democrático",
+    "economic": 0.8,
+    "social": 0.3,
+    "assessment": "analyst",
+    "federalism": 0.2,
+    "seats_share": 0.02,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": false,
+    "notes": "Liberal-conservador (Álvaro Alsogaray); referente ideológico de la liberalización de los 90."
+  },
+  {
+    "id": "frepaso",
+    "name": "Frente País Solidario",
+    "economic": -0.5,
+    "social": -0.5,
+    "assessment": "analyst",
+    "federalism": 0.0,
+    "seats_share": 0.0,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": false,
+    "notes": "Surge en 1994-1995 (no existía al inicio de la era, 1983); integra la Alianza con la UCR en 1999."
+  },
+  {
+    "id": "provinciales_1983",
+    "name": "Partidos provinciales (MPN, Bloquismo, Pacto Autonomista Liberal, etc.)",
+    "economic": 0.1,
+    "social": 0.2,
+    "assessment": "analyst",
+    "federalism": 0.9,
+    "seats_share": 0.03,
+    "seats_share_source": "general_knowledge (composicion aproximada de la Camara de Diputados al inicio de la era; no se hallo un archivo descargable con la composicion historica completa del Congreso -- se buscaron repos de legislAr/data_warehouse sin datos consolidados por bloque. Confianza baja: es el campo mas debil de este dataset, prioritario para el revisor.",
+    "seats_share_confidence": "low",
+    "in_government": false,
+    "notes": ""
+  }
+]
