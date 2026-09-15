@@ -59,3 +59,14 @@ def test_cli_viewer_writes_html(tmp_path: Path) -> None:
     result = CliRunner().invoke(app, ["viewer", str(src), "--out", str(tmp_path / "v.html")])
     assert result.exit_code == 0, result.output
     assert (tmp_path / "v.html").read_text(encoding="utf-8").startswith("<title>")
+
+
+def test_side_records_align_with_month_regardless_of_index_base(tmp_path: Path) -> None:
+    history = run(seed=5, months=6, actors_enabled=True)
+    path = tmp_path / "r.jsonl"
+    path.write_text(history.to_jsonl(), encoding="utf-8")
+    data = load_run(path)
+    raw = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    first_action_month = min(int(r["month"]) for r in raw if r.get("kind") == "action")
+    first_with_actions = next(m for m in data["months"] if m["actions"] or m["denied"])
+    assert data["months"].index(first_with_actions) == first_action_month - 1

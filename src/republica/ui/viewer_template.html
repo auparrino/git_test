@@ -95,6 +95,8 @@ h1, h2, h3 { margin: 0; font-family: "Bricolage Grotesque", "IBM Plex Sans", sys
 .topbar .outcome { margin-left: auto; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
 .outcome.survived { background: color-mix(in oklab, var(--good) 16%, var(--surface)); color: var(--good); }
 .outcome.collapse, .outcome.hyperinflation { background: var(--bad-bg); color: var(--bad); }
+.outcome.reelected { background: color-mix(in oklab, var(--good) 16%, var(--surface)); color: var(--good); }
+.outcome.defeated { background: color-mix(in oklab, var(--accent) 14%, var(--surface)); color: var(--accent); }
 .layout { display: grid; grid-template-columns: minmax(0, 7fr) minmax(300px, 5fr); gap: 18px; align-items: start; }
 @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
 
@@ -159,6 +161,13 @@ h1, h2, h3 { margin: 0; font-family: "Bricolage Grotesque", "IBM Plex Sans", sys
 .coh .gap { text-align: right; color: var(--ink-3); }
 .coh .gap.hot { color: var(--bad); }
 .coh-head { display: grid; grid-template-columns: 1fr 90px 46px 70px; gap: 8px; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 4px; }
+.election { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; }
+.election .win { font-family: "Bricolage Grotesque", system-ui, sans-serif; font-weight: 800; font-size: 18px; letter-spacing: -.01em; }
+.election .row { display: grid; grid-template-columns: 1fr 90px 56px 30px; gap: 8px; align-items: center; font-size: 12px; padding: 2px 0; }
+.election .track { height: 6px; background: var(--surface); border-radius: 3px; overflow: hidden; }
+.election .fill { height: 100%; background: var(--s1); }
+.election .fill.win { background: var(--s3); }
+.election .runoff { margin-top: 6px; font-size: 12px; color: var(--ink-2); }
 .vote { display: flex; align-items: center; gap: 10px; font-size: 12.5px; margin-bottom: 6px; }
 .vote .track { flex: 1; height: 8px; background: var(--surface-2); border-radius: 4px; position: relative; overflow: hidden; }
 .vote .fill { height: 100%; background: var(--s3); }
@@ -209,6 +218,14 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
     <div class="section" id="congress-section" hidden>
       <h3>Congreso</h3>
       <div id="votes"></div>
+    </div>
+    <div class="section" id="elec-section" hidden>
+      <h3>Noche electoral</h3>
+      <div class="election" id="election"></div>
+    </div>
+    <div class="section" id="mem-section" hidden>
+      <h3>Lo que los actores van a recordar</h3>
+      <ul class="feed" id="memories"></ul>
     </div>
     <div class="section" id="coh-section" hidden>
       <h3>Cohortes · aprobación y percepción</h3>
@@ -280,7 +297,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
 
   // ---------- header ----------
   $("meta").textContent = `semilla ${RUN.seed ?? "?"} · ${N} meses · ${RUN.config_hash ? RUN.config_hash.slice(0, 8) : ""}`;
-  const oc = $("outcome"); oc.textContent = ({ survived: "Sobrevivió", collapse: "Colapso", hyperinflation: "Hiperinflación" })[RUN.outcome] || RUN.outcome;
+  const oc = $("outcome"); oc.textContent = ({ survived: "Sobrevivió", collapse: "Colapso", hyperinflation: "Hiperinflación", reelected: "Reelegido", defeated: "Derrotado en las urnas" })[RUN.outcome] || RUN.outcome;
   oc.classList.add(RUN.outcome);
 
   // ---------- charts ----------
@@ -371,12 +388,14 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
     const today = $("today"); today.innerHTML = "";
     m.shocks_new.forEach(s => today.insertAdjacentHTML("beforeend", `<span class="chip new">⚡ ${SHOCK_NAMES[s] || s}</span>`));
     m.shocks_active.filter(s => !m.shocks_new.includes(s)).forEach(s => today.insertAdjacentHTML("beforeend", `<span class="chip">${SHOCK_NAMES[s] || s} <span class="mono">(sigue)</span></span>`));
+    const PARTY_NAMES_EV = { frente_federal: "Frente Federal", union_republicana: "Unión Republicana", partido_social: "Partido Social", movimiento_libertad: "Movimiento Libertad", alianza_provincial: "Alianza Provincial" };
     const CONC_N = { restore_transfers: "restaurar transferencias", public_works: "obra pública", wage_bonus: "bono salarial", tax_exemption: "exención impositiva", cabinet_seat: "un ministerio", delay_policy: "postergar la medida" };
     m.events.forEach(e => {
       const parts = String(e).split(":"); const id = parts[0];
       if (id === "agreement_honored") { today.insertAdjacentHTML("beforeend", `<span class="chip">✓ Acuerdo cumplido · ${parts[1] || ""} (${CONC_N[parts[2]] || parts[2] || ""})</span>`); return; }
       if (id === "agreement_broken") { today.insertAdjacentHTML("beforeend", `<span class="chip event">✕ Acuerdo roto por ${parts[3] === "actor" ? parts[1] : "el gobierno"} · ${CONC_N[parts[2]] || parts[2] || ""}</span>`); return; }
       if (id.startsWith("term_end")) return;
+      if (id === "election") { today.insertAdjacentHTML("beforeend", `<span class="chip event">🗳 Elección · gana ${(PARTY_NAMES_EV[parts[1]] || parts[1] || "")}</span>`); return; }
       today.insertAdjacentHTML("beforeend", `<span class="chip event">● ${EVENT_NAMES[id] || e}</span>`);
     });
     if (prev) {
@@ -397,6 +416,25 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
         vb.insertAdjacentHTML("beforeend", `<div class="vote"><span>Ley: ${label}</span><div class="track"><div class="fill ${ok ? "" : "fail"}" style="width:${Math.min(100, yes)}%"></div><div class="thr" style="left:${thr}%"></div></div><span class="mono">${fmt(yes, 0)}/100 ${ok ? "aprobada" : "rechazada"}</span></div><div class="chips" style="margin-bottom:8px">${parties}</div>`);
       });
     } else cs.hidden = true;
+    const PARTY_N = { frente_federal: "Frente Federal", union_republicana: "Unión Republicana", partido_social: "Partido Social", movimiento_libertad: "Movimiento Libertad", alianza_provincial: "Alianza Provincial" };
+    const es = $("elec-section"); const eb = $("election"); eb.innerHTML = "";
+    const el = (m.elections || [])[0];
+    if (el) {
+      es.hidden = false;
+      const fr = el.first_round || {}; const seats = el.seats || {};
+      const order = Object.keys(fr).sort((a, b) => fr[b] - fr[a]);
+      let rows = order.map(pid => `<div class="row"><span>${PARTY_N[pid] || pid}</span><div class="track"><div class="fill ${pid === el.winner ? "win" : ""}" style="width:${Math.min(100, fr[pid] * 2)}%"></div></div><span class="mono">${fmt(fr[pid], 1)} %</span><span class="mono" title="bancas">${seats[pid] ?? "—"}</span></div>`).join("");
+      const outcome = ({ reelected: "reelección", defeated: "derrota del oficialismo" })[el.outcome_type] || el.outcome_type || "";
+      let runoff = "";
+      if (el.runoff) { const rk = Object.keys(el.runoff); runoff = `<div class="runoff">Balotaje: ${rk.map(k => `${PARTY_N[k] || k} <span class="mono">${fmt(el.runoff[k], 1)} %</span>`).join(" vs ")}</div>`; }
+      eb.innerHTML = `<div class="win">Gana ${PARTY_N[el.winner] || el.winner} <span class="tag">${outcome}</span></div><div class="empty" style="margin:2px 0 6px">Primera vuelta · última columna: bancas (100)</div>${rows}${runoff}`;
+    } else es.hidden = true;
+    const ms = $("mem-section"); const ml = $("memories"); ml.innerHTML = "";
+    const mems = (m.memories || []).filter(x => Number(x.importance || 0) >= 0.6);
+    if (mems.length) {
+      ms.hidden = false;
+      mems.forEach(x => { const neg = Number(x.sentiment || 0) < 0; ml.insertAdjacentHTML("beforeend", `<li><span class="bar ${neg ? "oppose" : "support"}" style="height:18px"></span><div><div class="what"><b>${x.owner}</b> recordará: ${x.summary}</div></div></li>`); });
+    } else ms.hidden = true;
     const COH_NAMES = { urban_workers: "Trabajadores urbanos", rural: "Productores rurales", middle_class: "Clase media alta", public_employees: "Empleados públicos", young_professionals: "Jóvenes profesionales", informal: "Informales", retirees: "Jubilados", students: "Estudiantes" };
     const cs2 = $("coh-section"); const cl = $("cohorts"); cl.innerHTML = "";
     const coh = m.cohorts || {};
@@ -457,6 +495,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
     const left = (i / Math.max(1, N - 1) * 100).toFixed(2) + "%";
     if (m.shocks_new.length) marks.insertAdjacentHTML("beforeend", `<span style="left:${left}" title="${m.shocks_new.map(s => SHOCK_NAMES[s] || s).join(", ")}"></span>`);
     const grave = m.events.filter(e => /^(forced_devaluation|government_collapse|collapse|hyperinflation|election|agreement_broken)/.test(String(e)));
+    if ((m.elections || []).length) grave.push("election");
     if (grave.length) marks.insertAdjacentHTML("beforeend", `<span class="ev" style="left:${left}" title="${grave.join(", ")}"></span>`);
   });
   const yrs = [...new Set(M.map(m => (m.date || "").slice(0, 4)))].filter(Boolean);
@@ -487,6 +526,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
     if (ev.target.tagName === "SELECT" || ev.target.tagName === "INPUT") return;
     if (ev.key === "ArrowRight") { stop(); go(cur + 1); } else if (ev.key === "ArrowLeft") { stop(); go(cur - 1); } else if (ev.key === " ") { ev.preventDefault(); play(); }
   });
+  window.__AURORA = { M, go };
   go(0);
 })();
 </script>
