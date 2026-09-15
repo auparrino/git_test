@@ -186,6 +186,17 @@ calibrar— al precio de que las 50 corridas de 2016→2023 terminan en `collaps
 completo, con lo que no se puede concluir, en
 [`data/countries/argentina/validation/a4_main/report.md`](data/countries/argentina/validation/a4_main/report.md).
 
+Desde ADR 013 (A5), el paquete de Argentina también reemplaza los partidos/actores/lealtades
+genéricos de Aurora por tres **épocas** reales cuando `--start` cae dentro de una
+(`data/countries/argentina/eras/{1983-2001,2003-2015,2015-2023}/`, con partidos, ≥25 actores y
+lealtades por cohorte estimadas contra la elección real de apertura de cada una, ±3pp bajo utilidad
+neutra); fuera de las tres, cae a Aurora con aviso. La corrida cambia de época en la elección que
+cruza la frontera, y La Libertad Avanza entra recién en 2021-01 con un término `outsider_bonus` que
+crece con el descontento y la desconfianza — el único mecanismo por el que puede ganar en el modelo
+(ver [`docs/ADR_013_argentine_parties_actors.md`](docs/ADR_013_argentine_parties_actors.md), sección
+"Notas de implementación", para lo medido y lo que sigue pendiente). Ejemplo:
+`republica run --country argentina --start 2019-12 --months 48 --fx-regime auto`.
+
 ## Lo que viene
 
 - **Fase 9, lo que falta** ([`ADR_009`](docs/ADR_009_surrogate_ui.md), resultados en

@@ -20,6 +20,8 @@ import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import yaml
+
 from republica.actors.sheet import ActorSheet, load_actors
 from republica.world.cohorts import Cohort
 from republica.world.config import DEFAULT_DATA_DIR
@@ -66,7 +68,11 @@ def list_eras(country_id: str) -> list[Era]:
     for name, (start_year, end_year, anchor) in KNOWN_ERAS.items():
         d = root / name
         if d.is_dir():
-            out.append(Era(id=name, start_year=start_year, end_year=end_year, dir=d, anchor_election=anchor))
+            out.append(
+                Era(
+                    id=name, start_year=start_year, end_year=end_year, dir=d, anchor_election=anchor
+                )
+            )
     out.sort(key=lambda e: e.start_year)
     return out
 
@@ -100,6 +106,45 @@ def load_era_actors(era: Era) -> dict[str, ActorSheet]:
 
 def era_governance_path(era: Era) -> Path:
     return era.dir / "governance.yaml"
+
+
+def era_governance_overrides(governance_path: Path) -> dict[str, str]:
+    """Convierte `governance.yaml` de una epoca (ADR 013 secc. 1/3: "copia
+    de la de Aurora con ids remapeados") al formato de
+    `--governance-override actor.campo=valor` (`republica.governance.
+    parse_governance_overrides`/`_apply_override`, ADR 007 deliverable 6).
+
+    Es el UNICO mecanismo que ya viaja de punta a punta hasta
+    `republica.governance.load_governance` sin agregar un parametro nuevo a
+    `engine/simulation.py::run`/`new_simulation` (la tarea restringe ese
+    archivo a la unica linea de `era_change`; agregar un `governance_path`
+    ahi para esto violaria esa restriccion -- ver Notas de implementacion).
+    Sin esto, cada actor de una epoca (`gov_buenos_aires`, `party_pj`, etc.,
+    ids que NO existen en `data/governance.yaml` de Aurora) caeria a
+    `Governance._default_governance`: autonomy 5 sin restriccion de
+    `read`/`write`/`execute` -- el opuesto de lo que `governance.yaml` de la
+    epoca (con la MISMA plantilla por rol que Aurora, ADR 007 secc. 6)
+    declara, p.ej. `central_bank` con `autonomy: 2`/`execute: [SET_RATE]`
+    pero `human_approval_required: true`/`max_authority: recommendation_only`
+    (ADR 003 secc. 6.4: "solo recomienda, no fija la tasa")."""
+    raw = yaml.safe_load(governance_path.read_text(encoding="utf-8")) or {}
+    overrides: dict[str, str] = {}
+    for actor_id, entry in raw.items():
+        overrides[f"{actor_id}.model"] = str(entry.get("model", "rules"))
+        overrides[f"{actor_id}.autonomy"] = str(entry.get("autonomy", 5))
+        overrides[f"{actor_id}.read"] = ",".join(entry.get("read") or [])
+        overrides[f"{actor_id}.write"] = ",".join(entry.get("write") or [])
+        overrides[f"{actor_id}.execute"] = ",".join(entry.get("execute") or [])
+        overrides[f"{actor_id}.human_approval_required"] = str(
+            bool(entry.get("human_approval_required", False))
+        ).lower()
+        overrides[f"{actor_id}.max_authority"] = str(entry.get("max_authority", "full_catalog"))
+        budget = entry.get("budget") or {}
+        if budget.get("actions_per_turn") is not None:
+            overrides[f"{actor_id}.budget.actions_per_turn"] = str(budget["actions_per_turn"])
+        if budget.get("tokens_per_turn") is not None:
+            overrides[f"{actor_id}.budget.tokens_per_turn"] = str(budget["tokens_per_turn"])
+    return overrides
 
 
 def party_exists(founded: int | str | None, date: str) -> bool:
@@ -350,7 +395,8 @@ def _neutral_shares(
     raw = dict.fromkeys(party_ids, 0.0)
     for c in cohorts:
         util = {
-            pid: v_ideo * (1.0 - abs(c.econ_pref - party_economic[pid])) + v_loy * loyalty[(c.id, pid)]
+            pid: v_ideo * (1.0 - abs(c.econ_pref - party_economic[pid]))
+            + v_loy * loyalty[(c.id, pid)]
             for pid in party_ids
         }
         m = max(util.values())

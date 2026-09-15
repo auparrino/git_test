@@ -97,7 +97,12 @@ LOW_SEED = -0.4
 #: Socialista Popular, FIP, Obrero, Confederacion Nacional De Centro,
 #: Conservador Popular. FREPASO no existe (fundado 1994).
 OPENING_1983 = {
-    "mapped_votes": {"ucr": 7_724_559, "pj": 5_995_402, "ucede": 25_263, "provinciales_1983": 384_302},
+    "mapped_votes": {
+        "ucr": 7_724_559,
+        "pj": 5_995_402,
+        "ucede": 25_263,
+        "provinciales_1983": 384_302,
+    },
     "excluded_votes": 774_981,
     "total_valid_votes": 14_904_507,
 }
@@ -166,9 +171,15 @@ GOVERNANCE_BY_ROLE: dict[str, dict] = {
     "president": {
         "autonomy": 5,
         "read": [
-            "economic_indicators", "monetary_history", "government_announcements",
-            "provincial_finances", "party_polls", "labour_market", "sector",
-            "media_events", "cohort_view",
+            "economic_indicators",
+            "monetary_history",
+            "government_announcements",
+            "provincial_finances",
+            "party_polls",
+            "labour_market",
+            "sector",
+            "media_events",
+            "cohort_view",
         ],
         "write": ["CAMPAIGN", "NO_ACTION", "PROMISE", "PROPOSE_POLICY", "PUBLIC_STATEMENT"],
         "execute": ["ENACT_POLICY", "GRANT_CONCESSION"],
@@ -179,13 +190,24 @@ GOVERNANCE_BY_ROLE: dict[str, dict] = {
     "economy_minister": {
         "autonomy": 5,
         "read": [
-            "economic_indicators", "monetary_history", "government_announcements",
-            "provincial_finances", "party_polls", "labour_market", "sector",
-            "media_events", "cohort_view",
+            "economic_indicators",
+            "monetary_history",
+            "government_announcements",
+            "provincial_finances",
+            "party_polls",
+            "labour_market",
+            "sector",
+            "media_events",
+            "cohort_view",
         ],
         "write": [
-            "NEGOTIATE", "NO_ACTION", "OPPOSE_POLICY", "PROPOSE_POLICY",
-            "PUBLIC_STATEMENT", "RECOMMEND_RATE", "SUPPORT_POLICY",
+            "NEGOTIATE",
+            "NO_ACTION",
+            "OPPOSE_POLICY",
+            "PROPOSE_POLICY",
+            "PUBLIC_STATEMENT",
+            "RECOMMEND_RATE",
+            "SUPPORT_POLICY",
         ],
         "execute": [],
         "human_approval_required": False,
@@ -195,7 +217,13 @@ GOVERNANCE_BY_ROLE: dict[str, dict] = {
     "central_bank": {
         "autonomy": 2,
         "read": ["economic_indicators", "monetary_history", "government_announcements"],
-        "write": ["NO_ACTION", "OPPOSE_POLICY", "PUBLIC_STATEMENT", "RECOMMEND_RATE", "SUPPORT_POLICY"],
+        "write": [
+            "NO_ACTION",
+            "OPPOSE_POLICY",
+            "PUBLIC_STATEMENT",
+            "RECOMMEND_RATE",
+            "SUPPORT_POLICY",
+        ],
         "execute": ["SET_RATE"],
         "human_approval_required": True,
         "max_authority": "recommendation_only",
@@ -205,8 +233,15 @@ GOVERNANCE_BY_ROLE: dict[str, dict] = {
         "autonomy": 5,
         "read": ["economic_indicators", "provincial_finances", "government_announcements"],
         "write": [
-            "BREAK_ALLIANCE", "FORM_ALLIANCE", "LOBBY_CONGRESS", "NEGOTIATE", "NO_ACTION",
-            "OPPOSE_POLICY", "PUBLIC_STATEMENT", "REQUEST_FUNDS", "SUPPORT_POLICY",
+            "BREAK_ALLIANCE",
+            "FORM_ALLIANCE",
+            "LOBBY_CONGRESS",
+            "NEGOTIATE",
+            "NO_ACTION",
+            "OPPOSE_POLICY",
+            "PUBLIC_STATEMENT",
+            "REQUEST_FUNDS",
+            "SUPPORT_POLICY",
         ],
         "execute": [],
         "human_approval_required": False,
@@ -217,8 +252,17 @@ GOVERNANCE_BY_ROLE: dict[str, dict] = {
         "autonomy": 5,
         "read": ["economic_indicators", "party_polls", "government_announcements"],
         "write": [
-            "BREAK_ALLIANCE", "CALL_PROTEST", "CAMPAIGN", "FORM_ALLIANCE", "LOBBY_CONGRESS",
-            "NEGOTIATE", "NO_ACTION", "OPPOSE_POLICY", "PROMISE", "PUBLIC_STATEMENT", "SUPPORT_POLICY",
+            "BREAK_ALLIANCE",
+            "CALL_PROTEST",
+            "CAMPAIGN",
+            "FORM_ALLIANCE",
+            "LOBBY_CONGRESS",
+            "NEGOTIATE",
+            "NO_ACTION",
+            "OPPOSE_POLICY",
+            "PROMISE",
+            "PUBLIC_STATEMENT",
+            "SUPPORT_POLICY",
         ],
         "execute": [],
         "human_approval_required": False,
@@ -229,8 +273,15 @@ GOVERNANCE_BY_ROLE: dict[str, dict] = {
         "autonomy": 5,
         "read": ["economic_indicators", "labour_market", "government_announcements"],
         "write": [
-            "BREAK_ALLIANCE", "CALL_PROTEST", "FORM_ALLIANCE", "LOBBY_CONGRESS", "NEGOTIATE",
-            "NO_ACTION", "OPPOSE_POLICY", "PUBLIC_STATEMENT", "SUPPORT_POLICY",
+            "BREAK_ALLIANCE",
+            "CALL_PROTEST",
+            "FORM_ALLIANCE",
+            "LOBBY_CONGRESS",
+            "NEGOTIATE",
+            "NO_ACTION",
+            "OPPOSE_POLICY",
+            "PUBLIC_STATEMENT",
+            "SUPPORT_POLICY",
         ],
         "execute": ["STRIKE"],
         "human_approval_required": False,
@@ -241,8 +292,14 @@ GOVERNANCE_BY_ROLE: dict[str, dict] = {
         "autonomy": 5,
         "read": ["economic_indicators", "sector", "government_announcements"],
         "write": [
-            "BREAK_ALLIANCE", "FORM_ALLIANCE", "LOBBY_CONGRESS", "NEGOTIATE", "NO_ACTION",
-            "OPPOSE_POLICY", "PUBLIC_STATEMENT", "SUPPORT_POLICY",
+            "BREAK_ALLIANCE",
+            "FORM_ALLIANCE",
+            "LOBBY_CONGRESS",
+            "NEGOTIATE",
+            "NO_ACTION",
+            "OPPOSE_POLICY",
+            "PUBLIC_STATEMENT",
+            "SUPPORT_POLICY",
         ],
         "execute": ["INVEST", "WITHHOLD_INVESTMENT"],
         "human_approval_required": False,
@@ -252,7 +309,14 @@ GOVERNANCE_BY_ROLE: dict[str, dict] = {
     "media": {
         "autonomy": 5,
         "read": ["economic_indicators", "media_events", "government_announcements"],
-        "write": ["CRITICIZE", "ENDORSE", "NO_ACTION", "OPPOSE_POLICY", "PUBLIC_STATEMENT", "SUPPORT_POLICY"],
+        "write": [
+            "CRITICIZE",
+            "ENDORSE",
+            "NO_ACTION",
+            "OPPOSE_POLICY",
+            "PUBLIC_STATEMENT",
+            "SUPPORT_POLICY",
+        ],
         "execute": ["PUBLISH_STORY"],
         "human_approval_required": False,
         "max_authority": "full_catalog",
@@ -261,7 +325,13 @@ GOVERNANCE_BY_ROLE: dict[str, dict] = {
     "social_bloc": {
         "autonomy": 5,
         "read": ["economic_indicators", "cohort_view", "government_announcements"],
-        "write": ["CALL_PROTEST", "NO_ACTION", "OPPOSE_POLICY", "PUBLIC_STATEMENT", "SUPPORT_POLICY"],
+        "write": [
+            "CALL_PROTEST",
+            "NO_ACTION",
+            "OPPOSE_POLICY",
+            "PUBLIC_STATEMENT",
+            "SUPPORT_POLICY",
+        ],
         "execute": [],
         "human_approval_required": False,
         "max_authority": "full_catalog",
@@ -294,7 +364,8 @@ def _governance_entry(role: str) -> dict:
 
 BLOCS = [
     {
-        "id": "bloc_urban_workers", "name": "Bloque de Trabajadores Urbanos",
+        "id": "bloc_urban_workers",
+        "name": "Bloque de Trabajadores Urbanos",
         "ideology": {"economic": -0.7, "social": 0.5, "federalism": 0.1, "institutionalism": 0.3},
         "personality": {"ambition": 0.6, "risk_tolerance": 0.65, "loyalty": 0.7, "pragmatism": 0.5},
         "interests": ["real_wages", "employment", "social_programs"],
@@ -307,7 +378,8 @@ BLOCS = [
         "empleo y programas sociales; poder de movilizacion callejero.",
     },
     {
-        "id": "bloc_rural", "name": "Bloque de Productores Rurales",
+        "id": "bloc_rural",
+        "name": "Bloque de Productores Rurales",
         "ideology": {"economic": 0.5, "social": 0.0, "federalism": 0.6, "institutionalism": 0.5},
         "personality": {"ambition": 0.55, "risk_tolerance": 0.6, "loyalty": 0.5, "pragmatism": 0.6},
         "interests": ["agricultural_exports", "low_taxes"],
@@ -320,9 +392,15 @@ BLOCS = [
         "capacidad de corte de rutas y protesta sectorial.",
     },
     {
-        "id": "bloc_middle_class", "name": "Bloque de Clase Media",
+        "id": "bloc_middle_class",
+        "name": "Bloque de Clase Media",
         "ideology": {"economic": 0.3, "social": 0.1, "federalism": 0.0, "institutionalism": 0.6},
-        "personality": {"ambition": 0.55, "risk_tolerance": 0.45, "loyalty": 0.4, "pragmatism": 0.6},
+        "personality": {
+            "ambition": 0.55,
+            "risk_tolerance": 0.45,
+            "loyalty": 0.4,
+            "pragmatism": 0.6,
+        },
         "interests": ["price_stability", "financial_stability"],
         "influence": {"public": 0.45, "congress": 0.0, "streets": 0.3, "markets": 0.1},
         "assessment_note": (
@@ -333,7 +411,8 @@ BLOCS = [
         "estabilidad cambiaria; voto volatil entre eleccion y eleccion.",
     },
     {
-        "id": "bloc_public_employees", "name": "Bloque de Empleados Publicos",
+        "id": "bloc_public_employees",
+        "name": "Bloque de Empleados Publicos",
         "ideology": {"economic": -0.6, "social": 0.2, "federalism": -0.2, "institutionalism": 0.5},
         "personality": {"ambition": 0.5, "risk_tolerance": 0.4, "loyalty": 0.65, "pragmatism": 0.5},
         "interests": ["public_employment", "real_wages"],
@@ -346,9 +425,15 @@ BLOCS = [
         "capacidad de protesta gremial via ATE.",
     },
     {
-        "id": "bloc_informal", "name": "Bloque de Trabajadores Informales",
+        "id": "bloc_informal",
+        "name": "Bloque de Trabajadores Informales",
         "ideology": {"economic": -0.5, "social": 0.3, "federalism": 0.1, "institutionalism": 0.1},
-        "personality": {"ambition": 0.45, "risk_tolerance": 0.55, "loyalty": 0.55, "pragmatism": 0.45},
+        "personality": {
+            "ambition": 0.45,
+            "risk_tolerance": 0.55,
+            "loyalty": 0.55,
+            "pragmatism": 0.45,
+        },
         "interests": ["employment", "social_programs"],
         "influence": {"public": 0.2, "congress": 0.0, "streets": 0.55, "markets": 0.0},
         "assessment_note": (
@@ -363,22 +448,31 @@ BLOCS = [
 
 UNIONS = [
     {
-        "id": "union_cgt", "name": "Confederacion General del Trabajo",
+        "id": "union_cgt",
+        "name": "Confederacion General del Trabajo",
         "ideology": {"economic": -0.6, "social": 0.3, "federalism": 0.0, "institutionalism": 0.5},
         "personality": {"ambition": 0.6, "risk_tolerance": 0.6, "loyalty": 0.6, "pragmatism": 0.55},
         "interests": ["real_wages", "employment", "social_programs"],
         "influence": {"public": 0.4, "congress": 0.25, "streets": 0.65, "markets": 0.05},
-        "assessment_note": "Central sindical general, historicamente alineada al PJ/peronismo; negociadora pero con alta capacidad de movilizacion callejera.",
+        "assessment_note": "Central sindical general, historicamente alineada al PJ/peronismo; "
+        "negociadora pero con alta capacidad de movilizacion callejera.",
         "bio": "Confederacion General del Trabajo. Central sindical general, negocia paritarias "
         "y moviliza contra ajustes al salario real.",
     },
     {
-        "id": "union_public", "name": "Asociacion de Trabajadores del Estado (ATE)",
+        "id": "union_public",
+        "name": "Asociacion de Trabajadores del Estado (ATE)",
         "ideology": {"economic": -0.7, "social": 0.4, "federalism": -0.1, "institutionalism": 0.4},
-        "personality": {"ambition": 0.55, "risk_tolerance": 0.55, "loyalty": 0.6, "pragmatism": 0.5},
+        "personality": {
+            "ambition": 0.55,
+            "risk_tolerance": 0.55,
+            "loyalty": 0.6,
+            "pragmatism": 0.5,
+        },
         "interests": ["public_employment", "real_wages"],
         "influence": {"public": 0.25, "congress": 0.1, "streets": 0.5, "markets": 0.0},
-        "assessment_note": "Sindicato del empleo publico estatal; defiende planta y salario del Estado, opositor natural a ajustes fiscales via despidos.",
+        "assessment_note": "Sindicato del empleo publico estatal; defiende planta y salario del "
+        "Estado, opositor natural a ajustes fiscales via despidos.",
         "bio": "Asociacion de Trabajadores del Estado. Sindicato estatal, defiende empleo publico "
         "y salario de la administracion nacional y provincial.",
     },
@@ -386,32 +480,43 @@ UNIONS = [
 
 BUSINESS = [
     {
-        "id": "biz_agro", "name": "Sociedad Rural Argentina",
+        "id": "biz_agro",
+        "name": "Sociedad Rural Argentina",
         "ideology": {"economic": 0.7, "social": -0.1, "federalism": 0.4, "institutionalism": 0.5},
         "personality": {"ambition": 0.6, "risk_tolerance": 0.55, "loyalty": 0.5, "pragmatism": 0.5},
         "interests": ["agricultural_exports", "low_taxes"],
         "influence": {"public": 0.3, "congress": 0.15, "streets": 0.2, "markets": 0.2},
-        "assessment_note": "Entidad patronal del agro pampeano; opone retenciones/controles de cambio, favorece apertura exportadora.",
+        "assessment_note": "Entidad patronal del agro pampeano; opone retenciones/controles de "
+        "cambio, favorece apertura exportadora.",
         "bio": "Sociedad Rural Argentina. Representa a los grandes productores agropecuarios, "
         "opositora historica a retenciones y controles de cambio.",
     },
     {
-        "id": "biz_industry", "name": "Union Industrial Argentina",
+        "id": "biz_industry",
+        "name": "Union Industrial Argentina",
         "ideology": {"economic": 0.2, "social": 0.0, "federalism": -0.1, "institutionalism": 0.5},
         "personality": {"ambition": 0.6, "risk_tolerance": 0.5, "loyalty": 0.5, "pragmatism": 0.6},
         "interests": ["industrial_protection", "cheap_credit"],
         "influence": {"public": 0.3, "congress": 0.2, "streets": 0.1, "markets": 0.25},
-        "assessment_note": "Camara fabril nacional; interes en proteccion arancelaria/credito barato, mas heterogenea ideologicamente que el agro exportador.",
+        "assessment_note": "Camara fabril nacional; interes en proteccion arancelaria/credito "
+        "barato, mas heterogenea ideologicamente que el agro exportador.",
         "bio": "Union Industrial Argentina. Camara empresaria de la industria manufacturera, "
         "busca proteccion arancelaria y credito accesible.",
     },
     {
-        "id": "biz_finance", "name": "Asociacion de Bancos de la Argentina (ADEBA)",
+        "id": "biz_finance",
+        "name": "Asociacion de Bancos de la Argentina (ADEBA)",
         "ideology": {"economic": 0.8, "social": 0.1, "federalism": -0.1, "institutionalism": 0.6},
-        "personality": {"ambition": 0.65, "risk_tolerance": 0.6, "loyalty": 0.4, "pragmatism": 0.55},
+        "personality": {
+            "ambition": 0.65,
+            "risk_tolerance": 0.6,
+            "loyalty": 0.4,
+            "pragmatism": 0.55,
+        },
         "interests": ["financial_stability", "cheap_credit"],
         "influence": {"public": 0.15, "congress": 0.15, "streets": 0.0, "markets": 0.55},
-        "assessment_note": "Sector financiero/banca privada de capital nacional; maxima sensibilidad a estabilidad monetaria y riesgo cambiario.",
+        "assessment_note": "Sector financiero/banca privada de capital nacional; maxima "
+        "sensibilidad a estabilidad monetaria y riesgo cambiario.",
         "bio": "Asociacion de bancos privados de capital nacional. Sector financiero, alta "
         "sensibilidad a estabilidad monetaria y riesgo de default.",
     },
@@ -421,29 +526,56 @@ BUSINESS = [
 #: secc. 3) + `media_popular` (Pagina/12 o C5N segun epoca).
 MEDIA_BY_ERA = {
     "1983-2001": {
-        "media_nacional": ("Clarin", "Diario de mayor tirada, linea editorial centrista/establishment; "
-                            "cobertura institucional con creciente peso economico propio."),
-        "media_mercado": ("La Nacion", "Diario liberal-conservador tradicional, linea editorial "
-                           "pro-mercado y critica del intervencionismo estatal."),
-        "media_popular": ("Pagina/12", "Diario de centroizquierda fundado en 1987, cercano a "
-                           "movimientos sociales y critico del ajuste ortodoxo."),
+        "media_nacional": (
+            "Clarin",
+            "Diario de mayor tirada, linea editorial centrista/establishment; "
+            "cobertura institucional con creciente peso economico propio.",
+        ),
+        "media_mercado": (
+            "La Nacion",
+            "Diario liberal-conservador tradicional, linea editorial "
+            "pro-mercado y critica del intervencionismo estatal.",
+        ),
+        "media_popular": (
+            "Pagina/12",
+            "Diario de centroizquierda fundado en 1987, cercano a "
+            "movimientos sociales y critico del ajuste ortodoxo.",
+        ),
     },
     "2003-2015": {
-        "media_mercado": ("Clarin", "Multimedios de mayor alcance del pais; durante el kirchnerismo "
-                           "se convierte en el principal antagonista editorial del gobierno "
-                           "(conflicto por la Ley de Medios de 2009)."),
-        "media_nacional": ("La Nacion", "Diario tradicional centroderecha/institucional, critico del "
-                            "gobierno pero con linea editorial mas moderada que Clarin en este periodo."),
-        "media_popular": ("Pagina/12", "Diario alineado editorialmente con el kirchnerismo, cobertura "
-                           "favorable a las politicas de Nestor y Cristina Fernandez de Kirchner."),
+        "media_mercado": (
+            "Clarin",
+            "Multimedios de mayor alcance del pais; durante el kirchnerismo "
+            "se convierte en el principal antagonista editorial del gobierno "
+            "(conflicto por la Ley de Medios de 2009).",
+        ),
+        "media_nacional": (
+            "La Nacion",
+            "Diario tradicional centroderecha/institucional, critico del "
+            "gobierno pero con linea editorial mas moderada que Clarin en este periodo.",
+        ),
+        "media_popular": (
+            "Pagina/12",
+            "Diario alineado editorialmente con el kirchnerismo, cobertura "
+            "favorable a las politicas de Nestor y Cristina Fernandez de Kirchner.",
+        ),
     },
     "2015-2023": {
-        "media_nacional": ("Clarin", "Multimedios de mayor alcance del pais, linea editorial "
-                            "establishment/centroderecha moderada en este periodo."),
-        "media_mercado": ("La Nacion", "Diario liberal-conservador, linea editorial pro-mercado, "
-                           "favorable a Cambiemos/Juntos por el Cambio."),
-        "media_popular": ("C5N", "Senal de noticias de linea editorial cercana al kirchnerismo/Frente "
-                           "de Todos, contrapeso de la agenda de Clarin/La Nacion en este periodo."),
+        "media_nacional": (
+            "Clarin",
+            "Multimedios de mayor alcance del pais, linea editorial "
+            "establishment/centroderecha moderada en este periodo.",
+        ),
+        "media_mercado": (
+            "La Nacion",
+            "Diario liberal-conservador, linea editorial pro-mercado, "
+            "favorable a Cambiemos/Juntos por el Cambio.",
+        ),
+        "media_popular": (
+            "C5N",
+            "Senal de noticias de linea editorial cercana al kirchnerismo/Frente "
+            "de Todos, contrapeso de la agenda de Clarin/La Nacion en este periodo.",
+        ),
     },
 }
 
@@ -451,9 +583,24 @@ MEDIA_BY_ERA = {
 def _media_actors(era_id: str) -> list[dict]:
     out = []
     base_ideology_by_slot = {
-        "media_mercado": {"economic": 0.7, "social": 0.0, "federalism": -0.1, "institutionalism": 0.6},
-        "media_nacional": {"economic": 0.2, "social": 0.1, "federalism": -0.1, "institutionalism": 0.7},
-        "media_popular": {"economic": -0.5, "social": 0.4, "federalism": 0.0, "institutionalism": 0.3},
+        "media_mercado": {
+            "economic": 0.7,
+            "social": 0.0,
+            "federalism": -0.1,
+            "institutionalism": 0.6,
+        },
+        "media_nacional": {
+            "economic": 0.2,
+            "social": 0.1,
+            "federalism": -0.1,
+            "institutionalism": 0.7,
+        },
+        "media_popular": {
+            "economic": -0.5,
+            "social": 0.4,
+            "federalism": 0.0,
+            "institutionalism": 0.3,
+        },
     }
     for slot, (name, note) in MEDIA_BY_ERA[era_id].items():
         out.append(
@@ -461,7 +608,12 @@ def _media_actors(era_id: str) -> list[dict]:
                 "id": slot,
                 "name": name,
                 "ideology": base_ideology_by_slot[slot],
-                "personality": {"ambition": 0.6, "risk_tolerance": 0.5, "loyalty": 0.3, "pragmatism": 0.6},
+                "personality": {
+                    "ambition": 0.6,
+                    "risk_tolerance": 0.5,
+                    "loyalty": 0.3,
+                    "pragmatism": 0.6,
+                },
                 "interests": ["audience"],
                 "influence": {"public": 0.65, "congress": 0.1, "streets": 0.05, "markets": 0.15},
                 "assessment_note": note,
@@ -508,7 +660,12 @@ def _actor_sheet(
 
 #: Personalidad "sin atributos mas alla de lo publico" (ADR 013 secc. 3) para
 #: presidente/ministro/gobernador -- personas reales.
-REAL_PERSON_PERSONALITY = {"ambition": 0.5, "risk_tolerance": 0.5, "loyalty": 0.5, "pragmatism": 0.5}
+REAL_PERSON_PERSONALITY = {
+    "ambition": 0.5,
+    "risk_tolerance": 0.5,
+    "loyalty": 0.5,
+    "pragmatism": 0.5,
+}
 #: Influencia estandar por rol de persona real (misma escala que Aurora).
 PRESIDENT_INFLUENCE = {"public": 0.8, "congress": 0.7, "streets": 0.2, "markets": 0.3}
 MINISTER_INFLUENCE = {"public": 0.4, "congress": 0.5, "streets": 0.1, "markets": 0.6}
@@ -524,83 +681,156 @@ GOVERNOR_INFLUENCE = {"public": 0.4, "congress": 0.2, "streets": 0.25, "markets"
 def era_1983_2001() -> dict:
     parties_extra = {
         "ucr": {
-            "seats": 51, "founded": 1891, "personalism": 0.35, "discipline": 0.7,
+            "seats": 51,
+            "founded": 1891,
+            "personalism": 0.35,
+            "discipline": 0.7,
             "seats_confidence": "medium",
             "seats_note": "129/254 bancas reales de Diputados 1983 (~0.51); cruzado en "
             "politics/PENDING_FACTCHECK.md secc. 2.5 contra la composicion real.",
         },
         "pj": {
-            "seats": 44, "founded": 1946, "personalism": 0.6, "discipline": 0.75,
+            "seats": 44,
+            "founded": 1946,
+            "personalism": 0.6,
+            "discipline": 0.75,
             "seats_confidence": "medium",
             "seats_note": "111/254 bancas reales de Diputados 1983 (~0.44); mismo cruce que UCR.",
         },
         "ucede": {
-            "seats": 2, "founded": 1982, "personalism": 0.55, "discipline": 0.6,
-            "seats_confidence": "low", "seats_note": "politics/parties/1983-2001.json (seats_share=0.02).",
+            "seats": 2,
+            "founded": 1982,
+            "personalism": 0.55,
+            "discipline": 0.6,
+            "seats_confidence": "low",
+            "seats_note": "politics/parties/1983-2001.json (seats_share=0.02).",
         },
         "frepaso": {
-            "seats": 0, "founded": 1994, "personalism": 0.5, "discipline": 0.55,
-            "loyalty_seed": LOW_SEED, "seats_confidence": "n/a",
+            "seats": 0,
+            "founded": 1994,
+            "personalism": 0.5,
+            "discipline": 0.55,
+            "loyalty_seed": LOW_SEED,
+            "seats_confidence": "n/a",
             "seats_note": "No fundado al inicio de la epoca (ADR 013 secc. 2: seats=0).",
         },
         "provinciales_1983": {
-            "seats": 3, "founded": None, "personalism": 0.4, "discipline": 0.4,
-            "seats_confidence": "low", "seats_note": "politics/parties/1983-2001.json (seats_share=0.03).",
+            "seats": 3,
+            "founded": None,
+            "personalism": 0.4,
+            "discipline": 0.4,
+            "seats_confidence": "low",
+            "seats_note": "politics/parties/1983-2001.json (seats_share=0.03).",
         },
     }
     governors = {
         "buenos_aires": {
-            "name": "Alejandro Armendariz", "party": "ucr",
-            "ideology": {"economic": -0.05, "social": -0.2, "federalism": 0.6, "institutionalism": 0.6},
-            "interests": ["provincial_transfers", "reelection"], "confidence": "alta",
+            "name": "Alejandro Armendariz",
+            "party": "ucr",
+            "ideology": {
+                "economic": -0.05,
+                "social": -0.2,
+                "federalism": 0.6,
+                "institutionalism": 0.6,
+            },
+            "interests": ["provincial_transfers", "reelection"],
+            "confidence": "alta",
             "bio": "Gobernador de Buenos Aires (UCR), asume el 10-dic-1983.",
         },
         "cordoba": {
-            "name": "Eduardo Cesar Angeloz", "party": "ucr",
-            "ideology": {"economic": 0.1, "social": -0.1, "federalism": 0.5, "institutionalism": 0.6},
-            "interests": ["provincial_transfers", "industrial_protection"], "confidence": "alta",
+            "name": "Eduardo Cesar Angeloz",
+            "party": "ucr",
+            "ideology": {
+                "economic": 0.1,
+                "social": -0.1,
+                "federalism": 0.5,
+                "institutionalism": 0.6,
+            },
+            "interests": ["provincial_transfers", "industrial_protection"],
+            "confidence": "alta",
             "bio": "Gobernador de Cordoba (UCR), asume el 10-dic-1983 (reelecto hasta 1995).",
         },
         "entre_rios": {
-            "name": "Bruno Quijano", "party": "ucr",
-            "ideology": {"economic": -0.1, "social": -0.1, "federalism": 0.5, "institutionalism": 0.55},
-            "interests": ["provincial_transfers", "agricultural_exports"], "confidence": "media",
+            "name": "Bruno Quijano",
+            "party": "ucr",
+            "ideology": {
+                "economic": -0.1,
+                "social": -0.1,
+                "federalism": 0.5,
+                "institutionalism": 0.55,
+            },
+            "interests": ["provincial_transfers", "agricultural_exports"],
+            "confidence": "media",
             "bio": "Gobernador de Entre Rios (UCR), asume el 10-dic-1983. Confianza media, sin "
             "fuente primaria verificada en este entorno.",
         },
         "tucuman": {
-            "name": "Fernando Riera", "party": "pj",
-            "ideology": {"economic": -0.2, "social": 0.1, "federalism": 0.5, "institutionalism": 0.5},
-            "interests": ["provincial_transfers", "employment"], "confidence": "media",
+            "name": "Fernando Riera",
+            "party": "pj",
+            "ideology": {
+                "economic": -0.2,
+                "social": 0.1,
+                "federalism": 0.5,
+                "institutionalism": 0.5,
+            },
+            "interests": ["provincial_transfers", "employment"],
+            "confidence": "media",
             "bio": "Gobernador de Tucuman (PJ), asume el 10-dic-1983. Confianza media, sin "
             "fuente primaria verificada en este entorno.",
         },
         "misiones": {
-            "name": "Ricardo Barrios Arrechea", "party": "ucr",
-            "ideology": {"economic": -0.05, "social": -0.1, "federalism": 0.5, "institutionalism": 0.55},
-            "interests": ["provincial_transfers", "agricultural_exports"], "confidence": "media",
+            "name": "Ricardo Barrios Arrechea",
+            "party": "ucr",
+            "ideology": {
+                "economic": -0.05,
+                "social": -0.1,
+                "federalism": 0.5,
+                "institutionalism": 0.55,
+            },
+            "interests": ["provincial_transfers", "agricultural_exports"],
+            "confidence": "media",
             "bio": "Gobernador de Misiones (UCR), asume el 10-dic-1983. Confianza media, sin "
             "fuente primaria verificada en este entorno.",
         },
         "mendoza": {
-            "name": "Santiago Felipe Llaver", "party": "ucr",
-            "ideology": {"economic": 0.0, "social": -0.1, "federalism": 0.5, "institutionalism": 0.55},
-            "interests": ["provincial_transfers", "agricultural_exports"], "confidence": "media",
+            "name": "Santiago Felipe Llaver",
+            "party": "ucr",
+            "ideology": {
+                "economic": 0.0,
+                "social": -0.1,
+                "federalism": 0.5,
+                "institutionalism": 0.55,
+            },
+            "interests": ["provincial_transfers", "agricultural_exports"],
+            "confidence": "media",
             "bio": "Gobernador de Mendoza (UCR), asume el 10-dic-1983. Confianza media, sin "
             "fuente primaria verificada en este entorno.",
         },
         "rio_negro": {
-            "name": "Osvaldo Alvarez Guerrero", "party": "ucr",
-            "ideology": {"economic": -0.1, "social": 0.0, "federalism": 0.5, "institutionalism": 0.55},
-            "interests": ["provincial_transfers", "reelection"], "confidence": "media",
+            "name": "Osvaldo Alvarez Guerrero",
+            "party": "ucr",
+            "ideology": {
+                "economic": -0.1,
+                "social": 0.0,
+                "federalism": 0.5,
+                "institutionalism": 0.55,
+            },
+            "interests": ["provincial_transfers", "reelection"],
+            "confidence": "media",
             "bio": "Gobernador de Rio Negro (UCR), asume el 10-dic-1983. Confianza media, sin "
             "fuente primaria verificada en este entorno.",
         },
         "caba": {
             "name": "Intendencia de la Ciudad de Buenos Aires (cargo no electivo hasta 1996)",
             "party": "ucr",
-            "ideology": {"economic": 0.0, "social": -0.1, "federalism": -0.3, "institutionalism": 0.5},
-            "interests": ["provincial_transfers"], "confidence": "alta (sobre el status institucional, "
+            "ideology": {
+                "economic": 0.0,
+                "social": -0.1,
+                "federalism": -0.3,
+                "institutionalism": 0.5,
+            },
+            "interests": ["provincial_transfers"],
+            "confidence": "alta (sobre el status institucional, "
             "no sobre un nombre de intendente especifico)",
             "bio": "Antes de la reforma de 1994/la eleccion de 1996, el intendente de la Ciudad "
             "era designado por el Poder Ejecutivo Nacional, no un cargo electivo: se modela el "
@@ -613,22 +843,43 @@ def era_1983_2001() -> dict:
         "targets": _targets(OPENING_1983),
         "opening": OPENING_1983,
         "president": {
-            "name": "Raul Alfonsin", "party": "ucr", "took_office": "1983-12-10",
-            "ideology": {"economic": -0.1, "social": -0.3, "federalism": 0.0, "institutionalism": 0.8},
+            "name": "Raul Alfonsin",
+            "party": "ucr",
+            "took_office": "1983-12-10",
+            "ideology": {
+                "economic": -0.1,
+                "social": -0.3,
+                "federalism": 0.0,
+                "institutionalism": 0.8,
+            },
             "interests": ["price_stability", "reelection"],
             "bio": "Presidente electo en 1983, primer gobierno democratico tras la dictadura. "
             "Asume el 10-dic-1983.",
         },
         "minister": {
-            "name": "Bernardo Grinspun", "took_office": "1983-12-10", "left_office": "1985-02-19",
-            "ideology": {"economic": -0.3, "social": -0.2, "federalism": 0.0, "institutionalism": 0.5},
+            "name": "Bernardo Grinspun",
+            "took_office": "1983-12-10",
+            "left_office": "1985-02-19",
+            "ideology": {
+                "economic": -0.3,
+                "social": -0.2,
+                "federalism": 0.0,
+                "institutionalism": 0.5,
+            },
             "interests": ["employment", "real_wages"],
             "bio": "Ministro de Economia (10-dic-1983 a 19-feb-1985), linea desarrollista/"
             "heterodoxa, previo al Plan Austral.",
         },
         "central_bank": {
-            "name": "Enrique Garcia Vazquez", "took_office": "1983-12-10", "left_office": "1985-02",
-            "ideology": {"economic": -0.1, "social": 0.0, "federalism": 0.0, "institutionalism": 0.6},
+            "name": "Enrique Garcia Vazquez",
+            "took_office": "1983-12-10",
+            "left_office": "1985-02",
+            "ideology": {
+                "economic": -0.1,
+                "social": 0.0,
+                "federalism": 0.0,
+                "institutionalism": 0.6,
+            },
             "interests": ["price_stability", "financial_stability"],
             "bio": "Presidente del Banco Central (dic-1983 a feb-1985). Confianza media sobre la "
             "fecha exacta de salida, sin fuente primaria verificada en este entorno.",
@@ -640,86 +891,166 @@ def era_1983_2001() -> dict:
 def era_2003_2015() -> dict:
     parties_extra = {
         "fpv_pj": {
-            "seats": 35, "founded": 2003, "personalism": 0.65, "discipline": 0.8,
-            "seats_confidence": "low", "seats_note": "politics/parties/2003-2015.json (seats_share=0.35).",
+            "seats": 35,
+            "founded": 2003,
+            "personalism": 0.65,
+            "discipline": 0.8,
+            "seats_confidence": "low",
+            "seats_note": "politics/parties/2003-2015.json (seats_share=0.35).",
         },
         "ucr": {
-            "seats": 15, "founded": 1891, "personalism": 0.3, "discipline": 0.6,
-            "seats_confidence": "low", "seats_note": "politics/parties/2003-2015.json (seats_share=0.15).",
+            "seats": 15,
+            "founded": 1891,
+            "personalism": 0.3,
+            "discipline": 0.6,
+            "seats_confidence": "low",
+            "seats_note": "politics/parties/2003-2015.json (seats_share=0.15).",
         },
         "pj_disidente": {
-            "seats": 10, "founded": 1999, "personalism": 0.6, "discipline": 0.4,
-            "seats_confidence": "low", "seats_note": "politics/parties/2003-2015.json (seats_share=0.10).",
+            "seats": 10,
+            "founded": 1999,
+            "personalism": 0.6,
+            "discipline": 0.4,
+            "seats_confidence": "low",
+            "seats_note": "politics/parties/2003-2015.json (seats_share=0.10).",
         },
         "ari_cc": {
-            "seats": 5, "founded": 2002, "personalism": 0.7, "discipline": 0.5,
-            "seats_confidence": "low", "seats_note": "politics/parties/2003-2015.json (seats_share=0.05).",
+            "seats": 5,
+            "founded": 2002,
+            "personalism": 0.7,
+            "discipline": 0.5,
+            "seats_confidence": "low",
+            "seats_note": "politics/parties/2003-2015.json (seats_share=0.05).",
         },
         "pro": {
-            "seats": 0, "founded": 2005, "personalism": 0.6, "discipline": 0.65,
-            "loyalty_seed": LOW_SEED, "seats_confidence": "n/a",
+            "seats": 0,
+            "founded": 2005,
+            "personalism": 0.6,
+            "discipline": 0.65,
+            "loyalty_seed": LOW_SEED,
+            "seats_confidence": "n/a",
             "seats_note": "No fundado al inicio de la epoca (ADR 013 secc. 2: seats=0).",
         },
         "fit": {
-            "seats": 0, "founded": 2011, "personalism": 0.25, "discipline": 0.85,
-            "loyalty_seed": LOW_SEED, "seats_confidence": "n/a",
+            "seats": 0,
+            "founded": 2011,
+            "personalism": 0.25,
+            "discipline": 0.85,
+            "loyalty_seed": LOW_SEED,
+            "seats_confidence": "n/a",
             "seats_note": "No fundado al inicio de la epoca (ADR 013 secc. 2: seats=0).",
         },
     }
     governors = {
         "buenos_aires": {
-            "name": "Felipe Sola", "party": "fpv_pj",
-            "ideology": {"economic": -0.2, "social": 0.0, "federalism": 0.3, "institutionalism": 0.5},
-            "interests": ["provincial_transfers", "reelection"], "confidence": "alta",
+            "name": "Felipe Sola",
+            "party": "fpv_pj",
+            "ideology": {
+                "economic": -0.2,
+                "social": 0.0,
+                "federalism": 0.3,
+                "institutionalism": 0.5,
+            },
+            "interests": ["provincial_transfers", "reelection"],
+            "confidence": "alta",
             "bio": "Gobernador de Buenos Aires (PJ/FPV), en el cargo desde ene-2002, en funciones "
             "en 2003-05.",
         },
         "cordoba": {
-            "name": "Jose Manuel de la Sota", "party": "pj_disidente",
-            "ideology": {"economic": 0.1, "social": 0.0, "federalism": 0.5, "institutionalism": 0.5},
-            "interests": ["provincial_transfers", "industrial_protection"], "confidence": "alta",
+            "name": "Jose Manuel de la Sota",
+            "party": "pj_disidente",
+            "ideology": {
+                "economic": 0.1,
+                "social": 0.0,
+                "federalism": 0.5,
+                "institutionalism": 0.5,
+            },
+            "interests": ["provincial_transfers", "industrial_protection"],
+            "confidence": "alta",
             "bio": "Gobernador de Cordoba (PJ, linea no kirchnerista), primer mandato 1999-2003, "
             "en funciones en 2003-05.",
         },
         "entre_rios": {
-            "name": "Jorge Busti", "party": "fpv_pj",
-            "ideology": {"economic": -0.1, "social": 0.0, "federalism": 0.4, "institutionalism": 0.5},
-            "interests": ["provincial_transfers", "agricultural_exports"], "confidence": "media",
+            "name": "Jorge Busti",
+            "party": "fpv_pj",
+            "ideology": {
+                "economic": -0.1,
+                "social": 0.0,
+                "federalism": 0.4,
+                "institutionalism": 0.5,
+            },
+            "interests": ["provincial_transfers", "agricultural_exports"],
+            "confidence": "media",
             "bio": "Gobernador de Entre Rios (PJ), en funciones en 2003-05. Confianza media, sin "
             "fuente primaria verificada en este entorno.",
         },
         "tucuman": {
-            "name": "Julio Cesar Miranda", "party": "fpv_pj",
-            "ideology": {"economic": -0.15, "social": 0.1, "federalism": 0.4, "institutionalism": 0.4},
-            "interests": ["provincial_transfers", "employment"], "confidence": "baja",
+            "name": "Julio Cesar Miranda",
+            "party": "fpv_pj",
+            "ideology": {
+                "economic": -0.15,
+                "social": 0.1,
+                "federalism": 0.4,
+                "institutionalism": 0.4,
+            },
+            "interests": ["provincial_transfers", "employment"],
+            "confidence": "baja",
             "bio": "Gobernador de Tucuman (PJ) tras la etapa de Bussi. Confianza baja sobre la "
             "fecha exacta de asuncion respecto de mayo de 2003, sin fuente primaria verificada.",
         },
         "misiones": {
-            "name": "Carlos Rovira", "party": "fpv_pj",
-            "ideology": {"economic": -0.1, "social": 0.0, "federalism": 0.4, "institutionalism": 0.4},
-            "interests": ["provincial_transfers", "agricultural_exports"], "confidence": "media",
-            "bio": "Gobernador de Misiones (PJ), primer mandato 1999-2003, en funciones en 2003-05. "
-            "Confianza media, sin fuente primaria verificada en este entorno.",
+            "name": "Carlos Rovira",
+            "party": "fpv_pj",
+            "ideology": {
+                "economic": -0.1,
+                "social": 0.0,
+                "federalism": 0.4,
+                "institutionalism": 0.4,
+            },
+            "interests": ["provincial_transfers", "agricultural_exports"],
+            "confidence": "media",
+            "bio": "Gobernador de Misiones (PJ), primer mandato 1999-2003, en funciones en "
+            "2003-05. Confianza media, sin fuente primaria verificada en este entorno.",
         },
         "mendoza": {
-            "name": "Roberto Iglesias", "party": "ucr",
-            "ideology": {"economic": 0.0, "social": -0.1, "federalism": 0.4, "institutionalism": 0.5},
-            "interests": ["provincial_transfers", "agricultural_exports"], "confidence": "media",
+            "name": "Roberto Iglesias",
+            "party": "ucr",
+            "ideology": {
+                "economic": 0.0,
+                "social": -0.1,
+                "federalism": 0.4,
+                "institutionalism": 0.5,
+            },
+            "interests": ["provincial_transfers", "agricultural_exports"],
+            "confidence": "media",
             "bio": "Gobernador de Mendoza (UCR), 1999-2003, en funciones en 2003-05. Confianza "
             "media, sin fuente primaria verificada en este entorno.",
         },
         "rio_negro": {
-            "name": "Pablo Verani", "party": "ucr",
-            "ideology": {"economic": -0.05, "social": -0.1, "federalism": 0.4, "institutionalism": 0.5},
-            "interests": ["provincial_transfers", "reelection"], "confidence": "media",
+            "name": "Pablo Verani",
+            "party": "ucr",
+            "ideology": {
+                "economic": -0.05,
+                "social": -0.1,
+                "federalism": 0.4,
+                "institutionalism": 0.5,
+            },
+            "interests": ["provincial_transfers", "reelection"],
+            "confidence": "media",
             "bio": "Gobernador de Rio Negro (UCR/Alianza), 1999-2003, en funciones en 2003-05. "
             "Confianza media, sin fuente primaria verificada en este entorno.",
         },
         "caba": {
-            "name": "Anibal Ibarra", "party": "ari_cc",
-            "ideology": {"economic": -0.3, "social": -0.3, "federalism": -0.1, "institutionalism": 0.4},
-            "interests": ["provincial_transfers"], "confidence": "alta",
+            "name": "Anibal Ibarra",
+            "party": "ari_cc",
+            "ideology": {
+                "economic": -0.3,
+                "social": -0.3,
+                "federalism": -0.1,
+                "institutionalism": 0.4,
+            },
+            "interests": ["provincial_transfers"],
+            "confidence": "alta",
             "bio": "Jefe de Gobierno de la Ciudad de Buenos Aires, electo en 2000, en funciones "
             "en 2003-05.",
         },
@@ -730,22 +1061,43 @@ def era_2003_2015() -> dict:
         "targets": _targets(OPENING_2003),
         "opening": OPENING_2003,
         "president": {
-            "name": "Nestor Kirchner", "party": "fpv_pj", "took_office": "2003-05-25",
-            "ideology": {"economic": -0.5, "social": -0.3, "federalism": -0.1, "institutionalism": 0.4},
+            "name": "Nestor Kirchner",
+            "party": "fpv_pj",
+            "took_office": "2003-05-25",
+            "ideology": {
+                "economic": -0.5,
+                "social": -0.3,
+                "federalism": -0.1,
+                "institutionalism": 0.4,
+            },
             "interests": ["employment", "reelection"],
             "bio": "Presidente electo en 2003 (25% en primera vuelta, Menem se retira antes del "
             "balotaje). Asume el 25-may-2003.",
         },
         "minister": {
-            "name": "Roberto Lavagna", "took_office": "2002-04-27", "left_office": "2005-11-28",
-            "ideology": {"economic": -0.1, "social": -0.1, "federalism": 0.0, "institutionalism": 0.6},
+            "name": "Roberto Lavagna",
+            "took_office": "2002-04-27",
+            "left_office": "2005-11-28",
+            "ideology": {
+                "economic": -0.1,
+                "social": -0.1,
+                "federalism": 0.0,
+                "institutionalism": 0.6,
+            },
             "interests": ["price_stability", "fiscal_balance"],
             "bio": "Ministro de Economia desde abr-2002 (gobierno de Duhalde), continua con "
             "Kirchner hasta nov-2005. En funciones el 25-may-2003.",
         },
         "central_bank": {
-            "name": "Alfonso Prat-Gay", "took_office": "2002-12-11", "left_office": "2004-09-23",
-            "ideology": {"economic": 0.1, "social": 0.0, "federalism": 0.0, "institutionalism": 0.6},
+            "name": "Alfonso Prat-Gay",
+            "took_office": "2002-12-11",
+            "left_office": "2004-09-23",
+            "ideology": {
+                "economic": 0.1,
+                "social": 0.0,
+                "federalism": 0.0,
+                "institutionalism": 0.6,
+            },
             "interests": ["price_stability", "financial_stability"],
             "bio": "Presidente del Banco Central desde dic-2002, continua con Kirchner. En "
             "funciones el 25-may-2003.",
@@ -757,80 +1109,157 @@ def era_2003_2015() -> dict:
 def era_2015_2023() -> dict:
     parties_extra = {
         "cambiemos_jxc": {
-            "seats": 36, "founded": 2015, "personalism": 0.55, "discipline": 0.55,
-            "seats_confidence": "low", "seats_note": "politics/parties/2015-2023.json (seats_share=0.36).",
+            "seats": 36,
+            "founded": 2015,
+            "personalism": 0.55,
+            "discipline": 0.55,
+            "seats_confidence": "low",
+            "seats_note": "politics/parties/2015-2023.json (seats_share=0.36).",
         },
         "fpv_fdt_pj": {
-            "seats": 35, "founded": 2003, "personalism": 0.6, "discipline": 0.75,
-            "seats_confidence": "low", "seats_note": "politics/parties/2015-2023.json (seats_share=0.35); "
+            "seats": 35,
+            "founded": 2003,
+            "personalism": 0.6,
+            "discipline": 0.75,
+            "seats_confidence": "low",
+            "seats_note": "politics/parties/2015-2023.json (seats_share=0.35); "
             "renombrado Frente de Todos en 2019, misma linea kirchnerista-PJ.",
         },
         "fit_u": {
-            "seats": 3, "founded": 2015, "personalism": 0.25, "discipline": 0.85,
-            "seats_confidence": "medium", "seats_note": "3.31% real de 2015 (ver OPENING_2015) coincide "
+            "seats": 3,
+            "founded": 2015,
+            "personalism": 0.25,
+            "discipline": 0.85,
+            "seats_confidence": "medium",
+            "seats_note": "3.31% real de 2015 (ver OPENING_2015) coincide "
             "con seats_share=0.03 de politics/parties/2015-2023.json.",
         },
         "uca_otros_2015": {
-            "seats": 20, "founded": None, "personalism": 0.45, "discipline": 0.35,
-            "seats_confidence": "low", "seats_note": "politics/parties/2015-2023.json (seats_share=0.20).",
+            "seats": 20,
+            "founded": None,
+            "personalism": 0.45,
+            "discipline": 0.35,
+            "seats_confidence": "low",
+            "seats_note": "politics/parties/2015-2023.json (seats_share=0.20).",
         },
         "lla": {
-            "seats": 0, "founded": 2021, "personalism": 0.9, "discipline": 0.85,
-            "loyalty_seed": -0.5, "outsider_bonus": 0.3, "seats_confidence": "n/a",
+            "seats": 0,
+            "founded": 2021,
+            "personalism": 0.9,
+            "discipline": 0.85,
+            "loyalty_seed": -0.5,
+            "outsider_bonus": 0.3,
+            "seats_confidence": "n/a",
             "seats_note": "ADR 013 secc. 2, literal: founded 2021, seats 0 en 2019.",
         },
     }
     governors = {
         "buenos_aires": {
-            "name": "Maria Eugenia Vidal", "party": "cambiemos_jxc",
-            "ideology": {"economic": 0.4, "social": 0.1, "federalism": 0.2, "institutionalism": 0.6},
-            "interests": ["provincial_transfers", "reelection"], "confidence": "alta",
+            "name": "Maria Eugenia Vidal",
+            "party": "cambiemos_jxc",
+            "ideology": {
+                "economic": 0.4,
+                "social": 0.1,
+                "federalism": 0.2,
+                "institutionalism": 0.6,
+            },
+            "interests": ["provincial_transfers", "reelection"],
+            "confidence": "alta",
             "bio": "Gobernadora de Buenos Aires (PRO/Cambiemos), asume el 10-dic-2015 (primera "
             "gobernadora no peronista de la provincia en decadas).",
         },
         "cordoba": {
-            "name": "Juan Schiaretti", "party": "fpv_fdt_pj",
-            "ideology": {"economic": 0.1, "social": 0.0, "federalism": 0.5, "institutionalism": 0.55},
-            "interests": ["provincial_transfers", "industrial_protection"], "confidence": "alta",
+            "name": "Juan Schiaretti",
+            "party": "fpv_fdt_pj",
+            "ideology": {
+                "economic": 0.1,
+                "social": 0.0,
+                "federalism": 0.5,
+                "institutionalism": 0.55,
+            },
+            "interests": ["provincial_transfers", "industrial_protection"],
+            "confidence": "alta",
             "bio": "Gobernador de Cordoba (PJ, linea cordobesista/no kirchnerista), asume el "
             "10-dic-2015.",
         },
         "entre_rios": {
-            "name": "Gustavo Bordet", "party": "fpv_fdt_pj",
-            "ideology": {"economic": -0.1, "social": 0.0, "federalism": 0.4, "institutionalism": 0.5},
-            "interests": ["provincial_transfers", "agricultural_exports"], "confidence": "media",
+            "name": "Gustavo Bordet",
+            "party": "fpv_fdt_pj",
+            "ideology": {
+                "economic": -0.1,
+                "social": 0.0,
+                "federalism": 0.4,
+                "institutionalism": 0.5,
+            },
+            "interests": ["provincial_transfers", "agricultural_exports"],
+            "confidence": "media",
             "bio": "Gobernador de Entre Rios (PJ/FPV), asume el 10-dic-2015.",
         },
         "tucuman": {
-            "name": "Juan Manzur", "party": "fpv_fdt_pj",
-            "ideology": {"economic": -0.15, "social": 0.0, "federalism": 0.4, "institutionalism": 0.5},
-            "interests": ["provincial_transfers", "employment"], "confidence": "alta",
+            "name": "Juan Manzur",
+            "party": "fpv_fdt_pj",
+            "ideology": {
+                "economic": -0.15,
+                "social": 0.0,
+                "federalism": 0.4,
+                "institutionalism": 0.5,
+            },
+            "interests": ["provincial_transfers", "employment"],
+            "confidence": "alta",
             "bio": "Gobernador de Tucuman (PJ), asume el 10-dic-2015.",
         },
         "misiones": {
-            "name": "Hugo Passalacqua", "party": "uca_otros_2015",
-            "ideology": {"economic": 0.0, "social": 0.0, "federalism": 0.6, "institutionalism": 0.5},
-            "interests": ["provincial_transfers", "agricultural_exports"], "confidence": "media",
+            "name": "Hugo Passalacqua",
+            "party": "uca_otros_2015",
+            "ideology": {
+                "economic": 0.0,
+                "social": 0.0,
+                "federalism": 0.6,
+                "institutionalism": 0.5,
+            },
+            "interests": ["provincial_transfers", "agricultural_exports"],
+            "confidence": "media",
             "bio": "Gobernador de Misiones (Frente Renovador de la Concordia, provincial), asume "
             "el 10-dic-2015. Confianza media, sin fuente primaria verificada en este entorno.",
         },
         "mendoza": {
-            "name": "Alfredo Cornejo", "party": "cambiemos_jxc",
-            "ideology": {"economic": 0.3, "social": -0.1, "federalism": 0.4, "institutionalism": 0.55},
-            "interests": ["provincial_transfers", "agricultural_exports"], "confidence": "alta",
+            "name": "Alfredo Cornejo",
+            "party": "cambiemos_jxc",
+            "ideology": {
+                "economic": 0.3,
+                "social": -0.1,
+                "federalism": 0.4,
+                "institutionalism": 0.55,
+            },
+            "interests": ["provincial_transfers", "agricultural_exports"],
+            "confidence": "alta",
             "bio": "Gobernador de Mendoza (UCR/Cambiemos), asume el 10-dic-2015.",
         },
         "rio_negro": {
-            "name": "Alberto Weretilneck", "party": "uca_otros_2015",
-            "ideology": {"economic": 0.0, "social": 0.0, "federalism": 0.6, "institutionalism": 0.5},
-            "interests": ["provincial_transfers", "reelection"], "confidence": "media",
+            "name": "Alberto Weretilneck",
+            "party": "uca_otros_2015",
+            "ideology": {
+                "economic": 0.0,
+                "social": 0.0,
+                "federalism": 0.6,
+                "institutionalism": 0.5,
+            },
+            "interests": ["provincial_transfers", "reelection"],
+            "confidence": "media",
             "bio": "Gobernador de Rio Negro (Juntos Somos Rio Negro, provincial), reelecto para "
             "el periodo que arranca el 10-dic-2015.",
         },
         "caba": {
-            "name": "Horacio Rodriguez Larreta", "party": "cambiemos_jxc",
-            "ideology": {"economic": 0.4, "social": 0.1, "federalism": -0.1, "institutionalism": 0.6},
-            "interests": ["provincial_transfers"], "confidence": "alta",
+            "name": "Horacio Rodriguez Larreta",
+            "party": "cambiemos_jxc",
+            "ideology": {
+                "economic": 0.4,
+                "social": 0.1,
+                "federalism": -0.1,
+                "institutionalism": 0.6,
+            },
+            "interests": ["provincial_transfers"],
+            "confidence": "alta",
             "bio": "Jefe de Gobierno de la Ciudad de Buenos Aires (PRO/Cambiemos), asume el "
             "10-dic-2015.",
         },
@@ -841,20 +1270,41 @@ def era_2015_2023() -> dict:
         "targets": _targets(OPENING_2015),
         "opening": OPENING_2015,
         "president": {
-            "name": "Mauricio Macri", "party": "cambiemos_jxc", "took_office": "2015-12-10",
-            "ideology": {"economic": 0.6, "social": 0.1, "federalism": 0.1, "institutionalism": 0.6},
+            "name": "Mauricio Macri",
+            "party": "cambiemos_jxc",
+            "took_office": "2015-12-10",
+            "ideology": {
+                "economic": 0.6,
+                "social": 0.1,
+                "federalism": 0.1,
+                "institutionalism": 0.6,
+            },
             "interests": ["financial_stability", "reelection"],
             "bio": "Presidente electo en el balotaje de nov-2015. Asume el 10-dic-2015.",
         },
         "minister": {
-            "name": "Alfonso Prat-Gay", "took_office": "2015-12-10", "left_office": "2017-01-02",
-            "ideology": {"economic": 0.5, "social": 0.0, "federalism": 0.0, "institutionalism": 0.6},
+            "name": "Alfonso Prat-Gay",
+            "took_office": "2015-12-10",
+            "left_office": "2017-01-02",
+            "ideology": {
+                "economic": 0.5,
+                "social": 0.0,
+                "federalism": 0.0,
+                "institutionalism": 0.6,
+            },
             "interests": ["financial_stability", "price_stability"],
             "bio": "Ministro de Hacienda y Finanzas Publicas (10-dic-2015 a 2-ene-2017).",
         },
         "central_bank": {
-            "name": "Federico Sturzenegger", "took_office": "2015-12-10", "left_office": "2018-06-14",
-            "ideology": {"economic": 0.6, "social": 0.0, "federalism": 0.0, "institutionalism": 0.6},
+            "name": "Federico Sturzenegger",
+            "took_office": "2015-12-10",
+            "left_office": "2018-06-14",
+            "ideology": {
+                "economic": 0.6,
+                "social": 0.0,
+                "federalism": 0.0,
+                "institutionalism": 0.6,
+            },
             "interests": ["price_stability", "financial_stability"],
             "bio": "Presidente del Banco Central (10-dic-2015 a 14-jun-2018), adopta metas de "
             "inflacion.",
@@ -875,80 +1325,125 @@ def build_actors(era: dict) -> list[dict]:
     p = era["president"]
     actors.append(
         _actor_sheet(
-            "president", p["name"], "president", p["ideology"], REAL_PERSON_PERSONALITY,
-            p["interests"], PRESIDENT_INFLUENCE,
+            "president",
+            p["name"],
+            "president",
+            p["ideology"],
+            REAL_PERSON_PERSONALITY,
+            p["interests"],
+            PRESIDENT_INFLUENCE,
             f"Ideologia/intereses asignados por el analista para el momento de asuncion "
             f"({p['took_office']}); nombre y fecha son un hecho publico verificable.",
-            p["bio"], party=p["party"],
+            p["bio"],
+            party=p["party"],
         )
     )
     m = era["minister"]
     actors.append(
         _actor_sheet(
-            "minister_economy", m["name"], "economy_minister", m["ideology"], REAL_PERSON_PERSONALITY,
-            m["interests"], MINISTER_INFLUENCE,
+            "minister_economy",
+            m["name"],
+            "economy_minister",
+            m["ideology"],
+            REAL_PERSON_PERSONALITY,
+            m["interests"],
+            MINISTER_INFLUENCE,
             f"Ideologia/intereses asignados por el analista para el periodo "
-            f"{m['took_office']}/{m['left_office']}; nombre y fechas son un hecho publico verificable.",
+            f"{m['took_office']}/{m['left_office']}; nombre y fechas son un hecho "
+            "publico verificable.",
             m["bio"],
         )
     )
     cb = era["central_bank"]
     actors.append(
         _actor_sheet(
-            "central_bank", cb["name"], "central_bank", cb["ideology"], REAL_PERSON_PERSONALITY,
-            cb["interests"], CENTRAL_BANK_INFLUENCE,
+            "central_bank",
+            cb["name"],
+            "central_bank",
+            cb["ideology"],
+            REAL_PERSON_PERSONALITY,
+            cb["interests"],
+            CENTRAL_BANK_INFLUENCE,
             f"Ideologia/intereses asignados por el analista para el periodo "
-            f"{cb['took_office']}/{cb['left_office']}; nombre y fechas son un hecho publico verificable.",
+            f"{cb['took_office']}/{cb['left_office']}; nombre y fechas son un hecho "
+            "publico verificable.",
             cb["bio"],
         )
     )
     for province_id, g in era["governors"].items():
         actors.append(
             _actor_sheet(
-                _governor_id(province_id), g["name"], "governor", g["ideology"], REAL_PERSON_PERSONALITY,
-                g["interests"], GOVERNOR_INFLUENCE,
+                _governor_id(province_id),
+                g["name"],
+                "governor",
+                g["ideology"],
+                REAL_PERSON_PERSONALITY,
+                g["interests"],
+                GOVERNOR_INFLUENCE,
                 f"Ideologia/intereses asignados por el analista (confianza {g['confidence']} sobre "
                 "el nombre/fecha de asuncion, ver bio); provincia = la mas poblada de su region "
                 "(politics/regions.csv, Censo 2022) segun ADR 013 secc. 3.",
-                g["bio"], party=g["party"], province=province_id,
+                g["bio"],
+                party=g["party"],
+                province=province_id,
             )
         )
-    raw_parties = json.loads((POLITICS_PARTIES_DIR / f"{era['id']}.json").read_text(encoding="utf-8"))
+    raw_parties = json.loads(
+        (POLITICS_PARTIES_DIR / f"{era['id']}.json").read_text(encoding="utf-8")
+    )
     for rp in raw_parties:
         pid = rp["id"]
         actors.append(
             _actor_sheet(
-                f"party_{pid}", rp["name"], "party",
+                f"party_{pid}",
+                rp["name"],
+                "party",
                 {
-                    "economic": rp["economic"], "social": rp["social"],
-                    "federalism": rp["federalism"], "institutionalism": 0.5,
+                    "economic": rp["economic"],
+                    "social": rp["social"],
+                    "federalism": rp["federalism"],
+                    "institutionalism": 0.5,
                 },
                 {"ambition": 0.6, "risk_tolerance": 0.5, "loyalty": 0.55, "pragmatism": 0.55},
-                ["reelection", "party_unity"], {"public": 0.5, "congress": 0.5, "streets": 0.25, "markets": 0.15},
+                ["reelection", "party_unity"],
+                {"public": 0.5, "congress": 0.5, "streets": 0.25, "markets": 0.15},
                 f"economic/social/federalism de politics/parties/{era['id']}.json (assessment: "
                 "analyst en el origen); institutionalism/personality/interests/influence de este "
                 "script, mismo criterio.",
-                rp.get("notes") or rp["name"], party=pid,
+                rp.get("notes") or rp["name"],
+                party=pid,
             )
         )
     for b in BLOCS + UNIONS + BUSINESS + _media_actors(era["id"]):
         role = (
-            "social_bloc" if b["id"].startswith("bloc_")
-            else "union" if b["id"].startswith("union_")
-            else "business" if b["id"].startswith("biz_")
+            "social_bloc"
+            if b["id"].startswith("bloc_")
+            else "union"
+            if b["id"].startswith("union_")
+            else "business"
+            if b["id"].startswith("biz_")
             else "media"
         )
         actors.append(
             _actor_sheet(
-                b["id"], b["name"], role, b["ideology"], b["personality"], b["interests"],
-                b["influence"], b["assessment_note"], b["bio"],
+                b["id"],
+                b["name"],
+                role,
+                b["ideology"],
+                b["personality"],
+                b["interests"],
+                b["influence"],
+                b["assessment_note"],
+                b["bio"],
             )
         )
     return actors
 
 
 def build_parties_json(era: dict) -> list[dict]:
-    raw_parties = json.loads((POLITICS_PARTIES_DIR / f"{era['id']}.json").read_text(encoding="utf-8"))
+    raw_parties = json.loads(
+        (POLITICS_PARTIES_DIR / f"{era['id']}.json").read_text(encoding="utf-8")
+    )
     out = []
     for rp in raw_parties:
         pid = rp["id"]
@@ -977,20 +1472,31 @@ def build_parties_json(era: dict) -> list[dict]:
 
 
 def build_loyalty_rows(era: dict) -> tuple[list[dict], dict[str, float]]:
-    raw_parties = json.loads((POLITICS_PARTIES_DIR / f"{era['id']}.json").read_text(encoding="utf-8"))
+    raw_parties = json.loads(
+        (POLITICS_PARTIES_DIR / f"{era['id']}.json").read_text(encoding="utf-8")
+    )
     all_ids = [rp["id"] for rp in raw_parties]
     active_ids = [pid for pid in all_ids if pid in era["targets"]]
     party_economic = {rp["id"]: rp["economic"] for rp in raw_parties}
 
     loyalty = estimate_loyalties(COHORTS, active_ids, party_economic, era["targets"], TURNOUT)
-    errors = reproduction_errors(COHORTS, active_ids, party_economic, loyalty, era["targets"], TURNOUT)
+    errors = reproduction_errors(
+        COHORTS, active_ids, party_economic, loyalty, era["targets"], TURNOUT
+    )
 
     rows = []
     for pid in all_ids:
         seed = era["parties_extra"][pid].get("loyalty_seed")
         for c in COHORTS:
             value = loyalty[(c.id, pid)] if pid in active_ids else seed
-            rows.append({"cohort_id": c.id, "party_id": pid, "loyalty": round(value, 4), "turnout": TURNOUT[c.id]})
+            rows.append(
+                {
+                    "cohort_id": c.id,
+                    "party_id": pid,
+                    "loyalty": round(value, 4),
+                    "turnout": TURNOUT[c.id],
+                }
+            )
     return rows, errors
 
 
@@ -999,12 +1505,16 @@ def write_era(era: dict) -> dict:
     (era_dir / "actors").mkdir(parents=True, exist_ok=True)
 
     parties = build_parties_json(era)
-    (era_dir / "parties.json").write_text(json.dumps(parties, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (era_dir / "parties.json").write_text(
+        json.dumps(parties, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
 
     actors = build_actors(era)
     for a in actors:
         path = era_dir / "actors" / f"{a['id']}.yaml"
-        path.write_text(yaml.safe_dump(a, allow_unicode=True, sort_keys=False, width=100), encoding="utf-8")
+        path.write_text(
+            yaml.safe_dump(a, allow_unicode=True, sort_keys=False, width=100), encoding="utf-8"
+        )
 
     governance = {}
     role_by_id = {a["id"]: a["role"] for a in actors}
@@ -1037,7 +1547,7 @@ def write_era(era: dict) -> dict:
 
 def main() -> None:
     ERAS_DIR.mkdir(parents=True, exist_ok=True)
-    for era_id, builder in ERA_BUILDERS.items():
+    for builder in ERA_BUILDERS.values():
         write_era(builder())
 
 
