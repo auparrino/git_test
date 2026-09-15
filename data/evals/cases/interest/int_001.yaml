@@ -1,0 +1,20 @@
+id: int_001
+actor: gov_capital
+overrides:
+  ideology:
+    federalism: -0.6
+  interests:
+  - provincial_transfers
+perception:
+  proposal:
+    policy_delta:
+      provincial_transfers: 1.0
+    label: Aumento de transferencias a las provincias
+  private_indicators:
+    dependence: 0.9
+expected:
+  position: support
+  min_intensity: 0.33
+rationale: 'Gobernador centralista por ideologia, pero muy dependiente de las transferencias:
+  el interes material vence a la ideologia.'
+author: generated

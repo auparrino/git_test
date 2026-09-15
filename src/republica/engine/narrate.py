@@ -63,6 +63,10 @@ class Loaded:
     #: `ElectionResult` (ADR 006 secc. 2.4, `kind: "election"`), agrupados
     #: por mes. Vacio con `--no-elections` (o sin actores/cohortes).
     elections_by_month: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
+    #: `DecisionTrace` (ADR 004 secc. 6, `kind: "trace"`), agrupados por mes.
+    #: Vacio con `default_brain = "rules"` (ADR 007 secc. 5: usado por
+    #: `republica eval`/`republica traces`).
+    traces_by_month: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
 
 
 def load_jsonl(path: str | Path) -> Loaded:
@@ -85,6 +89,7 @@ def load_jsonl(path: str | Path) -> Loaded:
     negotiations_by_month: dict[int, list[dict[str, Any]]] = {}
     perceptions_by_month: dict[int, list[dict[str, Any]]] = {}
     elections_by_month: dict[int, list[dict[str, Any]]] = {}
+    traces_by_month: dict[int, list[dict[str, Any]]] = {}
     for r in parsed:
         kind = r.get("kind")
         if kind == "action":
@@ -97,6 +102,8 @@ def load_jsonl(path: str | Path) -> Loaded:
             perceptions_by_month.setdefault(r["month"], []).append(r)
         elif kind == "election":
             elections_by_month.setdefault(r["month"], []).append(r)
+        elif kind == "trace":
+            traces_by_month.setdefault(r["month"], []).append(r)
     return Loaded(
         records=records,
         summary=summary,
@@ -105,6 +112,7 @@ def load_jsonl(path: str | Path) -> Loaded:
         negotiations_by_month=negotiations_by_month,
         perceptions_by_month=perceptions_by_month,
         elections_by_month=elections_by_month,
+        traces_by_month=traces_by_month,
     )
 
 

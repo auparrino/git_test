@@ -1,0 +1,19 @@
+id: ideo_019
+actor: minister_economy
+overrides:
+  ideology:
+    economic: 0.95
+  interests:
+  - fiscal_balance
+  - low_taxes
+perception:
+  proposal:
+    policy_delta:
+      tax_rate: 7.5
+      primary_spending: 7.5
+    label: Suba de impuestos y expansion del gasto
+expected:
+  position: oppose
+  min_intensity: 0.51
+rationale: 'Ministro de perfil liberal: se opone a la suba de impuestos y al gasto expansivo.'
+author: generated

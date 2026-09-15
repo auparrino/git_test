@@ -1,0 +1,21 @@
+id: ideo_014
+actor: party_movimiento_libertad
+overrides:
+  ideology:
+    economic: 0.95
+  interests:
+  - low_taxes
+  - fiscal_balance
+perception:
+  proposal:
+    policy_delta:
+      tax_rate: 7.5
+      primary_spending: 7.5
+    label: Suba de impuestos y expansion del gasto
+  public_indicators:
+    government_approval: 50
+expected:
+  position: oppose
+  min_intensity: 0.46
+rationale: 'Partido liberal: se opone a la suba de impuestos y al gasto expansivo.'
+author: generated

@@ -1,0 +1,23 @@
+id: ideo_001
+actor: biz_finance
+overrides:
+  ideology:
+    economic: 0.95
+  interests:
+  - low_taxes
+  - financial_stability
+perception:
+  proposal:
+    policy_delta:
+      tax_rate: 10.0
+    label: Duplicar impuestos a las ganancias corporativas
+  public_indicators:
+    inflation: 2.1
+    unemployment: 8.0
+    government_approval: 48
+expected:
+  position: oppose
+  min_intensity: 0.63
+rationale: Liberal economico, anti-impuestos, respaldado por el interes en bajos impuestos y
+  estabilidad financiera.
+author: generated

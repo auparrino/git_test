@@ -173,6 +173,13 @@ class Game:
             memory_enabled=memory_enabled,
             elections_enabled=elections_enabled,
         )
+        # ADR 007 secc. 6, deliverable 6: con un jugador humano, las
+        # acciones EXECUTE de un actor con `human_approval_required` se
+        # retienen para un dilema Si/No (`pending_human_approvals`/
+        # `set_human_approvals` abajo) en vez de autorizarse solas -- a
+        # diferencia de `republica run`/los evals, que dejan
+        # `auto_approve_governance=True` (el default de `Simulation`).
+        sim.auto_approve_governance = False
         game = cls(
             country=base_country,
             seed=seed,
@@ -273,6 +280,31 @@ class Game:
                     "negotiation": dict(negotiation_decisions),
                 }
             )
+
+    @property
+    def pending_human_approvals(self) -> list[Action]:
+        """Acciones EXECUTE del mes pasado retenidas por
+        `human_approval_required` (ADR 007 secc. 6, deliverable 6): dilema
+        Si/No para el jugador (`cli.py::_collect_approval_decisions`). Vacio
+        si `actors_enabled=False` o ningun actor con gobernanza de
+        aprobacion humana emitio una EXECUTE este mes."""
+        if self.sim.actor_engine is None:
+            return []
+        return list(self.sim.actor_engine.last_pending_approvals)
+
+    def set_human_approvals(self, approved_actor_ids: set[str]) -> None:
+        """Fija que acciones EXECUTE pendientes aprueba el jugador este mes
+        (ADR 007 secc. 6, deliverable 6: dilema Si/No, `--auto` = Si). Las
+        aprobadas se reinyectan el mes que viene por el mismo camino que un
+        `GRANT_CONCESSION` ya decidido (`sim.pending_grant_override`, ver
+        `set_grant_decisions`): se EXTIENDE en vez de pisarse, para no
+        perder concesiones/negociaciones ya fijadas este mismo turno."""
+        approved = [
+            a for a in self.pending_human_approvals if a.actor_id in approved_actor_ids
+        ]
+        if not approved:
+            return
+        self.sim.pending_grant_override = list(self.sim.pending_grant_override or []) + approved
 
     @property
     def campaign_window_active(self) -> bool:

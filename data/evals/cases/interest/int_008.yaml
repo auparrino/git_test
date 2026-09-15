@@ -1,0 +1,18 @@
+id: int_008
+actor: biz_industry
+overrides:
+  ideology:
+    economic: -0.4
+  interests:
+  - low_taxes
+perception:
+  proposal:
+    policy_delta:
+      tax_rate: -8.0
+    label: Baja de impuestos a las ganancias
+expected:
+  position: support
+  min_intensity: 0.29
+rationale: 'Ideologicamente mas estatista, pero su interes en bajos impuestos domina: respalda
+  la baja.'
+author: generated

@@ -11,6 +11,13 @@ dependencies = [
     "pyyaml",
 ]
 
+# ADR 007 secc. 5: extra opcional para `republica traces export --to
+# langfuse` -- sin instalar, `ai/tracing.py::try_export_langfuse` cae solo a
+# `traces.jsonl` (ver docstring). No es una dependencia por default: este
+# entorno no tiene red hacia Langfuse.
+[project.optional-dependencies]
+langfuse = ["langfuse>=2"]
+
 [project.scripts]
 republica = "republica.cli:app"
 

@@ -118,12 +118,21 @@ def build_decision_actor(
     temperature: float = 0.4,
     cache_dir: str | Path | None = None,
     memory_enabled: bool = False,
+    governance: Any | None = None,
 ) -> RuleBasedActor | LLMActor:
     """`spec` -> el objeto `decide(perception, rng) -> list[Action]` para
     `sheet` (ADR 004 secc. 7, deliverable 6: "cada actor obtiene el cerebro
     de la tabla"). `memory_enabled` (ADR 006 secc. 1.3) solo importa para
     `RuleBasedActor` (`w_mem`/`trust_president`); un `LLMActor` ya ve las
-    memorias via el prompt (`MEMORIAS RELEVANTES`), sin necesitar el flag."""
+    memorias via el prompt (`MEMORIAS RELEVANTES`), sin necesitar el flag.
+
+    `governance` (ADR 007 secc. 6, deliverable 6, default `None` = carga
+    `data/governance.yaml` sin overrides -- comportamiento identico a antes
+    de ADR 007): se reenvia tal cual a `RuleBasedActor`, que solo lee
+    `governance.central_bank_autonomy` (ADR 003 secc. 6.4) para decidir si
+    SIQUIERA intenta `SET_RATE` -- sin pasarlo aca, `--governance-override
+    central_bank.autonomy=4` autorizaria `SET_RATE` en `authorize()` pero
+    el actor nunca llegaria a proponerlo (ver Notas de implementacion)."""
     if spec == "rules":
         return RuleBasedActor(
             sheet,
@@ -131,6 +140,7 @@ def build_decision_actor(
             country.taylor,
             country.structure.r_neutral,
             country.policy_ranges["interest_rate_target"],
+            governance=governance,
             memory_enabled=memory_enabled,
         )
     backend = build_backend(spec, cache_dir=cache_dir, memory_enabled=memory_enabled)

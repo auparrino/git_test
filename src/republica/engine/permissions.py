@@ -13,12 +13,33 @@ from pydantic import ValidationError
 
 from republica.actors.sheet import ActorSheet
 from republica.engine.actions import PARAM_SCHEMAS, Action, ActionType
+from republica.governance import (
+    DEFAULT_GOVERNANCE_PATH,
+    Governance,
+    load_governance,
+    required_tier,
+)
 from republica.world.config import Party
 from republica.world.elections import is_campaign_month
 from republica.world.state import WorldState
 
+__all__ = [
+    "ACTION_BUDGET_PER_TURN",
+    "COOLDOWN_MONTHS",
+    "DEFAULT_GOVERNANCE_PATH",
+    "DEFAULT_PERMISSIONS_PATH",
+    "Allowed",
+    "AuthContext",
+    "Denied",
+    "Governance",
+    "authorize",
+    "authorize_all",
+    "load_governance",
+    "load_permissions",
+    "to_record_dict",
+]
+
 DEFAULT_PERMISSIONS_PATH = Path(__file__).resolve().parents[3] / "data" / "permissions.yaml"
-DEFAULT_GOVERNANCE_PATH = Path(__file__).resolve().parents[3] / "data" / "governance.yaml"
 
 #: Presupuesto de acciones por turno (ADR 003 secc. 4/9): la 4a accion de un
 #: actor en un mes se deniega. `NO_ACTION` no consume presupuesto (no
@@ -43,17 +64,6 @@ def load_permissions(path: str | Path | None = None) -> dict[str, set[ActionType
     p = Path(path) if path is not None else DEFAULT_PERMISSIONS_PATH
     raw = yaml.safe_load(p.read_text(encoding="utf-8"))
     return {role: {ActionType(t) for t in types} for role, types in raw.items()}
-
-
-@dataclass(frozen=True)
-class Governance:
-    central_bank_autonomy: int
-
-
-def load_governance(path: str | Path | None = None) -> Governance:
-    p = Path(path) if path is not None else DEFAULT_GOVERNANCE_PATH
-    raw = yaml.safe_load(p.read_text(encoding="utf-8"))
-    return Governance(central_bank_autonomy=int(raw["central_bank"]["autonomy"]))
 
 
 @dataclass
@@ -96,11 +106,6 @@ def _check_state_conditions(actor: ActorSheet, action: Action, ctx: AuthContext)
         party = ctx.parties_by_id.get(party_id)
         if party is None or party.in_government:
             return "CALL_PROTEST solo lo puede convocar un partido de oposicion"
-    if action.type is ActionType.SET_RATE and ctx.governance.central_bank_autonomy < 3:
-        return (
-            "SET_RATE requiere autonomia del Banco Central >= 3 "
-            f"(actual {ctx.governance.central_bank_autonomy})"
-        )
     if action.type is ActionType.PROPOSE_POLICY and actor.role == "economy_minister":
         delta = action.params.get("policy_delta", {})
         non_fiscal = set(delta) - FISCAL_INSTRUMENTS
@@ -116,17 +121,54 @@ def _check_state_conditions(actor: ActorSheet, action: Action, ctx: AuthContext)
     return None
 
 
+def _check_governance(actor: ActorSheet, action: Action, ctx: AuthContext) -> str | None:
+    """Chequeo de gobernanza (ADR 007 secc. 6), consultado ANTES de la
+    matriz de rol -- pero solo si `action.type` YA es del rol de `actor`
+    (ver `authorize`): si ni siquiera es del rol, se deja que el chequeo 1
+    (matriz) produzca su propio `"no tiene permitido"`, del que depende la
+    metrica `authority_violation` (ADR 004 secc. 8) -- documentado en Notas
+    de implementacion de ADR 007.
+
+    Reemplaza el chequeo puntual de `SET_RATE` (ADR 003 secc. 6.4) por el
+    mecanismo general: `write`/`execute` restringen que tipos puede
+    *intentar* este actor en particular, y un tipo de `execute` ademas
+    necesita `autonomy >= required_tier(tipo)` (la misma regla de antes,
+    generalizada: `SET_RATE` sigue pidiendo `autonomy >= 3`)."""
+    gov = ctx.governance.for_actor(actor.id)
+    if action.type is ActionType.NO_ACTION:
+        return None
+    if not gov.allows_type(action.type):
+        return f"governance:write ({actor.id} no tiene {action.type.value} en write/execute)"
+    if not gov.meets_autonomy(action.type):
+        return (
+            f"governance:autonomy ({action.type.value} requiere autonomy >= "
+            f"{required_tier(action.type)}, {actor.id} tiene {gov.autonomy})"
+        )
+    budget = gov.budget.actions_per_turn
+    if budget is not None and budget < ACTION_BUDGET_PER_TURN:
+        used = ctx.action_counts.get(actor.id, 0)
+        if used >= budget:
+            return f"governance:budget ({actor.id} ya emitio {used} acciones, tope {budget})"
+    return None
+
+
 def authorize(actor: ActorSheet, action: Action, ctx: AuthContext) -> Allowed | Denied:
     """Los 5 chequeos de ADR 003 secc. 4, en orden: (1) matriz de permisos,
     (2) params validan contra el esquema de su tipo, (3) condiciones de
-    estado, (4) cooldowns, (5) presupuesto de acciones por turno. No muta
-    `ctx`: quien llama debe actualizar `cooldowns`/`action_counts` despues de
-    ver el resultado (ver `authorize_all`)."""
+    estado, (4) cooldowns, (5) presupuesto de acciones por turno -- mas la
+    gobernanza de ADR 007 secc. 6, consultada antes que (1) para los tipos
+    que ya son del rol de `actor` (ver `_check_governance`). No muta `ctx`:
+    quien llama debe actualizar `cooldowns`/`action_counts` despues de ver
+    el resultado (ver `authorize_all`)."""
     if action.actor_id != actor.id:
         return Denied(action, f"actor_id {action.actor_id!r} no coincide con la ficha {actor.id!r}")
 
     permissions = ctx.permissions or load_permissions()
     allowed_types = permissions.get(actor.role, set())
+    if action.type in allowed_types:
+        gov_reason = _check_governance(actor, action, ctx)
+        if gov_reason is not None:
+            return Denied(action, gov_reason)
     if action.type not in allowed_types:
         return Denied(action, f"el rol {actor.role!r} no tiene permitido {action.type.value}")
 

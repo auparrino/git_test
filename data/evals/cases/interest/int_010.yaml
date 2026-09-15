@@ -1,0 +1,21 @@
+id: int_010
+actor: union_cgt
+overrides:
+  ideology:
+    economic: 0.6
+    social: -0.5
+  interests:
+  - real_wages
+perception:
+  proposal:
+    policy_delta:
+      primary_spending: 3.0
+    label: Aumento del gasto publico
+  public_indicators:
+    inflation: 9.0
+expected:
+  position: oppose
+  min_intensity: 0.76
+rationale: 'Ideologicamente favorable a mas gasto publico, pero la inflacion alta ya esta licuando
+  el salario real (su interes declarado) y eso domina: se opone.'
+author: generated

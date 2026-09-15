@@ -1,0 +1,21 @@
+id: int_005
+actor: gov_cuyo
+overrides:
+  ideology:
+    federalism: -0.3
+    economic: 0.5
+  interests:
+  - provincial_transfers
+perception:
+  proposal:
+    policy_delta:
+      provincial_transfers: 1.0
+    label: Aumento de transferencias a las provincias
+  private_indicators:
+    dependence: 0.85
+expected:
+  position: support
+  min_intensity: 0.41
+rationale: 'Gobernador ortodoxo y poco federalista, pero dependiente de las transferencias:
+  el interes vence a la ideologia.'
+author: generated

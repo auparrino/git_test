@@ -1,0 +1,19 @@
+id: ideo_017
+actor: bloc_middle_class
+overrides:
+  ideology:
+    economic: 0.95
+  interests:
+  - low_taxes
+  - fiscal_balance
+perception:
+  proposal:
+    policy_delta:
+      tax_rate: 7.5
+      primary_spending: 7.5
+    label: Suba de impuestos y expansion del gasto
+expected:
+  position: oppose
+  min_intensity: 0.5
+rationale: 'Clase media liberal: se opone a la suba de impuestos.'
+author: generated

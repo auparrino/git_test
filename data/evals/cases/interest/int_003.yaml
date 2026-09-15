@@ -1,0 +1,21 @@
+id: int_003
+actor: gov_litoral
+overrides:
+  ideology:
+    federalism: -0.4
+    economic: 0.6
+  interests:
+  - provincial_transfers
+perception:
+  proposal:
+    policy_delta:
+      provincial_transfers: -1.0
+    label: Recorte de transferencias a las provincias
+  private_indicators:
+    dependence: 0.85
+expected:
+  position: oppose
+  min_intensity: 0.36
+rationale: 'Gobernador ortodoxo y poco federalista, pero su provincia depende mucho de las transferencias:
+  se opone al recorte por interes, no por ideologia.'
+author: generated

@@ -1,0 +1,20 @@
+id: int_006
+actor: gov_centro
+overrides:
+  ideology:
+    federalism: -0.4
+  interests:
+  - provincial_transfers
+perception:
+  proposal:
+    policy_delta:
+      provincial_transfers: -1.0
+    label: Recorte de transferencias a las provincias
+  private_indicators:
+    dependence: 0.8
+expected:
+  position: oppose
+  min_intensity: 0.43
+rationale: 'Gobernador poco federalista, pero su provincia depende de las transferencias: se
+  opone por interes.'
+author: generated

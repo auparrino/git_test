@@ -1,0 +1,20 @@
+id: ideo_020
+actor: bloc_rural
+overrides:
+  ideology:
+    economic: 0.95
+    federalism: 0.95
+  interests:
+  - agricultural_exports
+  - low_taxes
+perception:
+  proposal:
+    policy_delta:
+      fx_intervention: -1.0
+      tax_rate: -6.0
+    label: Devaluacion y baja de impuestos
+expected:
+  position: support
+  min_intensity: 0.89
+rationale: 'Sector rural liberal: respalda la devaluacion competitiva y la baja de impuestos.'
+author: generated

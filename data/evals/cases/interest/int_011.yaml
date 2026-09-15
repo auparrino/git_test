@@ -1,0 +1,21 @@
+id: int_011
+actor: bloc_urban_workers
+overrides:
+  ideology:
+    economic: 0.6
+    social: -0.5
+  interests:
+  - real_wages
+perception:
+  proposal:
+    policy_delta:
+      primary_spending: 3.0
+    label: Aumento del gasto publico
+  public_indicators:
+    inflation: 9.0
+expected:
+  position: oppose
+  min_intensity: 0.69
+rationale: 'Ideologicamente favorable al gasto publico, pero el interes en el salario real ante
+  la inflacion alta domina: se opone.'
+author: generated

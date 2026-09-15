@@ -1,0 +1,21 @@
+id: ideo_006
+actor: biz_agro
+overrides:
+  ideology:
+    economic: 0.95
+    federalism: 0.95
+  interests:
+  - agricultural_exports
+  - low_taxes
+perception:
+  proposal:
+    policy_delta:
+      fx_intervention: 1.0
+      tax_rate: 6.0
+    label: Apreciacion y suba de retenciones
+expected:
+  position: oppose
+  min_intensity: 0.85
+rationale: 'Agroexportador liberal: apreciacion cambiaria y suba de impuestos van contra su
+  ideologia.'
+author: generated

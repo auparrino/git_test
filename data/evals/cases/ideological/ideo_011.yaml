@@ -1,0 +1,19 @@
+id: ideo_011
+actor: gov_pampa
+overrides:
+  ideology:
+    federalism: 0.95
+  interests:
+  - provincial_transfers
+perception:
+  proposal:
+    policy_delta:
+      provincial_transfers: -2.6
+    label: Recorte de transferencias a las provincias
+  private_indicators:
+    dependence: 0.3
+expected:
+  position: oppose
+  min_intensity: 0.83
+rationale: 'Gobernador federalista: se opone al recorte de transferencias.'
+author: generated

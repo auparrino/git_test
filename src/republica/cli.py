@@ -30,6 +30,10 @@ from republica.world.config import load_country
 app = typer.Typer(help="Republica Artificial - laboratorio politico jugable.")
 actors_app = typer.Typer(help="Fichas de actores (ADR 003).")
 app.add_typer(actors_app, name="actors")
+traces_app = typer.Typer(help="Trazas de decision de actores IA (ADR 007 secc. 5).")
+app.add_typer(traces_app, name="traces")
+eval_app = typer.Typer(help="Evals de agentes (ADR 007 secc. 1-4).")
+app.add_typer(eval_app, name="eval")
 console = Console()
 
 
@@ -181,8 +185,18 @@ def run(
             help="YAML con cerebro por actor (ADR 004 secc. 7, formato de data/brains.yaml)."
         ),
     ] = None,
+    governance_override: Annotated[
+        list[str],
+        typer.Option(
+            "--governance-override",
+            help="Override de gobernanza actor.campo=valor (ADR 007 secc. 6, repetible; ej. "
+            "central_bank.autonomy=4).",
+        ),
+    ] = [],  # noqa: B006 - typer clona la lista, no se muta
 ) -> None:
     """Corre una simulacion de `months` meses y la guarda en `out` (JSONL)."""
+    from republica.governance import parse_governance_overrides
+
     country = load_country()
     policy_rule = _build_policy_rule(policy, country)
     forced_shocks: dict[int, list[str]] = {}
@@ -233,6 +247,7 @@ def run(
         media_enabled=media_enabled,
         memory_enabled=memory_enabled,
         elections_enabled=elections_enabled,
+        governance_overrides=parse_governance_overrides(governance_override) or None,
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(history.to_jsonl(), encoding="utf-8")
@@ -555,6 +570,28 @@ def _collect_grant_decisions(game: Game, auto: bool) -> None:
     game.set_grant_decisions(granted, negotiation_decisions)
 
 
+def _collect_approval_decisions(game: Game, auto: bool) -> None:
+    """Dilema Si/No de gobernanza (ADR 007 secc. 6, deliverable 6): acciones
+    EXECUTE del mes pasado de un actor con `human_approval_required`
+    (`central_bank.SET_RATE` con `autonomy >= 3`, p.ej. via
+    `--governance-override central_bank.autonomy=4`). `--auto` = Si (ADR
+    007 secc. 6, literal)."""
+    pending = game.pending_human_approvals
+    if not pending:
+        return
+    approved: set[str] = set()
+    for action in pending:
+        prompt = f"  {action.actor_id} pide {action.type.value}: {action.reason} [Si/No]"
+        if auto:
+            console.print(f"[dim]--auto: {prompt} -> Si[/dim]")
+            approved.add(action.actor_id)
+            continue
+        answer = typer.prompt(prompt, default="Si").strip().lower()
+        if answer.startswith("s"):
+            approved.add(action.actor_id)
+    game.set_human_approvals(approved)
+
+
 def _collect_campaign_decisions(game: Game, auto: bool) -> None:
     """Pantalla de campana (ADR 006 secc. 2.5, deliverable 6): en los
     ultimos 4 meses del mandato, el jugador elige un foco de `CAMPAIGN`
@@ -790,6 +827,7 @@ def play(
         _render_dashboard(console, game, prev_state)
         choices = _collect_choices(game, auto)
         _collect_grant_decisions(game, auto)
+        _collect_approval_decisions(game, auto)
         _collect_campaign_decisions(game, auto)
         edits, quit_now = _menu(game, save_path, auto)
         if quit_now:
@@ -977,6 +1015,144 @@ def compare(
             ", ".join(rb["actions"]) or "-",
         )
     console.print(table)
+
+
+@traces_app.command("export")
+def traces_export(
+    path: Annotated[Path, typer.Argument(help="JSONL de una corrida (`republica run`).")],
+    to: Annotated[
+        str,
+        typer.Option(help="Destino: jsonl|langfuse (ADR 007 secc. 5)."),
+    ] = "jsonl",
+    out: Annotated[
+        Path | None,
+        typer.Option("--out", help="Salida (default: mismo nombre con .traces.jsonl)."),
+    ] = None,
+) -> None:
+    """Exporta las trazas (`kind: "trace"`) de `path` a spans (ADR 007 secc. 5):
+    `--to langfuse` usa el SDK si esta instalado (`pip install
+    republica-artificial[langfuse]`); si no, cae a `--to jsonl`."""
+    from republica.ai.tracing import export_traces_jsonl, read_traces_jsonl, try_export_langfuse
+
+    if to not in ("jsonl", "langfuse"):
+        raise typer.BadParameter("usar jsonl|langfuse")
+    traces = read_traces_jsonl(path)
+    if to == "langfuse":
+        if try_export_langfuse(traces):
+            console.print(f"[green]OK[/green] {len(traces)} trazas -> Langfuse")
+            return
+        console.print("[yellow]langfuse no esta instalado; exportando a JSONL.[/yellow]")
+    out_path = out or path.with_suffix(".traces.jsonl")
+    n = export_traces_jsonl(traces, out_path)
+    console.print(f"[green]OK[/green] {len(traces)} trazas, {n} spans -> {out_path}")
+
+
+@traces_app.command("show")
+def traces_show(
+    path: Annotated[Path, typer.Argument(help="JSONL de una corrida (`republica run`).")],
+    trace_id: Annotated[str, typer.Argument(help="`run_id:mes:actor_id` (ver `traces export`).")],
+) -> None:
+    """Imprime el arbol de spans de una decision (ADR 007 secc. 5/7 punto 6)."""
+    from republica.ai.tracing import read_traces_jsonl, render_trace_tree, spans_from_trace_dict
+
+    traces = read_traces_jsonl(path)
+    match = next(
+        (
+            t
+            for t in traces
+            if f"{t.get('run_id', '')}:{int(t.get('month', 0)):03d}:{t.get('actor_id', '')}"
+            == trace_id
+        ),
+        None,
+    )
+    if match is None:
+        console.print(f"[red]no se encontro trace_id {trace_id!r} en {path}[/red]")
+        raise typer.Exit(code=1)
+    console.print(render_trace_tree(spans_from_trace_dict(match)))
+
+
+@eval_app.callback(invoke_without_command=True)
+def eval_main(
+    ctx: typer.Context,
+    suite: Annotated[
+        str, typer.Option("--suite", help="all|ideological|interest|... (ADR 007 secc. 2).")
+    ] = "all",
+    brain: Annotated[
+        str, typer.Option("--brain", help="rules|fake:rules|fake:unauthorized|llm:ollama:<m>.")
+    ] = "rules",
+    judge: Annotated[
+        str, typer.Option("--judge", help="fake|llm:ollama:<m>|llm:anthropic:<m>.")
+    ] = "fake",
+    out: Annotated[
+        Path | None,
+        typer.Option("--out", help="Directorio de salida (default: evals/reports/<ts>/)."),
+    ] = None,
+    seed: Annotated[int, typer.Option(help="Semilla base de las corridas sinteticas.")] = 7,
+) -> None:
+    """`republica eval --suite all|<id> --brain ... --judge ... --out ...`
+    (ADR 007 secc. 2/4): corre la suite y escribe `report.json` + `report.md`.
+    `republica eval compare`/`republica eval export-promptfoo` son subcomandos
+    aparte (ver abajo)."""
+    if ctx.invoked_subcommand is not None:
+        return
+    from republica.evals.runner import run_suite
+
+    out_dir = out or Path("evals/reports") / time.strftime("%Y%m%d-%H%M%S")
+    report = run_suite(suite=suite, brain=brain, judge=judge, seed=seed)
+    paths = report.write(out_dir)
+    console.print(
+        f"[green]OK[/green] suite={suite} brain={brain} judge={judge} -> "
+        f"{paths[0].parent}"
+    )
+
+
+@eval_app.command("compare")
+def eval_compare(
+    a: Annotated[Path, typer.Argument(help="Directorio de reporte A (`report.json`).")],
+    b: Annotated[Path, typer.Argument(help="Directorio de reporte B (`report.json`).")],
+) -> None:
+    """Tabla lado a lado de dos reportes, marca diferencias fuera del IC 95 %
+    (ADR 007 secc. 4/7 punto 7)."""
+    from republica.evals.report import compare_reports
+
+    table_rows, differing = compare_reports(a, b)
+    table = Table(title=f"eval compare: {a.name} vs {b.name}")
+    table.add_column("metrica")
+    table.add_column("A", justify="right")
+    table.add_column("B", justify="right")
+    table.add_column("IC A 95%")
+    table.add_column("IC B 95%")
+    table.add_column("difiere")
+    for row in table_rows:
+        mark = "[red]si[/red]" if row["differs"] else "no"
+        table.add_row(
+            row["metric"],
+            f"{row['a']:.3f}" if row["a"] is not None else "-",
+            f"{row['b']:.3f}" if row["b"] is not None else "-",
+            row["ci_a"],
+            row["ci_b"],
+            mark,
+        )
+    console.print(table)
+    if differing:
+        console.print(
+            f"[yellow]{len(differing)} metricas difieren fuera del IC: {differing}[/yellow]"
+        )
+
+
+@eval_app.command("export-promptfoo")
+def eval_export_promptfoo(
+    out: Annotated[
+        Path, typer.Option("--out", help="Directorio de salida.")
+    ] = Path("evals/promptfoo"),
+) -> None:
+    """Genera `evals/promptfoo/promptfooconfig.yaml` + `cases.yaml` desde los
+    mismos casos de `data/evals/cases/` (ADR 007 secc. 4). Promptfoo no es
+    una dependencia de Python: son archivos, nada mas."""
+    from republica.evals.promptfoo import export_promptfoo
+
+    paths = export_promptfoo(out)
+    console.print(f"[green]OK[/green] promptfoo -> {', '.join(str(p) for p in paths)}")
 
 
 if __name__ == "__main__":

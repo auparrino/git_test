@@ -1,0 +1,20 @@
+id: ideo_005
+actor: biz_agro
+overrides:
+  ideology:
+    economic: 0.95
+    federalism: 0.95
+  interests:
+  - agricultural_exports
+  - low_taxes
+perception:
+  proposal:
+    policy_delta:
+      fx_intervention: -1.0
+      tax_rate: -6.0
+    label: Devaluacion y baja de retenciones
+expected:
+  position: support
+  min_intensity: 0.84
+rationale: 'Agroexportador liberal: devaluacion y baja de impuestos alineadas con su ideologia.'
+author: generated

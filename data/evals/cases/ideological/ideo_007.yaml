@@ -1,0 +1,19 @@
+id: ideo_007
+actor: gov_norte
+overrides:
+  ideology:
+    federalism: 0.95
+  interests:
+  - provincial_transfers
+perception:
+  proposal:
+    policy_delta:
+      provincial_transfers: -5.0
+    label: Recorte de transferencias a las provincias
+  private_indicators:
+    dependence: 0.1
+expected:
+  position: oppose
+  min_intensity: 0.67
+rationale: 'Gobernador federalista: se opone a un recorte de transferencias por ideologia federal.'
+author: generated

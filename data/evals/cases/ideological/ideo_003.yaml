@@ -1,0 +1,20 @@
+id: ideo_003
+actor: biz_industry
+overrides:
+  ideology:
+    economic: 0.95
+    institutionalism: 0.95
+  interests:
+  - industrial_protection
+  - low_taxes
+perception:
+  proposal:
+    policy_delta:
+      tax_rate: -7.5
+      fx_intervention: -1.0
+    label: Baja de impuestos y devaluacion competitiva
+expected:
+  position: support
+  min_intensity: 0.39
+rationale: 'Industrial liberal: baja de impuestos y devaluacion favorecen su ideologia economica.'
+author: generated

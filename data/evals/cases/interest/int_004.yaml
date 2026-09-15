@@ -1,0 +1,19 @@
+id: int_004
+actor: gov_norte
+overrides:
+  ideology:
+    federalism: -0.3
+  interests:
+  - provincial_transfers
+perception:
+  proposal:
+    policy_delta:
+      provincial_transfers: 1.0
+    label: Aumento de transferencias a las provincias
+  private_indicators:
+    dependence: 0.9
+expected:
+  position: support
+  min_intensity: 0.43
+rationale: 'Gobernador poco federalista por ideologia, pero muy dependiente: el interes domina.'
+author: generated

@@ -1,0 +1,18 @@
+id: int_009
+actor: bloc_rural
+overrides:
+  ideology:
+    economic: -0.5
+  interests:
+  - agricultural_exports
+perception:
+  proposal:
+    policy_delta:
+      fx_intervention: -5.0
+    label: Fuerte devaluacion competitiva
+expected:
+  position: support
+  min_intensity: 0.29
+rationale: 'Ideologicamente reticente a medidas de mercado, pero su interes en las exportaciones
+  agropecuarias domina: respalda la devaluacion.'
+author: generated

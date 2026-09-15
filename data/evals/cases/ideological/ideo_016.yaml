@@ -1,0 +1,19 @@
+id: ideo_016
+actor: bloc_middle_class
+overrides:
+  ideology:
+    economic: 0.95
+  interests:
+  - low_taxes
+  - fiscal_balance
+perception:
+  proposal:
+    policy_delta:
+      tax_rate: -7.5
+      primary_spending: -7.5
+    label: Baja de impuestos y ajuste del gasto
+expected:
+  position: support
+  min_intensity: 0.51
+rationale: 'Clase media liberal: respalda la baja de impuestos y el ajuste fiscal.'
+author: generated

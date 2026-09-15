@@ -47,6 +47,7 @@ from republica.world.elections import (
     honeymoon_approval,
     is_election_month,
     load_loyalty,
+    load_province_weights,
     reseed_president_relationships,
     run_election,
 )
@@ -74,7 +75,7 @@ from republica.world.perception import (
     perception_gap as compute_perception_gap,
 )
 from republica.world.politics import step_politics
-from republica.world.provinces import compute_provinces
+from republica.world.provinces import ProvinceRecord, compute_provinces
 from republica.world.society import step_society
 from republica.world.state import Exogenous, Policy, WorldState, clamp, clamp_state
 
@@ -318,6 +319,12 @@ class Simulation:
     memory_records: list[MemoryEvent] = field(default_factory=list)
     election_records: list[ElectionResult] = field(default_factory=list)
     loyalty_table: LoyaltyTable = field(default_factory=LoyaltyTable)
+    #: `{cohort_id: {province_id: peso}}` (calibracion: `data/
+    #: cohort_provinces.csv`, opcional) para `regional_bonus_c,p` (secc.
+    #: 2.2, `world/elections.py::compute_regional_bonus`); `{}` deja
+    #: `regional_bonus_c,p = 0` para todas (mismo comportamiento que antes
+    #: de la calibracion).
+    province_weights_table: dict[str, dict[str, float]] = field(default_factory=dict)
     #: `campaign_p` acumulado por partido y foco (ADR 006 secc. 2.5:
     #: `CAMPAIGN(focus, intensity)` -> `campaign_p += 0.5 * intensity`),
     #: reseteado en cada transicion de gobierno.
@@ -331,6 +338,12 @@ class Simulation:
     #: (`world/elections.py::compute_vote_intention(loyalty_adjustments=...)`),
     #: sin reescribir el CSV.
     loyalty_adjustments: dict[tuple[str, str], float] = field(default_factory=dict)
+    #: ADR 007 secc. 6, deliverable 6 (default `True`): si las acciones
+    #: EXECUTE de un actor con `human_approval_required` se autorizan solas
+    #: (`run()`, sin jugador) o se retienen para un dilema Si/No
+    #: (`engine/game.py::Game.new()` lo pone en `False`; ver
+    #: `engine/scheduler.py::run_actor_turn(auto_approve_execute=...)`).
+    auto_approve_governance: bool = True
 
 
 def new_simulation(
@@ -356,6 +369,8 @@ def new_simulation(
     memory_enabled: bool = False,
     elections_enabled: bool = False,
     loyalty_table: LoyaltyTable | None = None,
+    province_weights_table: dict[str, dict[str, float]] | None = None,
+    governance_overrides: dict[str, str] | None = None,
 ) -> Simulation:
     """Construye una `Simulation` nueva sin correrla (uso interactivo, Fase 2:
     ver `engine/game.py`, que llama `advance_month` mes a mes).
@@ -400,6 +415,7 @@ def new_simulation(
             llm_temperature=llm_temperature,
             llm_cache_dir=llm_cache_dir,
             memory_enabled=resolved_memory_enabled,
+            governance_overrides=governance_overrides,
         )
         if actors_enabled
         else None
@@ -421,6 +437,11 @@ def new_simulation(
         (loyalty_table if loyalty_table is not None else load_loyalty())
         if resolved_elections_enabled
         else LoyaltyTable()
+    )
+    resolved_province_weights_table = (
+        (province_weights_table if province_weights_table is not None else load_province_weights())
+        if resolved_elections_enabled
+        else {}
     )
     resolved_consumption = (
         (media_consumption if media_consumption is not None else load_media_consumption())
@@ -464,6 +485,7 @@ def new_simulation(
         memory_enabled=resolved_memory_enabled,
         elections_enabled=resolved_elections_enabled,
         loyalty_table=resolved_loyalty_table,
+        province_weights_table=resolved_province_weights_table,
     )
 
 
@@ -475,13 +497,25 @@ def _format_date(start_year: int, start_month: int, month_index: int) -> str:
 
 
 def _run_election(
-    sim: Simulation, clamped: WorldState, month: int, country: Country
+    sim: Simulation,
+    clamped: WorldState,
+    month: int,
+    country: Country,
+    provinces: list[ProvinceRecord],
 ) -> tuple[WorldState, ElectionResult]:
     """Corre la eleccion de este mes (ADR 006 secc. 2.2/2.3) y aplica la
     transicion de gobierno (secc. 2.4). Muta `sim.actor_engine`/
     `sim.country`/`sim.cohort_state`/`sim.campaign_state` segun corresponda;
     devuelve el `WorldState` con la aprobacion de luna de miel/continuidad
     ya aplicada (secc. 2.4, literal) y el `ElectionResult`.
+
+    `provinces` (calibracion, secc. 2.2 `regional_bonus_c,p`):
+    `income_p`/`unemployment_p` de este mes (`world/provinces.py::
+    compute_provinces`, ya calculado por el llamador). Junto con
+    `country.provinces` (gobernador de cada una) y `sim.province_weights_table`
+    (`data/cohort_provinces.csv`) arma el bono regional; si
+    `province_weights_table` esta vacio (sin el CSV) el bono queda en 0 para
+    todos, mismo comportamiento que antes de esta calibracion.
 
     `Δreal_wage_12m`/`Δunemployment_12m` (secc. 2.2) se calculan contra el
     `MonthRecord` de 12 meses atras si hay suficiente historia (si no, deltas
@@ -512,6 +546,10 @@ def _run_election(
         campaign_state=sim.campaign_state,
         memory_store=sim.actor_engine.memory_store if sim.memory_enabled else None,
         loyalty_adjustments=sim.loyalty_adjustments,
+        provinces=country.provinces,
+        province_records=provinces,
+        province_weights=sim.province_weights_table,
+        national_unemployment=clamped.unemployment,
     )
 
     # Bancas/`in_government` de la proxima temporada, siempre (ADR 006 secc.
@@ -739,6 +777,7 @@ def advance_month(sim: Simulation) -> MonthRecord:
             media_perception_active=sim.media_enabled,
             memory_enabled=sim.memory_enabled,
             term_length=country.term_length,
+            auto_approve_execute=sim.auto_approve_governance,
         )
         month_action_records = action_records
         sim.action_records.extend(action_records)
@@ -1063,11 +1102,26 @@ def advance_month(sim: Simulation) -> MonthRecord:
             # mientras la firma economica siga contradiciendola).
         sim.promises = still_active
 
+    # `income_p`/`unemployment_p` por provincia de ESTE mes (calculado antes
+    # de la eleccion -- calibracion, secc. 2.2 `regional_bonus_c,p`: la
+    # eleccion los necesita para el bono regional; se reusa mas abajo para
+    # el registro de la seccion 9, sin recalcularlo -- `clamped`/`policy`/
+    # `agg` no cambian entre este punto y ahi salvo `government_approval`,
+    # que `compute_provinces` no usa).
+    provinces = compute_provinces(
+        clamped,
+        policy,
+        country.provinces,
+        coeff.province_transfer_sensitivity,
+        coeff.transfers_ref,
+        agg,
+    )
+
     # -- ADR 006 secc. 2: elecciones -----------------------------------------
     election_window = sim.actors_enabled and sim.elections_enabled
     if election_window and is_election_month(month, country.term_length):
         assert sim.actor_engine is not None
-        clamped, election_result = _run_election(sim, clamped, month, country)
+        clamped, election_result = _run_election(sim, clamped, month, country, provinces)
         sim.election_records.append(election_result)
         events.append(f"election:{election_result.winner}")
         if outcome == "survived":
@@ -1080,14 +1134,6 @@ def advance_month(sim: Simulation) -> MonthRecord:
         sim.outcome = outcome
 
     # 9. registro
-    provinces = compute_provinces(
-        clamped,
-        policy,
-        country.provinces,
-        coeff.province_transfer_sensitivity,
-        coeff.transfers_ref,
-        agg,
-    )
     record = MonthRecord(
         month_index=month,
         date=date,
@@ -1135,6 +1181,8 @@ def run(
     memory_enabled: bool = False,
     elections_enabled: bool = False,
     loyalty_table: LoyaltyTable | None = None,
+    province_weights_table: dict[str, dict[str, float]] | None = None,
+    governance_overrides: dict[str, str] | None = None,
 ) -> History:
     """Corre `months` meses (o hasta un fin de partida temprano) y devuelve
     la `History`.
@@ -1181,6 +1229,8 @@ def run(
         memory_enabled=memory_enabled,
         elections_enabled=elections_enabled,
         loyalty_table=loyalty_table,
+        province_weights_table=province_weights_table,
+        governance_overrides=governance_overrides,
     )
     sim.country = sim.country.model_copy(update={"months": months})
     for _ in range(months):

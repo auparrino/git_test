@@ -1,0 +1,23 @@
+id: int_007
+actor: biz_finance
+overrides:
+  ideology:
+    economic: 0.0
+    social: 0.0
+    federalism: 0.0
+    institutionalism: 0.0
+  interests:
+  - financial_stability
+perception:
+  proposal:
+    policy_delta:
+      interest_rate_target: 30.0
+    label: Fuerte suba de la tasa de interes
+  public_indicators:
+    inflation: 8.0
+expected:
+  position: oppose
+  min_intensity: 0.39
+rationale: 'Sin sesgo ideologico neto (ideologia neutralizada): la suba brusca de tasa amenaza
+  la estabilidad financiera, su interes declarado, y eso define la posicion.'
+author: generated

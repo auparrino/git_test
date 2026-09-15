@@ -1,0 +1,19 @@
+id: ideo_018
+actor: minister_economy
+overrides:
+  ideology:
+    economic: 0.95
+  interests:
+  - fiscal_balance
+  - low_taxes
+perception:
+  proposal:
+    policy_delta:
+      tax_rate: -7.5
+      primary_spending: -7.5
+    label: Baja de impuestos y ajuste fiscal
+expected:
+  position: support
+  min_intensity: 0.53
+rationale: 'Ministro de perfil liberal: respalda la baja de impuestos y el ajuste fiscal.'
+author: generated

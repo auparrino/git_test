@@ -1,0 +1,19 @@
+id: ideo_008
+actor: gov_norte
+overrides:
+  ideology:
+    federalism: 0.95
+  interests:
+  - provincial_transfers
+perception:
+  proposal:
+    policy_delta:
+      provincial_transfers: 5.0
+    label: Aumento de transferencias a las provincias
+  private_indicators:
+    dependence: 0.1
+expected:
+  position: support
+  min_intensity: 0.69
+rationale: 'Gobernador federalista: respalda un aumento de transferencias por ideologia federal.'
+author: generated

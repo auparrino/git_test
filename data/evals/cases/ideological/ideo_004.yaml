@@ -1,0 +1,20 @@
+id: ideo_004
+actor: biz_industry
+overrides:
+  ideology:
+    economic: 0.95
+  interests:
+  - industrial_protection
+  - low_taxes
+perception:
+  proposal:
+    policy_delta:
+      tax_rate: 7.5
+      fx_intervention: 1.0
+    label: Suba de impuestos y apreciacion cambiaria
+expected:
+  position: oppose
+  min_intensity: 0.4
+rationale: Suba de impuestos y apreciacion del tipo de cambio van contra su ideologia economica
+  liberal.
+author: generated

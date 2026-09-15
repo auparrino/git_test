@@ -42,6 +42,7 @@ from republica.engine.permissions import (
     load_permissions,
     to_record_dict,
 )
+from republica.governance import filter_perception
 from republica.world.config import Country
 from republica.world.economy import Aux
 from republica.world.events import ShockAggregate
@@ -158,6 +159,15 @@ class ActorEngine:
     #: (mismo patron que `last_score`/`last_trace`) para sumarlos a
     #: `MonthRecord.events`.
     last_compliance_events: list[str] = field(default_factory=list)
+    #: `Action` de este mes retenidas por `human_approval_required` (ADR 007
+    #: secc. 6, deliverable 6): acciones EXECUTE de un actor cuya ficha de
+    #: gobernanza pide aprobacion humana, con `auto_approve_execute=False`
+    #: (solo en `play`, ver `engine/game.py::Game.pending_human_approvals`).
+    #: No pasaron por `authorize_all` este mes (ni autorizadas ni denegadas:
+    #: quedan pendientes, mismo patron que `pending_requests`); si el
+    #: jugador las aprueba, se re-emiten el mes que viene via
+    #: `grant_actions` (`Game.set_human_approvals`).
+    last_pending_approvals: list[Action] = field(default_factory=list)
 
 
 def build_actor_engine(
@@ -170,6 +180,7 @@ def build_actor_engine(
     llm_temperature: float = 0.4,
     llm_cache_dir: str | None = None,
     memory_enabled: bool = False,
+    governance_overrides: dict[str, str] | None = None,
 ) -> ActorEngine:
     """Arma un `ActorEngine` nuevo: carga las 29 fichas (o las que se pasen,
     para tests), un actor de decision por rol no-`president` y un RNG propio
@@ -181,9 +192,22 @@ def build_actor_engine(
     todos -- cero LLM, comportamiento identico a antes de ADR 004): que
     cerebro usa cada actor. `llm_temperature`/`llm_cache_dir` solo importan
     para actores cuyo cerebro no sea `"rules"` (`ai/brains.py::
-    build_decision_actor`)."""
+    build_decision_actor`).
+
+    `governance_overrides` (ADR 007 secc. 6, deliverable 6): overrides
+    `actor.campo=valor` sobre `data/governance.yaml` (`--governance-override`
+    de `republica run`, `republica.governance.parse_governance_overrides`),
+    p.ej. `{"central_bank.autonomy": "4"}` para el experimento canonico de
+    Fase 7 (autonomy 2 vs. 4)."""
     actors = actors if actors is not None else load_actors()
     brain_map = brain_map or {}
+    # Se carga ANTES que `decision_actors` (ADR 007 secc. 6, deliverable 6):
+    # `RuleBasedActor` necesita la MISMA `Governance` (con overrides ya
+    # aplicados) que va a consultar `authorize()`, para que
+    # `--governance-override central_bank.autonomy=4` autorice `SET_RATE`
+    # Y el actor lo proponga (ver `ai/brains.py::build_decision_actor`,
+    # Notas de implementacion).
+    governance = load_governance(overrides=governance_overrides)
     decision_actors: dict[str, DecisionActor] = {
         actor_id: build_decision_actor(
             brain_map.get(actor_id, default_brain),
@@ -193,6 +217,7 @@ def build_actor_engine(
             temperature=llm_temperature,
             cache_dir=llm_cache_dir,
             memory_enabled=memory_enabled,
+            governance=governance,
         )
         for actor_id, sheet in actors.items()
         if sheet.role != "president"
@@ -203,7 +228,7 @@ def build_actor_engine(
         decision_actors=decision_actors,
         actor_rngs=actor_rngs,
         relationships=Relationships.from_actors(actors),
-        governance=load_governance(),
+        governance=governance,
         permissions=load_permissions(),
         consequence_coeffs=load_consequences(),
         concessions=load_concessions(),
@@ -232,6 +257,7 @@ def run_actor_turn(
     media_perception_active: bool = False,
     memory_enabled: bool = False,
     term_length: int = 48,
+    auto_approve_execute: bool = True,
 ) -> tuple[list[ActionRecord], dict[str, float], list[NegotiationRecord]]:
     """Pasos 3-5 de ADR 003 secc. 7 (percepciones/decide/authorize/
     consequences), mas la negociacion de ADR 005 secc. 2 (paso 4 de su orden
@@ -264,11 +290,21 @@ def run_actor_turn(
     cohorte propia -- se arma con el `cohort_state` de *inicio* de mes (ADR
     005 secc. 5 paso 3, antes de que este mismo mes lo actualice medios/
     cohortes en los pasos 8-9). `media_perception_active` pasa a
-    `ConsequenceContext` (ver `engine/consequences.py`)."""
+    `ConsequenceContext` (ver `engine/consequences.py`).
+
+    `auto_approve_execute` (ADR 007 secc. 6, deliverable 6, default `True`):
+    con `True` (siempre en `run()`/eval -- no hay jugador que responda un
+    dilema), una accion EXECUTE de un actor con `human_approval_required`
+    se autoriza en el mismo mes, igual que cualquier otra (comportamiento
+    identico a antes de ADR 007). Con `False` (solo `play`, via
+    `Simulation.auto_approve_governance`), esas acciones se retienen en
+    `engine.last_pending_approvals` en vez de pasar a `authorize_all` este
+    mes; `Game`/`cli.py::play` las presenta como un dilema Si/No."""
     provinces_table = build_provinces_table(state, policy, country.provinces, agg)
     parties_by_id = {p.id: p for p in country.parties}
 
     all_actions: list[Action] = list(grant_actions)
+    pending_approvals: list[Action] = []
     scores: dict[str, dict[str, float]] = {}
     traces: list[DecisionTrace] = []
 
@@ -297,6 +333,12 @@ def run_actor_turn(
             memory_store=engine.memory_store if memory_enabled else None,
             memory_enabled=memory_enabled,
         )
+        # ADR 007 secc. 6: `read` filtra la `Perception` ANTES de que el
+        # actor decida (regla o LLM por igual) -- con el `read` default de
+        # `data/governance.yaml` (todas las categorias del rol) esto es un
+        # no-op, ver `republica.governance.filter_perception`.
+        gov = engine.governance.for_actor(actor_id)
+        perception = filter_perception(sheet, perception, gov)
         decision_actor = engine.decision_actors[actor_id]
         actions = decision_actor.decide(perception, engine.actor_rngs[actor_id])
         last_score = getattr(decision_actor, "last_score", None)
@@ -306,7 +348,16 @@ def run_actor_turn(
         if last_trace is not None:
             last_trace.run_id = engine.run_id
             traces.append(last_trace)
-        all_actions.extend(actions)
+        if not auto_approve_execute and gov.human_approval_required:
+            for action in actions:
+                if action.type.value in gov.execute:
+                    pending_approvals.append(action)
+                else:
+                    all_actions.append(action)
+        else:
+            all_actions.extend(actions)
+
+    engine.last_pending_approvals = pending_approvals
 
     auth_ctx = AuthContext(
         state=state,

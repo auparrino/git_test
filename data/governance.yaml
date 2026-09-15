@@ -1,9 +1,708 @@
-# Gobernanza minima (ADR 003 secc. 6.4): solo la autonomia del Banco Central
-# por ahora (mas campos en Fases posteriores). `autonomy` en [0, 5]: con
-# `>= 3` el Banco Central puede emitir `SET_RATE` ademas de `RECOMMEND_RATE`
-# (si no, solo puede recomendar, como en v0.1 donde la tasa la fija la
-# `PolicyRule`/el presidente). Valor inventado para v0.3: 2 (BC tecnico pero
-# no plenamente autonomo, consistente con que en v0.1 el presidente/la regla
-# de politica fija la tasa sin intervencion del BC).
+# Gobernanza por actor (ADR 007 secc. 6): ficha completa de las 29 fichas de
+# `data/actors/*.yaml`, aplicada por el motor (`engine/permissions.py::
+# authorize()`, consultada ANTES de la matriz de rol de `data/permissions.yaml`).
+#
+# Campos (ADR 007 secc. 6, literal):
+#   model: cerebro (informativo aca; el que manda es `--brain`/`data/brains.yaml`,
+#     ADR 004 secc. 7 -- gobernanza no elige el cerebro, solo lo que puede hacer).
+#   autonomy: 0-5 (tabla de ADR 007 secc. 6). Default 5 (catalogo completo del
+#     rol) para todo actor salvo `central_bank` (2, el mismo valor que ya tenia
+#     `governance.yaml` desde ADR 003 secc. 6.4: Banco Central tecnico pero no
+#     plenamente autonomo -- solo recomienda, no fija la tasa).
+#   read: categorias visibles de la `Perception` (`republica.governance.
+#     ALL_CATEGORIES`); una clave fuera de estas no se renderiza en el prompt
+#     (`republica.governance.filter_perception`). Por default cubre TODO lo que
+#     ese rol ya veia antes de ADR 007 (`engine/perception.py::build_perception`,
+#     ADR 004 secc. 5) -- no filtra nada, reproduce el comportamiento previo.
+#   write: tipos de `ActionType` que este actor puede *declarar/proponer/negociar*
+#     (autonomy >= 1 o 2 segun el tipo, `republica.governance.required_tier`).
+#   execute: tipos que requieren autonomy >= 3 (sin efecto fiscal: `SET_RATE`,
+#     `STRIKE`, `PUBLISH_STORY`, `WITHHOLD_INVESTMENT`, `INVEST`) o >= 4 (con
+#     efecto fiscal acotado: `GRANT_CONCESSION`, `ENACT_POLICY`), ademas de
+#     figurar aca (`republica.governance.EXECUTE_TIER`).
+#   human_approval_required: en `republica play`, las acciones EXECUTE de este
+#     actor se difieren a un dilema Si/No para el jugador (ADR 007 secc. 6,
+#     deliverable 6) en vez de autorizarse solas. Solo `central_bank` (el
+#     ejemplo literal del ADR) lo trae `true` para v0.7: es el unico actor cuyo
+#     `autonomy` de gobernanza default (2) ya bloquea su unica accion EXECUTE
+#     (`SET_RATE`), asi que activar la aprobacion humana ahi es lo que deja
+#     "ensayar" el experimento canonico (`autonomy` 2 vs. 4, ver ADR 007 secc.
+#     6 in fine) sin que el Banco Central emita tasas sin supervision ni en
+#     `run` (que auto-aprueba siempre, ver Notas de implementacion) ni en
+#     `play` con `autonomy=4`.
+#   max_authority: descripcion libre (no la interpreta el motor), documental.
+#   budget: `actions_per_turn`/`tokens_per_turn`. `actions_per_turn: 3` iguala
+#     al presupuesto generico del motor (`engine/permissions.py::
+#     ACTION_BUDGET_PER_TURN`) a proposito: el chequeo de gobernanza solo corta
+#     una accion ADICIONAL cuando es mas estricto que ese generico (< 3, ver
+#     Notas de implementacion) -- con 3 en las 29 fichas, el default no resta
+#     ningun comportamiento previo (test de hash dorado, ADR 007 secc. 7 punto 5).
+#     `tokens_per_turn` es informativo en v0.7 (no hay backend real corriendo en
+#     este entorno para gastarlos): valores inventados por rol, del mismo orden
+#     que el ejemplo literal del ADR (`central_bank: 2000`).
+#
+# Generado desde `data/permissions.yaml` + `data/actors/*.yaml` (un actor por
+# rol comparte `read`/`write`/`execute`/`max_authority`/`budget`; `autonomy`/
+# `human_approval_required` distinguen solo a `central_bank`) -- ver Notas de
+# implementacion de ADR 007 para el script.
+biz_agro:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - sector
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute:
+  - INVEST
+  - WITHHOLD_INVESTMENT
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+biz_finance:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - sector
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute:
+  - INVEST
+  - WITHHOLD_INVESTMENT
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+biz_industry:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - sector
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute:
+  - INVEST
+  - WITHHOLD_INVESTMENT
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+bloc_informal:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - cohort_view
+  - government_announcements
+  write:
+  - CALL_PROTEST
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 1500
+bloc_middle_class:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - cohort_view
+  - government_announcements
+  write:
+  - CALL_PROTEST
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 1500
+bloc_public_employees:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - cohort_view
+  - government_announcements
+  write:
+  - CALL_PROTEST
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 1500
+bloc_rural:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - cohort_view
+  - government_announcements
+  write:
+  - CALL_PROTEST
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 1500
+bloc_urban_workers:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - cohort_view
+  - government_announcements
+  write:
+  - CALL_PROTEST
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 1500
 central_bank:
+  model: rules
   autonomy: 2
+  read:
+  - economic_indicators
+  - monetary_history
+  - government_announcements
+  write:
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - RECOMMEND_RATE
+  - SUPPORT_POLICY
+  execute:
+  - SET_RATE
+  human_approval_required: true
+  max_authority: recommendation_only
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+gov_capital:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - provincial_finances
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - REQUEST_FUNDS
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+gov_centro:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - provincial_finances
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - REQUEST_FUNDS
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+gov_costa:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - provincial_finances
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - REQUEST_FUNDS
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+gov_cuyo:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - provincial_finances
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - REQUEST_FUNDS
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+gov_litoral:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - provincial_finances
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - REQUEST_FUNDS
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+gov_norte:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - provincial_finances
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - REQUEST_FUNDS
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+gov_pampa:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - provincial_finances
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - REQUEST_FUNDS
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+gov_patagonia:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - provincial_finances
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - REQUEST_FUNDS
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+media_mercado:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - media_events
+  - government_announcements
+  write:
+  - CRITICIZE
+  - ENDORSE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute:
+  - PUBLISH_STORY
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+media_nacional:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - media_events
+  - government_announcements
+  write:
+  - CRITICIZE
+  - ENDORSE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute:
+  - PUBLISH_STORY
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+media_popular:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - media_events
+  - government_announcements
+  write:
+  - CRITICIZE
+  - ENDORSE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute:
+  - PUBLISH_STORY
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+minister_economy:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - monetary_history
+  - government_announcements
+  - provincial_finances
+  - party_polls
+  - labour_market
+  - sector
+  - media_events
+  - cohort_view
+  write:
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PROPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - RECOMMEND_RATE
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 3000
+party_alianza_provincial:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - party_polls
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - CALL_PROTEST
+  - CAMPAIGN
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PROMISE
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+party_frente_federal:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - party_polls
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - CALL_PROTEST
+  - CAMPAIGN
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PROMISE
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+party_movimiento_libertad:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - party_polls
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - CALL_PROTEST
+  - CAMPAIGN
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PROMISE
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+party_partido_social:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - party_polls
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - CALL_PROTEST
+  - CAMPAIGN
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PROMISE
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+party_union_republicana:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - party_polls
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - CALL_PROTEST
+  - CAMPAIGN
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PROMISE
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute: []
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+president:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - monetary_history
+  - government_announcements
+  - provincial_finances
+  - party_polls
+  - labour_market
+  - sector
+  - media_events
+  - cohort_view
+  write:
+  - CAMPAIGN
+  - NO_ACTION
+  - PROMISE
+  - PROPOSE_POLICY
+  - PUBLIC_STATEMENT
+  execute:
+  - ENACT_POLICY
+  - GRANT_CONCESSION
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 4000
+union_cgt:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - labour_market
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - CALL_PROTEST
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute:
+  - STRIKE
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000
+union_public:
+  model: rules
+  autonomy: 5
+  read:
+  - economic_indicators
+  - labour_market
+  - government_announcements
+  write:
+  - BREAK_ALLIANCE
+  - CALL_PROTEST
+  - FORM_ALLIANCE
+  - LOBBY_CONGRESS
+  - NEGOTIATE
+  - NO_ACTION
+  - OPPOSE_POLICY
+  - PUBLIC_STATEMENT
+  - SUPPORT_POLICY
+  execute:
+  - STRIKE
+  human_approval_required: false
+  max_authority: full_catalog
+  budget:
+    actions_per_turn: 3
+    tokens_per_turn: 2000

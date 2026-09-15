@@ -1,0 +1,21 @@
+id: ideo_015
+actor: party_frente_federal
+overrides:
+  ideology:
+    economic: -0.85
+    social: 0.85
+  interests:
+  - social_programs
+  - public_employment
+perception:
+  proposal:
+    policy_delta:
+      primary_spending: 7.5
+    label: Aumento del gasto social
+  public_indicators:
+    government_approval: 50
+expected:
+  position: support
+  min_intensity: 0.43
+rationale: 'Partido progresista: respalda un aumento del gasto social.'
+author: generated

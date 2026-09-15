@@ -1,0 +1,20 @@
+id: int_002
+actor: gov_costa
+overrides:
+  ideology:
+    federalism: -0.5
+  interests:
+  - provincial_transfers
+perception:
+  proposal:
+    policy_delta:
+      provincial_transfers: 1.0
+    label: Aumento de transferencias a las provincias
+  private_indicators:
+    dependence: 0.9
+expected:
+  position: support
+  min_intensity: 0.41
+rationale: 'Gobernador poco federalista por ideologia, pero muy dependiente de las transferencias:
+  el interes gana.'
+author: generated
