@@ -1,0 +1,219 @@
+{
+  "adr": "ADR 011 secc. 8 (A4)",
+  "registered_before_running": true,
+  "country": "argentina",
+  "calibration_run_id": "a3_main",
+  "seeds": 50,
+  "months_cap": null,
+  "arms": [
+    "calibrated",
+    "aurora"
+  ],
+  "control_hypothesis": "Aurora sin calibrar falla al menos una de las tres",
+  "control_metric": "la diferencia con el calibrado es el \"valor\" de la calibración",
+  "honesty_sentence": "Estos resultados describen el comportamiento de República Artificial calibrada con datos de Argentina; no son evidencia sobre lo que hubiera pasado.",
+  "tests": [
+    {
+      "test_id": "V1",
+      "title": "V1 1988→1990: ¿emerge la hiperinflación?",
+      "hypothesis": "el modelo entra en `hyperinflation` en 12–24 meses en > 50 % de semillas",
+      "metric": "fracción de semillas, mes mediano",
+      "adr_forced_shocks": "solo exógenos (commodities, mundo) — **no** se fuerza la hiper",
+      "start": "1988-06",
+      "months": 24,
+      "months_adr": 24,
+      "fx_regime": null,
+      "forced_shocks_requested": [],
+      "forced_shocks_applied": {},
+      "initial_state_provenance": {
+        "counts": {
+          "source": 5,
+          "proxy": 1,
+          "assumed": 15
+        },
+        "variables": {
+          "source": [
+            "gdp_growth",
+            "inflation",
+            "inflation_lag1",
+            "institutional_confidence",
+            "political_stability"
+          ],
+          "proxy": [
+            "government_approval"
+          ],
+          "assumed": [
+            "congress_support",
+            "consumer_confidence",
+            "crime_perception",
+            "exchange_rate",
+            "fiscal_balance",
+            "gdp",
+            "inequality",
+            "interest_rate",
+            "poverty",
+            "protest_level",
+            "public_debt",
+            "real_wage",
+            "reserves",
+            "social_tension",
+            "unemployment"
+          ]
+        },
+        "n_variables": 21
+      },
+      "random_shocks_enabled": true
+    },
+    {
+      "test_id": "V2",
+      "title": "V2 1998→2002: ¿colapso con convertibilidad rígida?",
+      "hypothesis": "`sovereign_default` o `collapse` en 36–54 meses en > 50 %",
+      "metric": "idem + trayectoria de reservas vs real",
+      "adr_forced_shocks": "crisis internacional 1998–99 (Rusia, Brasil)",
+      "start": "1998-01",
+      "months": 54,
+      "months_adr": 54,
+      "fx_regime": "peg",
+      "forced_shocks_requested": [
+        {
+          "shock_id": "international_crisis",
+          "label": "crisis internacional 1998–99 (Rusia, Brasil)",
+          "window": "1998-01:1999-12",
+          "matched": []
+        }
+      ],
+      "forced_shocks_applied": {},
+      "initial_state_provenance": {
+        "counts": {
+          "source": 7,
+          "proxy": 1,
+          "assumed": 13
+        },
+        "variables": {
+          "source": [
+            "gdp_growth",
+            "inflation",
+            "inflation_lag1",
+            "institutional_confidence",
+            "political_stability",
+            "public_debt",
+            "reserves"
+          ],
+          "proxy": [
+            "government_approval"
+          ],
+          "assumed": [
+            "congress_support",
+            "consumer_confidence",
+            "crime_perception",
+            "exchange_rate",
+            "fiscal_balance",
+            "gdp",
+            "inequality",
+            "interest_rate",
+            "poverty",
+            "protest_level",
+            "real_wage",
+            "social_tension",
+            "unemployment"
+          ]
+        },
+        "n_variables": 21
+      },
+      "random_shocks_enabled": true
+    },
+    {
+      "test_id": "V3",
+      "title": "V3 2016→2023: ¿se acelera la inflación y pierde el oficialismo?",
+      "hypothesis": "inflación anual final > 80 % en la mediana y el oficialismo pierde en 2019 y 2023",
+      "metric": "error de inflación, aciertos electorales",
+      "adr_forced_shocks": "sequía 2018, pandemia 2020, sequía 2023",
+      "start": "2016-01",
+      "months": 96,
+      "months_adr": 96,
+      "fx_regime": null,
+      "forced_shocks_requested": [
+        {
+          "shock_id": "drought",
+          "label": "sequía 2018",
+          "window": "2018-01:2018-12",
+          "matched": []
+        },
+        {
+          "shock_id": "epidemic",
+          "label": "pandemia 2020",
+          "window": "2020-01:2020-12",
+          "matched": [
+            {
+              "shock_id": "epidemic",
+              "date": "2020-03",
+              "month_index": 51,
+              "title": "Pandemia de COVID-19 / ASPO",
+              "duration_months": "24"
+            }
+          ]
+        },
+        {
+          "shock_id": "drought",
+          "label": "sequía 2023",
+          "window": "2023-01:2023-12",
+          "matched": [
+            {
+              "shock_id": "drought",
+              "date": "2023-01",
+              "month_index": 85,
+              "title": "Sequía histórica de la campaña 2022/2023",
+              "duration_months": "12"
+            }
+          ]
+        }
+      ],
+      "forced_shocks_applied": {
+        "51": [
+          "epidemic"
+        ],
+        "85": [
+          "drought"
+        ]
+      },
+      "initial_state_provenance": {
+        "counts": {
+          "source": 11,
+          "proxy": 1,
+          "assumed": 9
+        },
+        "variables": {
+          "source": [
+            "fiscal_balance",
+            "gdp_growth",
+            "inflation",
+            "inflation_lag1",
+            "institutional_confidence",
+            "interest_rate",
+            "political_stability",
+            "poverty",
+            "public_debt",
+            "reserves",
+            "unemployment"
+          ],
+          "proxy": [
+            "government_approval"
+          ],
+          "assumed": [
+            "congress_support",
+            "consumer_confidence",
+            "crime_perception",
+            "exchange_rate",
+            "gdp",
+            "inequality",
+            "protest_level",
+            "real_wage",
+            "social_tension"
+          ]
+        },
+        "n_variables": 21
+      },
+      "random_shocks_enabled": true
+    }
+  ]
+}

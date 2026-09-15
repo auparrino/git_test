@@ -75,3 +75,23 @@ calibrada con datos de Argentina; no son evidencia sobre lo que hubiera pasado."
 
 `data/countries/argentina/history/` con todo lo descargable, `SOURCES.md`, `coverage.md`, `events.csv`
 y `regimes.csv` auditados, y el ADR 011 aprobado. Recién entonces se toca código.
+
+## 6. Estado al cierre de la primera iteración y qué sigue
+
+A0–A4 ejecutadas. Datos y cronología: 23 series reales con procedencia, cronología 1810–2023 verificada
+contra V-Dem. Paquete de país, calibración y validación: hechos y corridos. **Resultado de la
+validación: negativo en las tres pruebas**, con diagnóstico mecánico en
+`data/countries/argentina/validation/a4_main/report.md`. Lo que aprendimos manda los próximos pasos:
+
+| Causa estructural encontrada | Cambio necesario en el motor (ADR 012, pendiente) |
+|---|---|
+| La ecuación de precios es contractiva (`rho_pi + c_e < 1`): la hiperinflación endógena es algebraicamente imposible | Expectativas con régimen: indexación y persistencia que suben con la inflación pasada (`rho_pi` función de π), o un término de dominancia fiscal no lineal (emisión ∝ déficit / demanda de dinero, con demanda de dinero que cae con π) |
+| `--fx-regime peg` es inerte: `fx_regime` no entra en `step_economy` | Que el régimen cambiario gobierne `de_raw`, la intervención y `k_k`; un `peg` con reservas cayendo debe terminar en salida forzada (devaluación) |
+| Reservas sin ancla de balance de pagos: `reserves_target` fijo de Aurora (10.000) no muerde con 27.914 reales | Reservas = cuenta corriente (exportaciones ∝ commodities y tipo de cambio real, importaciones ∝ PIB) + cuenta capital (∝ tasa real, riesgo, `dollar_demand`); `default_risk` sobre deuda en USD / exportaciones |
+| Calendario incompleto: sin crisis 1998–99, sin corralito/default 2001, sin sequía 2018 | Completar `shocks_calendar.csv` desde `events.csv` (ya tiene los eventos) |
+| Calibrar sobre 1993–2015 (ventana reversiva) empeora los episodios extremos | Calibrar con ventanas que incluyan al menos un episodio extremo y con pérdida ponderada por colas; o calibrar por regímenes |
+| Aprobación cae a 0 y 50/50 corridas colapsan antes de 2023 | Mecanismos de recuperación de largo plazo de confianza y tensión (también pendiente en Aurora) |
+
+Orden sugerido: ADR 012 (precios con expectativas, régimen cambiario efectivo, balance de pagos) →
+completar calendario → recalibrar con ventana 1975–2023 y holdout por episodios → repetir A4 con las
+mismas hipótesis. Después, A5 (actores argentinos) y A6 (contrafácticos) tienen sentido; antes, no.

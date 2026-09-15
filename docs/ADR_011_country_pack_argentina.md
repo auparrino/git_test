@@ -497,3 +497,77 @@ reemplaza `country.coefficients`/el `BimonetaryCoefficients` por defecto con los
 - El presupuesto real (`--budget 300`, tarea A3 punto 7) midió ~2.8s de pared por evaluación con 4
   workers sobre las 88 fechas de train (por debajo del umbral de 3s del enunciado): no hizo falta bajar
   el stride a 6. Ver el reporte final para el tiempo de pared total medido.
+
+## Notas de implementación (A4)
+
+Implementado: `src/republica/validation/argentina.py` y la CLI `republica validate --country argentina
+--calibration <run_id> --seeds N --out <dir>` (con `--months-cap`, `--tests`, `--seed-base`,
+`--resamples`, `--plots/--no-plots`). Salida en `data/countries/argentina/validation/<run_id>/`:
+`registration.json` (escrito ANTES de correr la primera simulación), `results.json`, `report.md`,
+`plots/v{1,2,3}.png`. Tests en `tests/test_validation_argentina.py` (15). La corrida de referencia es
+`a4_main`: 50 semillas × 3 pruebas × 2 brazos, 70 s de pared, secuencial (no hace falta pool).
+
+**Registro previo (secc. 8, "hipótesis registradas antes de correr")**
+
+`HYPOTHESES`/`METRICS`/`ADR_FORCED_SHOCKS` son el texto **literal** de las cuatro filas de la tabla de
+la secc. 8, y `test_hypotheses_match_adr_text` parsea esa tabla de este mismo archivo y compara carácter
+a carácter: editar el ADR después de correr A4 rompe el test y obliga a re-registrar, en vez de dejar
+reescribir la hipótesis para que dé. `build_registration()` corre y escribe `registration.json`
+**antes** de la primera simulación; `report.md` sólo lee de ahí.
+
+**Shocks del calendario que el ADR pide y el calendario no tiene**
+
+Los shocks forzados de cada prueba se resuelven como una CONSULTA a `politics/shocks_calendar.csv`
+(`ShockRequest(shock_id, ventana)`), no como filas escritas a mano. Tres de los cinco pedidos por la
+secc. 8 no existen en el calendario de A1 y por lo tanto **no se aplicaron** (regla de honestidad,
+PLAN_ARGENTINA.md secc. 0.1: no se agregó ninguna fila para que la prueba diera):
+- V2 `international_crisis` 1998-01:1999-12 (Rusia/Brasil): el calendario **no tiene ninguna fila entre
+  1995-01 y 2003-01** — tampoco el corralito/default de dic-2001 que PLAN_ARGENTINA.md secc. 1 lista
+  como shock histórico. V2 corrió con cero shocks forzados; es un hueco de datos de A1, no un resultado
+  del modelo.
+- V3 `drought` 2018 (la sequía de la campaña 2017/18): tampoco está. Sí se aplicaron `epidemic`
+  2020-03 (mes 51) y `drought` 2023-01 (mes 85).
+- V1 no pide forzar nada por diseño; y `hyperinflation_regime` nunca se fuerza
+  (`NEVER_FORCED_SHOCK_IDS`), verificado por test para las tres pruebas.
+
+Los shocks **aleatorios** de `shocks.json` siguen activos (`shocks_enabled=True`, como en cualquier
+`republica run`): `results.json → random_shocks_observed` lista los que efectivamente salieron, y el
+reporte lo dice antes de cada resultado.
+
+**Hallazgos que cambian lo que A2/A3 daban por implementado** (ver también `docs/EMERGENCE_LOG.md`)
+
+- **`fx_regime = peg` es inerte.** `fx_regime` sólo se lee en `world/bimonetary.py::step_bimonetary` y
+  sólo para decidir si `fx_gap > 0` (`"control"`); no entra en `step_economy`. La secc. 5 de este ADR
+  decía que «la convertibilidad es `peg` con `fx_intervention = 1` y `k_k` alto mientras haya reservas»
+  y eso no se implementó en A2. Verificado empíricamente, no por lectura de código
+  (`fx_regime_inertness_check`, diagnóstico de `results.json`): `peg` y `float` dan trayectorias
+  idénticas con la misma semilla. **V2 no testeó la convertibilidad.**
+- **El bloque bimonetario no realimenta al núcleo.** La secc. 5 pedía `de_raw += x_d · dollar_demand`;
+  ese término no existe en `world/economy.py`. `dollar_demand`/`fx_gap`/`external_debt_usd`/
+  `default_risk` se calculan después de `advance_month` y nunca vuelven a las 20 variables: hoy el
+  bloque externo es un lector, no un mecanismo.
+- **La hiperinflación endógena es algebraicamente imposible.** El coeficiente total sobre la inflación
+  del mes anterior es `rho_pi + c_e` = 0,91 (Aurora) y 0,51 (calibrado): los dos < 1, así que la
+  ecuación de la secc. 4.3 es una contracción. El único camino a `outcome = hyperinflation` es un
+  `shock_pi` forzado, que es justamente lo que V1 prohíbe.
+- **Las reservas no tienen ancla de nivel** (secc. 4.7 es una caminata con deriva) y `reserves_target`
+  (10 000 USD M, valor de Aurora) sólo entra por `pos(target − R)`, que con las reservas reales de
+  Argentina (27 900 USD M en 1998-01) vale 0 todos los meses.
+
+**Métricas y decisiones de medición**
+
+- `sovereign_default` no es un `outcome` del motor (los outcomes son
+  `survived/collapse/hyperinflation/reelected/defeated`): en V2 se cuenta como el shock activo en algún
+  mes de la ventana 36–54, que sin forzados sólo puede venir del disparo endógeno del bloque externo.
+- El motor TERMINA la corrida al disparar `hyperinflation`/`collapse`, así que el "mes mediano" de V1 es
+  el último mes simulado, y las bandas IQR de los gráficos se calculan sólo sobre las semillas VIVAS en
+  cada mes (no se rellena con el último valor, que inventaría una trayectoria no simulada).
+- Elecciones de V3: el motor las pone en múltiplos de `term_length` desde `--start` (meses 48 y 96 =
+  2019-12 y 2023-12, no octubre), y se compara sólo `reelected`/`defeated` — misma simplificación
+  declarada en A3, no hay mapeo partido-sintético → lista real.
+- V1 no tiene serie de IPC MENSUAL descargada (`inflation_cpi_monthly.csv` arranca en 1997-02): el
+  gráfico usa la variación ANUAL del Banco Mundial convertida a mensual equivalente
+  `(1+a)^(1/12) − 1`, un proxy derivado y declarado como tal.
+- Los IC 95 % son bootstrap percentil (2000 remuestreos) sobre las SEMILLAS: cubren variabilidad de
+  Monte Carlo, no la incertidumbre del estado inicial (9–15 de 21 variables `assumed`), ni la de los
+  coeficientes, ni la del calendario.

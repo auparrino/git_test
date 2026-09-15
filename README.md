@@ -170,9 +170,21 @@ partidos por época, provincias con censo 2022) verificada por un revisor indepe
 escrito lo que sigue sin fuente. Plan y diseño: [`docs/PLAN_ARGENTINA.md`](docs/PLAN_ARGENTINA.md),
 [`docs/ADR_011_country_pack_argentina.md`](docs/ADR_011_country_pack_argentina.md).
 
-En curso: el paquete de país (estado inicial por fecha, modo de régimen con golpes y dictaduras, shocks
-históricos, sector externo bimonetario con default y FMI), la calibración con período de holdout y tres
-validaciones con hipótesis registradas antes de correr (1988→1990, 1998→2002, 2016→2023).
+La calibración (A3) y la validación histórica (A4) ya corrieron, y el resultado es negativo. Ajustar los
+107 coeficientes con CMA-ES sobre 1993–2015 mejoró el RMSE normalizado de inflación a 12 meses dentro del
+período de entrenamiento (0,55 contra 0,71 del baseline de persistencia) pero lo empeoró en el holdout
+2016–2023 (1,26 contra 0,71), y las tres validaciones con hipótesis registradas antes de correr —50
+semillas cada una— dieron **NO CUMPLIDA**: 0 % de las semillas entra en hiperinflación desde el estado real
+de 1988-06 (la hipótesis pedía > 50 %), 2 % [IC95 0–6 %] llega a default o colapso entre 1998 y 2002 con
+las reservas casi planas (RMSE 7.026 USD M, apenas 1,2 % mejor que suponer que no cambian), y la inflación
+anualizada final de 2016→2023 queda en 18,3 % mediana [IC95 16,1–21,1] contra 135 % real. La causa es
+estructural y está documentada: la persistencia total de la inflación del motor es `rho_pi + c_e` = 0,51 <
+1, o sea revierte a la media por construcción, y `--fx-regime peg` no tiene ningún efecto en el código
+(verificado: `peg` y `float` dan trayectorias idénticas). Lo único que la calibración mejoró es el bloque
+político —acierta la derrota del oficialismo en 2019 en 96 % de las semillas contra 4 % del modelo sin
+calibrar— al precio de que las 50 corridas de 2016→2023 terminan en `collapse` antes de 2023; reporte
+completo, con lo que no se puede concluir, en
+[`data/countries/argentina/validation/a4_main/report.md`](data/countries/argentina/validation/a4_main/report.md).
 
 ## Lo que viene
 

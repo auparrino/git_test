@@ -1,0 +1,522 @@
+{
+  "registration": {
+    "adr": "ADR 011 secc. 8 (A4)",
+    "registered_before_running": true,
+    "country": "argentina",
+    "calibration_run_id": "a3_main",
+    "seeds": 50,
+    "months_cap": null,
+    "arms": [
+      "calibrated",
+      "aurora"
+    ],
+    "control_hypothesis": "Aurora sin calibrar falla al menos una de las tres",
+    "control_metric": "la diferencia con el calibrado es el \"valor\" de la calibración",
+    "honesty_sentence": "Estos resultados describen el comportamiento de República Artificial calibrada con datos de Argentina; no son evidencia sobre lo que hubiera pasado.",
+    "tests": [
+      {
+        "test_id": "V1",
+        "title": "V1 1988→1990: ¿emerge la hiperinflación?",
+        "hypothesis": "el modelo entra en `hyperinflation` en 12–24 meses en > 50 % de semillas",
+        "metric": "fracción de semillas, mes mediano",
+        "adr_forced_shocks": "solo exógenos (commodities, mundo) — **no** se fuerza la hiper",
+        "start": "1988-06",
+        "months": 24,
+        "months_adr": 24,
+        "fx_regime": null,
+        "forced_shocks_requested": [],
+        "forced_shocks_applied": {},
+        "initial_state_provenance": {
+          "counts": {
+            "source": 5,
+            "proxy": 1,
+            "assumed": 15
+          },
+          "variables": {
+            "source": [
+              "gdp_growth",
+              "inflation",
+              "inflation_lag1",
+              "institutional_confidence",
+              "political_stability"
+            ],
+            "proxy": [
+              "government_approval"
+            ],
+            "assumed": [
+              "congress_support",
+              "consumer_confidence",
+              "crime_perception",
+              "exchange_rate",
+              "fiscal_balance",
+              "gdp",
+              "inequality",
+              "interest_rate",
+              "poverty",
+              "protest_level",
+              "public_debt",
+              "real_wage",
+              "reserves",
+              "social_tension",
+              "unemployment"
+            ]
+          },
+          "n_variables": 21
+        },
+        "random_shocks_enabled": true
+      },
+      {
+        "test_id": "V2",
+        "title": "V2 1998→2002: ¿colapso con convertibilidad rígida?",
+        "hypothesis": "`sovereign_default` o `collapse` en 36–54 meses en > 50 %",
+        "metric": "idem + trayectoria de reservas vs real",
+        "adr_forced_shocks": "crisis internacional 1998–99 (Rusia, Brasil)",
+        "start": "1998-01",
+        "months": 54,
+        "months_adr": 54,
+        "fx_regime": "peg",
+        "forced_shocks_requested": [
+          {
+            "shock_id": "international_crisis",
+            "label": "crisis internacional 1998–99 (Rusia, Brasil)",
+            "window": "1998-01:1999-12",
+            "matched": []
+          }
+        ],
+        "forced_shocks_applied": {},
+        "initial_state_provenance": {
+          "counts": {
+            "source": 7,
+            "proxy": 1,
+            "assumed": 13
+          },
+          "variables": {
+            "source": [
+              "gdp_growth",
+              "inflation",
+              "inflation_lag1",
+              "institutional_confidence",
+              "political_stability",
+              "public_debt",
+              "reserves"
+            ],
+            "proxy": [
+              "government_approval"
+            ],
+            "assumed": [
+              "congress_support",
+              "consumer_confidence",
+              "crime_perception",
+              "exchange_rate",
+              "fiscal_balance",
+              "gdp",
+              "inequality",
+              "interest_rate",
+              "poverty",
+              "protest_level",
+              "real_wage",
+              "social_tension",
+              "unemployment"
+            ]
+          },
+          "n_variables": 21
+        },
+        "random_shocks_enabled": true
+      },
+      {
+        "test_id": "V3",
+        "title": "V3 2016→2023: ¿se acelera la inflación y pierde el oficialismo?",
+        "hypothesis": "inflación anual final > 80 % en la mediana y el oficialismo pierde en 2019 y 2023",
+        "metric": "error de inflación, aciertos electorales",
+        "adr_forced_shocks": "sequía 2018, pandemia 2020, sequía 2023",
+        "start": "2016-01",
+        "months": 96,
+        "months_adr": 96,
+        "fx_regime": null,
+        "forced_shocks_requested": [
+          {
+            "shock_id": "drought",
+            "label": "sequía 2018",
+            "window": "2018-01:2018-12",
+            "matched": []
+          },
+          {
+            "shock_id": "epidemic",
+            "label": "pandemia 2020",
+            "window": "2020-01:2020-12",
+            "matched": [
+              {
+                "shock_id": "epidemic",
+                "date": "2020-03",
+                "month_index": 51,
+                "title": "Pandemia de COVID-19 / ASPO",
+                "duration_months": "24"
+              }
+            ]
+          },
+          {
+            "shock_id": "drought",
+            "label": "sequía 2023",
+            "window": "2023-01:2023-12",
+            "matched": [
+              {
+                "shock_id": "drought",
+                "date": "2023-01",
+                "month_index": 85,
+                "title": "Sequía histórica de la campaña 2022/2023",
+                "duration_months": "12"
+              }
+            ]
+          }
+        ],
+        "forced_shocks_applied": {
+          "51": [
+            "epidemic"
+          ],
+          "85": [
+            "drought"
+          ]
+        },
+        "initial_state_provenance": {
+          "counts": {
+            "source": 11,
+            "proxy": 1,
+            "assumed": 9
+          },
+          "variables": {
+            "source": [
+              "fiscal_balance",
+              "gdp_growth",
+              "inflation",
+              "inflation_lag1",
+              "institutional_confidence",
+              "interest_rate",
+              "political_stability",
+              "poverty",
+              "public_debt",
+              "reserves",
+              "unemployment"
+            ],
+            "proxy": [
+              "government_approval"
+            ],
+            "assumed": [
+              "congress_support",
+              "consumer_confidence",
+              "crime_perception",
+              "exchange_rate",
+              "gdp",
+              "inequality",
+              "protest_level",
+              "real_wage",
+              "social_tension"
+            ]
+          },
+          "n_variables": 21
+        },
+        "random_shocks_enabled": true
+      }
+    ]
+  },
+  "wall_seconds": 69.70250232699982,
+  "tests": [
+    {
+      "test_id": "V1",
+      "months": 24,
+      "wall_seconds": 14.323749221999606,
+      "metrics": {
+        "calibrated": {
+          "hyperinflation_fraction": 0.0,
+          "hyperinflation_fraction_ci": [
+            0.0,
+            0.0
+          ],
+          "hyperinflation_median_month": null,
+          "hyperinflation_median_month_ci": [
+            null,
+            null
+          ],
+          "n_hyperinflation": 0,
+          "outcomes": {
+            "survived": 50
+          },
+          "inflation_monthly_final_median": 1.4065960028633375,
+          "inflation_annual_final_median": 18.248201460300592,
+          "passes": false
+        },
+        "aurora": {
+          "hyperinflation_fraction": 0.0,
+          "hyperinflation_fraction_ci": [
+            0.0,
+            0.0
+          ],
+          "hyperinflation_median_month": null,
+          "hyperinflation_median_month_ci": [
+            null,
+            null
+          ],
+          "n_hyperinflation": 0,
+          "outcomes": {
+            "survived": 50
+          },
+          "inflation_monthly_final_median": 4.387814190846122,
+          "inflation_annual_final_median": 67.41627043501771,
+          "passes": false
+        }
+      },
+      "diagnostics": {},
+      "random_shocks_observed": {
+        "calibrated": [
+          "banking_crisis",
+          "commodity_boom",
+          "corruption_scandal",
+          "drought",
+          "energy_discovery",
+          "epidemic",
+          "flood",
+          "general_strike",
+          "growth_surprise",
+          "international_crisis",
+          "protest_wave",
+          "trade_partner_collapse"
+        ],
+        "aurora": [
+          "banking_crisis",
+          "commodity_boom",
+          "corruption_scandal",
+          "drought",
+          "energy_discovery",
+          "epidemic",
+          "flood",
+          "general_strike",
+          "growth_surprise",
+          "international_crisis",
+          "protest_wave",
+          "sovereign_default",
+          "trade_partner_collapse"
+        ]
+      }
+    },
+    {
+      "test_id": "V2",
+      "months": 54,
+      "wall_seconds": 22.890778614999363,
+      "metrics": {
+        "calibrated": {
+          "default_or_collapse_fraction": 0.02,
+          "default_or_collapse_fraction_ci": [
+            0.0,
+            0.06
+          ],
+          "window_months": [
+            36,
+            54
+          ],
+          "window_empty": false,
+          "n_default": 0,
+          "n_collapse_in_window": 1,
+          "outcomes": {
+            "collapse": 1,
+            "survived": 49
+          },
+          "reserves_rmse_median": 7026.274937714967,
+          "reserves_rmse_ci": [
+            6869.074522752846,
+            7313.076865063881
+          ],
+          "reserves_rmse_persistence": 7110.6712333568685,
+          "passes": false
+        },
+        "aurora": {
+          "default_or_collapse_fraction": 0.0,
+          "default_or_collapse_fraction_ci": [
+            0.0,
+            0.0
+          ],
+          "window_months": [
+            36,
+            54
+          ],
+          "window_empty": false,
+          "n_default": 0,
+          "n_collapse_in_window": 0,
+          "outcomes": {
+            "survived": 50
+          },
+          "reserves_rmse_median": 7269.038475241792,
+          "reserves_rmse_ci": [
+            7095.268805518048,
+            7584.982401581617
+          ],
+          "reserves_rmse_persistence": 7110.6712333568685,
+          "passes": false
+        }
+      },
+      "diagnostics": {
+        "fx_regime_inertness": {
+          "compared_regimes": [
+            "peg",
+            "float"
+          ],
+          "seeds": 3,
+          "trajectories_identical": true
+        }
+      },
+      "random_shocks_observed": {
+        "calibrated": [
+          "banking_crisis",
+          "commodity_boom",
+          "corruption_scandal",
+          "drought",
+          "energy_discovery",
+          "epidemic",
+          "flood",
+          "general_strike",
+          "growth_surprise",
+          "international_crisis",
+          "protest_wave",
+          "trade_partner_collapse"
+        ],
+        "aurora": [
+          "banking_crisis",
+          "commodity_boom",
+          "corruption_scandal",
+          "drought",
+          "energy_discovery",
+          "epidemic",
+          "flood",
+          "general_strike",
+          "growth_surprise",
+          "international_crisis",
+          "protest_wave",
+          "trade_partner_collapse"
+        ]
+      }
+    },
+    {
+      "test_id": "V3",
+      "months": 96,
+      "wall_seconds": 32.44207568599995,
+      "metrics": {
+        "calibrated": {
+          "inflation_annual_final_median": 18.347909074911563,
+          "inflation_annual_final_ci": [
+            16.13506678158638,
+            21.136975275321323
+          ],
+          "inflation_threshold": 80.0,
+          "inflation_passes": false,
+          "elections": {
+            "2019-12": {
+              "real_outcome": "defeated",
+              "n_held": 48,
+              "hit_fraction": 0.96,
+              "hit_fraction_ci": [
+                0.9,
+                1.0
+              ],
+              "passes": true
+            },
+            "2023-12": {
+              "real_outcome": "defeated",
+              "n_held": 0,
+              "hit_fraction": 0.0,
+              "hit_fraction_ci": [
+                0.0,
+                0.0
+              ],
+              "passes": false
+            }
+          },
+          "outcomes": {
+            "collapse": 50
+          },
+          "median_months_run": 69.5,
+          "passes": false
+        },
+        "aurora": {
+          "inflation_annual_final_median": 32.69515410456193,
+          "inflation_annual_final_ci": [
+            29.73907420462134,
+            37.204450514821175
+          ],
+          "inflation_threshold": 80.0,
+          "inflation_passes": false,
+          "elections": {
+            "2019-12": {
+              "real_outcome": "defeated",
+              "n_held": 50,
+              "hit_fraction": 0.04,
+              "hit_fraction_ci": [
+                0.0,
+                0.1
+              ],
+              "passes": false
+            },
+            "2023-12": {
+              "real_outcome": "defeated",
+              "n_held": 50,
+              "hit_fraction": 0.66,
+              "hit_fraction_ci": [
+                0.52,
+                0.8
+              ],
+              "passes": true
+            }
+          },
+          "outcomes": {
+            "defeated": 33,
+            "reelected": 17
+          },
+          "median_months_run": 96.0,
+          "passes": false
+        }
+      },
+      "diagnostics": {},
+      "random_shocks_observed": {
+        "calibrated": [
+          "banking_crisis",
+          "commodity_boom",
+          "corruption_scandal",
+          "energy_discovery",
+          "flood",
+          "general_strike",
+          "growth_surprise",
+          "international_crisis",
+          "protest_wave",
+          "trade_partner_collapse"
+        ],
+        "aurora": [
+          "banking_crisis",
+          "commodity_boom",
+          "corruption_scandal",
+          "energy_discovery",
+          "flood",
+          "general_strike",
+          "growth_surprise",
+          "international_crisis",
+          "protest_wave",
+          "trade_partner_collapse"
+        ]
+      }
+    }
+  ],
+  "control_verdict": {
+    "aurora_failed_tests": [
+      "V1",
+      "V2",
+      "V3"
+    ],
+    "calibrated_passed_tests": [],
+    "passes": true
+  },
+  "inflation_persistence": {
+    "aurora_rho_pi": 0.85,
+    "aurora_c_e": 0.06,
+    "aurora_total": 0.9099999999999999,
+    "calibrated_rho_pi": 0.44966422289914193,
+    "calibrated_c_e": 0.0590701059012993,
+    "calibrated_total": 0.5087343288004412
+  },
+  "honesty_sentence": "Estos resultados describen el comportamiento de República Artificial calibrada con datos de Argentina; no son evidencia sobre lo que hubiera pasado."
+}

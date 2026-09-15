@@ -1896,6 +1896,99 @@ def calibrate(
     console.print(f"[green]OK[/green] -> {run_dir}")
 
 
+@app.command()
+def validate(
+    country_id: Annotated[
+        str, typer.Option("--country", help="Paquete de pais (ADR 011; hoy solo 'argentina').")
+    ],
+    out: Annotated[Path, typer.Option("--out", help="Directorio de salida de la validacion.")],
+    calibration_run_id: Annotated[
+        str,
+        typer.Option("--calibration", help="run_id de `republica calibrate` (A3), ej. 'a3_main'."),
+    ] = "a3_main",
+    seeds: Annotated[int, typer.Option(help="Semillas por prueba y por brazo.")] = 50,
+    seed_base: Annotated[
+        int, typer.Option(help="Primera semilla (las demas son consecutivas).")
+    ] = 1,
+    months_cap: Annotated[
+        int | None,
+        typer.Option(
+            "--months-cap",
+            help="Recorta los meses de CADA prueba (smoke tests). Sin esto: 24/54/96 del ADR.",
+        ),
+    ] = None,
+    tests: Annotated[
+        str | None,
+        typer.Option(
+            "--tests", help="Subconjunto separado por comas, ej. 'V1,V3'. Default: las 3."
+        ),
+    ] = None,
+    resamples: Annotated[
+        int, typer.Option(help="Remuestreos del bootstrap de los IC 95 %.")
+    ] = 2000,
+    plots: Annotated[
+        bool, typer.Option("--plots/--no-plots", help="Graficos (requiere el extra `analysis`).")
+    ] = True,
+) -> None:
+    """`republica validate` (A4, ADR 011 secc. 8): corre las tres pruebas de
+    validacion historica (V1 1988-1990, V2 1998-2002, V3 2016-2023) con los
+    coeficientes calibrados y con los de Aurora sin calibrar (control C), y
+    escribe `registration.json` (hipotesis y shocks forzados REGISTRADOS
+    ANTES de correr), `results.json`, `report.md` y `plots/`."""
+    from republica.validation.argentina import TESTS_BY_ID, run_validation
+
+    if country_id != "argentina":
+        raise typer.BadParameter(
+            f"La validacion historica (A4, ADR 011 secc. 8) esta definida solo para "
+            f"'argentina'; se pidio {country_id!r}."
+        )
+    test_ids = None
+    if tests:
+        test_ids = [t.strip().upper() for t in tests.split(",") if t.strip()]
+        unknown = [t for t in test_ids if t not in TESTS_BY_ID]
+        if unknown:
+            raise typer.BadParameter(
+                f"Pruebas desconocidas: {unknown}. Disponibles: {sorted(TESTS_BY_ID)}."
+            )
+    console.print(
+        f"[cyan]Validando[/cyan] {country_id} calibracion={calibration_run_id} "
+        f"seeds={seeds} months_cap={months_cap or 'ADR'} -> {out}"
+    )
+    t0 = time.time()
+    payload = run_validation(
+        out,
+        seeds=seeds,
+        seed_base=seed_base,
+        months_cap=months_cap,
+        calibration_run_id=calibration_run_id,
+        test_ids=test_ids,
+        resamples=resamples,
+        make_plots=plots,
+        progress=lambda msg: console.print(f"  [dim]{msg}[/dim]"),
+    )
+    table = Table(title="Validacion historica (A4, ADR 011 secc. 8)")
+    table.add_column("prueba")
+    table.add_column("calibrado")
+    table.add_column("Aurora sin calibrar")
+    for t in payload["tests"]:
+        table.add_row(
+            t["test_id"],
+            "CUMPLIDA" if t["metrics"]["calibrated"]["passes"] else "NO CUMPLIDA",
+            "CUMPLIDA" if t["metrics"]["aurora"]["passes"] else "NO CUMPLIDA",
+        )
+    control = payload["control_verdict"]
+    table.add_row(
+        "C",
+        "-",
+        "CUMPLIDA" if control["passes"] else "NO CUMPLIDA",
+    )
+    console.print(table)
+    console.print(
+        f"[green]OK[/green] {time.time() - t0:.1f}s -> {out / 'report.md'} "
+        f"(registro previo: {out / 'registration.json'})"
+    )
+
+
 @country_app.command("info")
 def country_info(
     country_id: Annotated[str, typer.Argument(help="Id del paquete (ej. 'argentina').")],
