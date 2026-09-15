@@ -53,3 +53,9 @@ experiments/results/**/*.jsonl
 # metricas de una corrida real de referencia).
 data/ml/*
 !data/ml/manifest_example.json
+
+# ADR 010 secc. 7: corridas crudas del hito 1 de `republica.core` (un JSON
+# por semilla, cientos de ellas entre la corrida base y los barridos H3/H4)
+# -- report.md/summary.csv/plots/*.png SI se versionan (el resultado legible
+# y chico), las corridas se reproducen con `republica core run`/`batch`.
+experiments/results/core_hito1/**/*.json

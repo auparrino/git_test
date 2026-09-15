@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import statistics
 import time
 from collections import Counter
@@ -43,6 +44,10 @@ ml_app = typer.Typer(
 app.add_typer(ml_app, name="ml")
 early_warning_app = typer.Typer(help="Early-warning de crisis (ADR 009 secc. 5).")
 ml_app.add_typer(early_warning_app, name="early-warning")
+core_app = typer.Typer(
+    help="CPU social minima -- hito 1: emergencia de un medio de intercambio (ADR 010)."
+)
+app.add_typer(core_app, name="core")
 console = Console()
 
 
@@ -1471,6 +1476,139 @@ def ml_early_warning_predict_cmd(
 
     result = predict_from_run(model, run, month)
     console.print(risk_sentence(result["probability"], result["top_features"]))
+
+
+def _core_import_error(exc: ImportError) -> None:
+    console.print(
+        f"[red]{exc}[/red]\n"
+        "[red]`republica core` necesita el extra opcional `core` "
+        "(`uv sync --group dev --extra core`, instala `numpy`).[/red]"
+    )
+    raise typer.Exit(code=1) from exc
+
+
+@core_app.command("run")
+def core_run(
+    agents: Annotated[int, typer.Option("--agents", help="Cantidad de agentes.")] = 10_000,
+    turns: Annotated[int, typer.Option("--turns", help="Turnos de la corrida.")] = 500,
+    seed: Annotated[int, typer.Option("--seed", help="Semilla.")] = 7,
+    out: Annotated[
+        Path, typer.Option("--out", help="JSON de salida (metricas por turno + clasificacion).")
+    ] = Path("simulations/core/run.json"),
+    config: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--config",
+            help="Override `clave=valor` sobre CoreConfig (repetible, ej. transport_cost=0.1).",
+        ),
+    ] = None,
+) -> None:
+    """`republica core run --agents N --turns T --seed S --out archivo.json`
+    (ADR 010 secc. 7): corre una semilla, escribe el JSON con la serie de
+    metricas por turno y la clasificacion final (medio de intercambio,
+    Herfindahl, privacion, Gini)."""
+    try:
+        from republica.core.run import apply_overrides, parse_config_overrides, simulate
+        from republica.core.world import CoreConfig
+    except ImportError as exc:
+        _core_import_error(exc)
+        return
+
+    cfg = CoreConfig(n_agents=agents, turns=turns, seed=seed)
+    if config:
+        cfg = apply_overrides(cfg, parse_config_overrides(config))
+
+    start = time.monotonic()
+    result = simulate(cfg)
+    elapsed = time.monotonic() - start
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(result), encoding="utf-8")
+
+    cls = result["classification"]
+    medium = cls["medium_of_exchange"] or "ninguno"
+    console.print(
+        f"[green]OK[/green] {agents} agentes x {turns} turnos (semilla {seed}) "
+        f"en {elapsed:.1f}s -> {out}"
+    )
+    console.print(
+        f"medio de intercambio: {medium} (turno {cls['emergence_turn']}), "
+        f"Herfindahl={cls['herfindahl_intermediates']:.3f}, "
+        f"indirectos={cls['indirect_trade_share']:.1%}, "
+        f"privacion media={cls['mean_deprivation']:.2f}, Gini={cls['inventory_gini']:.3f}"
+    )
+
+
+@core_app.command("batch")
+def core_batch(
+    seeds: Annotated[int, typer.Option("--seeds", help="Cantidad de semillas (0..N-1).")] = 100,
+    agents: Annotated[int, typer.Option("--agents", help="Cantidad de agentes.")] = 10_000,
+    turns: Annotated[int, typer.Option("--turns", help="Turnos por corrida.")] = 500,
+    out: Annotated[
+        Path, typer.Option("--out", help="Directorio de salida (un JSON por semilla).")
+    ] = Path("simulations/core/batch"),
+    workers: Annotated[int, typer.Option("--workers", help="Procesos en paralelo.")] = 4,
+    config: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--config",
+            help="Override `clave=valor` sobre CoreConfig, igual en TODAS las semillas "
+            "(repetible; ADR 010 secc. 7: 'varia nada mas que la semilla' salvo que se pase esto).",
+        ),
+    ] = None,
+) -> None:
+    """`republica core batch --seeds 100 --turns 500 --out simulations/core/batch/ --workers 4`
+    (ADR 010 secc. 7): corre `seeds` semillas (0..seeds-1) con la MISMA
+    config salvo la semilla."""
+    try:
+        from republica.core.run import apply_overrides, parse_config_overrides, run_batch
+        from republica.core.world import CoreConfig
+    except ImportError as exc:
+        _core_import_error(exc)
+        return
+
+    cfg = CoreConfig(n_agents=agents, turns=turns)
+    if config:
+        cfg = apply_overrides(cfg, parse_config_overrides(config))
+
+    result = run_batch(cfg, list(range(seeds)), out, workers=workers)
+    console.print(
+        f"[green]OK[/green] {result['n_ok']}/{result['n_seeds']} corridas "
+        f"({result['n_failed']} fallidas) en {result['elapsed_seconds']:.1f}s "
+        f"-> {result['out_dir']}"
+    )
+    if result["n_failed"]:
+        console.print(f"[yellow]fallidas: {result['failed']}[/yellow]")
+
+
+@core_app.command("classify")
+def core_classify(
+    directory: Annotated[Path, typer.Argument(help="Directorio de una corrida de `core batch`.")],
+    shell_sweep: Annotated[
+        Path | None,
+        typer.Option("--shell-sweep", help="Directorio del barrido de abundancia de conchas (H3)."),
+    ] = None,
+    transport_sweep: Annotated[
+        Path | None,
+        typer.Option(
+            "--transport-sweep", help="Directorio del barrido de costo de transporte (H4)."
+        ),
+    ] = None,
+) -> None:
+    """`republica core classify <dir>` (ADR 010 secc. 6-7): escribe
+    `<dir>/report.md` con H1-H4 marcadas CUMPLIDA/NO CUMPLIDA, IC bootstrap
+    y graficos PNG si `matplotlib` esta instalado."""
+    try:
+        from republica.core.run import classify_directory
+    except ImportError as exc:
+        _core_import_error(exc)
+        return
+
+    report = classify_directory(
+        directory, shell_sweep_dir=shell_sweep, transport_sweep_dir=transport_sweep
+    )
+    console.print(f"[green]OK[/green] report.md escrito en {directory / 'report.md'}")
+    console.print(report.splitlines()[0] if report else "")
 
 
 @app.command()

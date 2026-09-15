@@ -34,6 +34,13 @@ analysis = ["duckdb>=1", "pandas>=2", "matplotlib>=3"]
 ml = ["scikit-learn>=1.4", "joblib>=1.3"]
 ui = ["streamlit>=1.35"]
 
+# ADR 010 secc. 7: extra opcional de la CPU social minima (`src/republica/core/`).
+# `numpy` es la unica dependencia -- el paquete vectoriza el estado por turno
+# (inventarios, necesidades, aceptabilidad) con arrays; se importa de forma
+# perezosa (dentro de las funciones que lo usan) para que el motor de v1
+# (`republica.engine`, `republica.world`, ...) siga importando sin numpy.
+core = ["numpy>=1.26"]
+
 [project.scripts]
 republica = "republica.cli:app"
 

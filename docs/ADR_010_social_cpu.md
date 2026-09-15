@@ -163,3 +163,134 @@ Ningún hallazgo de v2 se publica sin: stress test (cambiar physics radicalmente
 primitiva y ver si el fenómeno persiste), sensibilidad (barrer parámetros), out-of-distribution (mundos
 no usados en la búsqueda), y contraste con literatura (Menger, Kiyotaki–Wright, Ostrom, Axelrod) para
 decir "esto se parece a X" sin decir "esto demuestra X". Y la frase fija de ADR 008 §4 en cada reporte.
+
+## 10. Notas de implementación (hito 1)
+
+Desviaciones, decisiones de diseño e interpretaciones operativas al implementar
+`src/republica/core/{world,exchange,evolve,classify,run}.py`, el sub-comando `republica core`
+y las corridas reales de `experiments/results/core_hito1/`.
+
+### Lectura operativa de la tabla de bienes/regiones (`core/world.py`)
+
+1. **"Necesita 3 [bienes] por turno" se leyó como los 3 bienes de consumo masivo (grano,
+   pescado, tela, `need_qty=1.0` cada uno), y se agregaron sal (`0.2`, "todos, poco" — literal
+   de la tabla del ADR) y herramienta (`0.3`) como necesidades MENORES adicionales, no como parte
+   de "los 3".** La tabla del ADR describe 4 bienes "que todos consumen" (grano/pescado/tela/sal,
+   este último "poco") más herramienta ("productores") — no hay una lectura literal donde
+   exactamente 3 bienes cubran "todos" Y "productores" a la vez, así que se priorizaron los 3
+   bienes de consumo pesado como la necesidad central (privación se dispara mayormente por
+   estos) y sal/herramienta como fricción adicional de menor peso.
+2. **"Quién lo consume: productores" (herramienta) se modeló como `consumed_by="all"` con
+   `need_qty=0.3`, no como una categoría separada.** En este mundo TODO agente es productor (de
+   los 2 bienes de su región, ADR secc. 2 "Producción"), así que "productores" y "todos" coinciden
+   — no hay agentes que no produzcan nada. Se probó primero una lectura literal (herramienta sin
+   necesidad, solo con un bono multiplicativo a la producción propia de quien la tiene,
+   `tool_bonus`) pero esa lectura hace que `classify.acceptance_rate` cuente la demanda genuina de
+   herramienta (querida por su bono, no como intermediario) como si fuera un candidato a medio de
+   intercambio: con esa lectura herramienta ganaba en la mayoría de las semillas de prueba, lo cual
+   contradice H2 (que espera sal/conchas/tela, nunca herramienta) y es un artefacto de medición, no
+   un hallazgo real. Se mantuvo el bono de producción (`tool_bonus=0.25`, ADR: "produce más de un
+   bien reduce los otros" se interpretó de forma más simple, ver punto 5) COMO ADEMÁS de la
+   necesidad, no en su lugar.
+3. **Reparto de especialización por región** (ADR: "cada agente produce 2 bienes... fija al
+   inicio"; la tabla del ADR no especifica QUÉ región produce qué): llanura→{grano, sal},
+   costa→{pescado, conchas}, valle→{tela, herramienta}, sierra→{herramienta, sal}. Grano y pescado
+   quedan cada uno en una sola región; herramienta y sal en dos (para que las 4 regiones tengan
+   algo que exportar); conchas SOLO en costa (la hace escasa por diseño, relevante para H3).
+   Ninguna región produce los 3 bienes de consumo pesado (grano/pescado/tela) a la vez: todas
+   dependen del comercio para cubrir su necesidad central, que es el supuesto que hace el hito
+   interesante (sin comercio, privación total).
+4. **`transport_cost` es DOS parámetros distintos y ninguno mueve literalmente bienes entre
+   regiones.** `GoodSpec.transport_cost` (por bien, de la tabla del ADR: bajo/medio/muy bajo →
+   0.05/0.10/0.01) queda declarado pero NO se usa en la física del hito 1 (no hay una primitiva de
+   "mover inventario de región" — los agentes no viajan, solo comercian con la muestra local); es
+   metadata para un hito futuro. El que sí es físico es `CoreConfig.transport_cost` (un único
+   escalar general, el parámetro que barre H4): reduce la probabilidad de que un vecino muestreado
+   sea de otra región (`p_mismo = 1 - max(0, 0.2 - transport_cost)`), o sea, así de caro moverse
+   se manifiesta como MENOS oportunidad de contacto entre regiones, no como pérdida de mercancía en
+   tránsito.
+5. **"Producir más de un bien reduce los otros" (ADR secc. 2) se simplificó a producción FIJA por
+   agente (los 2 bienes de su región, a tasa constante `production_rate=1.2`), sin que el agente
+   elija cuánto de cada uno.** El hito 1 no activa ninguna primitiva de decisión sobre producción
+   (solo `TRANSFER`/`OFFER`), así que no hay "más de un bien" que asignar: el trade-off ya está
+   fijado por la especialización regional (2 bienes SÍ, los otros 4 NO), que es lo mínimo que pide
+   el ADR para que haya ventaja comparativa.
+
+### Mecánica de oferta/aceptación (`core/exchange.py`)
+
+6. **La distinción "directo" vs. "indirecto" se decide del lado del INICIADOR de la `OFFER`, no
+   del receptor.** Una oferta es directa si el bien que el iniciador PIDE es uno de sus propias
+   necesidades incumplidas ese turno; es indirecta si, no teniendo ninguna necesidad incumplida (o
+   habiendo agotado los intentos directos), el iniciador pide un bien que NO necesita, apostando
+   (`acceptability[i, g]`) a poder revenderlo. El bien recibido por la CONTRAPARTE puede a su vez
+   no ser una necesidad suya — eso se cuenta por separado (`accept_no_need_by_good`,
+   `last_accept_turn`) para `classify.acceptance_rate`, que mide aceptación sin consumo de
+   CUALQUIERA de los dos lados del trueque, no solo del lado que inició la oferta.
+7. **A lo sumo una oferta EJECUTADA por contraparte-blanco por ronda** (si dos iniciadores
+   distintos apuntan al mismo vecino en la misma ronda, solo se ejecuta la del índice de agente más
+   bajo). Es una simplificación deliberada para vectorizar con numpy sin una segunda pasada de
+   reconciliación de conflictos: evita que una contraparte "regale" más de lo que tiene cuando la
+   contabilidad se hace en un único paso vectorizado sobre los N agentes a la vez. Con
+   `neighbours_per_turn=12` y regiones de ~2.500 agentes, la probabilidad de colisión por ronda es
+   baja; no se corrigió por ser de bajo impacto y alto costo de implementación (perdería la
+   vectorización).
+8. **`acceptance_rate[g]`, el indicador central de `classify.py`, mide "recibió `g` por trueque sin
+   necesitarlo en los últimos 50 turnos" vía un array `last_accept_turn[N, K]` (turno de la última
+   vez), no un conteo de eventos.** Es una lectura literal de "fracción de agentes que lo aceptaron
+   sin consumirlo en los últimos 50 turnos" (ADR secc. 6) — un agente cuenta como "aceptando" `g`
+   mientras haya pasado por esa situación alguna vez en la ventana, independientemente de si
+   todavía lo tiene en el inventario (que puede haberse decaído o retransferido). Ver el hallazgo
+   del control negativo (punto 10) para la consecuencia de esta elección.
+
+### Refuerzo y mutación (`core/evolve.py`)
+
+9. **El refuerzo (sube/baja `acceptability`) se ata a un único array de apuestas pendientes por
+   `(agente, bien)` (`pending_turn`), no a una cola de transacciones individuales.** Si un agente
+   acepta el mismo bien intermedio dos veces antes de resolver la primera apuesta, la segunda
+   aceptación NO abre una apuesta nueva (se ignora, `pending_turn` ya estaba puesto) — el refuerzo
+   se basa en "¿el bien X, en general, se pudo revender a tiempo?", no en rastrear cada unidad
+   físicamente. Es una simplificación necesaria para vectorizar (numpy no tiene una cola de eventos
+   por celda); el efecto práctico es que el refuerzo es un poco más lento en agentes que aceptan el
+   mismo bien muy seguido, no que sea incorrecto.
+
+### Control negativo (DoD, ADR secc. 7)
+
+10. **"Todos los bienes con durabilidad 0.6" (la ablación LITERAL del ADR) NO alcanza para suprimir
+    la emergencia en esta implementación — se verificó empíricamente (10/10 semillas con medio de
+    intercambio emergido, incluso bajando la durabilidad uniforme hasta 0.1).** La razón, una vez
+    investigada: lo que hace de conchas el candidato dominante no es (solo) su durabilidad relativa
+    sino que es el ÚNICO bien que nadie necesita (`consumed_by="none"`) — su "excedente" nunca se
+    consume, así que se acumula turno a turno sea cual sea la durabilidad, mientras que producción
+    lo repone cada turno independientemente de cuánto sobrevivió. Bajar la durabilidad de TODOS los
+    bienes por igual no toca esa ventaja estructural (grano/pescado/tela/sal siguen
+    consumiéndose, conchas sigue sin consumirse), así que conchas sigue ganando. El control negativo
+    real que SÍ suprime la emergencia (verificado: 0/10 semillas en la prueba rápida, 20 semillas x
+    300 turnos en el test formal) combina la ablación de durabilidad CON la eliminación de esa
+    ventaja estructural: los 6 bienes pasan a `consumed_by="all"` (nadie tiene ya un bien "puro
+    token", todos se consumen y por lo tanto todos tienen un costo de oportunidad por acumularlos)
+    ADEMÁS de la durabilidad uniforme 0.6. Este hallazgo es interesante por derecho propio: sugiere
+    que, en esta física mínima, la condición NECESARIA para que emerja un medio de intercambio no
+    es (solo) la durabilidad diferencial (que sí determina, entre varios candidatos sin uso propio,
+    cuál gana — H2) sino la EXISTENCIA de al menos un bien sin utilidad de consumo directo. Se deja
+    documentado en vez de forzar el test a pasar con la ablación literal; `tests/test_core.py`
+    implementa la versión que sí demuestra la hipótesis (ausencia de medio de intercambio) y explica
+    el porqué en su docstring.
+
+### Corridas reales (`experiments/results/core_hito1/`)
+
+11. **La batería de 280 corridas (100 semillas base + 3×30 del barrido H3 + 3×30 del barrido H4)
+    se corrió a 2.000 agentes × 500 turnos, no a 10.000 × 500.** El target de rendimiento del ADR
+    (10.000 agentes × 500 turnos < 60 s, 4 cores) se demuestra aparte con una corrida de
+    calibración a escala completa (`republica core run --agents 10000 --turns 500 --seed 7`,
+    ~22 s en este entorno — ver el reporte). Correr las 280 semillas de la batería epistémica a
+    10.000 agentes habría tomado del orden de 20-25 minutos incluso con 4 workers; a 2.000 agentes
+    (~4.7 s/corrida) el mismo lote corre en unos pocos minutos, dejando margen para iterar. La
+    dinámica cualitativa (qué bien emerge, cuándo, y cómo responde a los barridos) es la misma a
+    ambas escalas en las corridas de prueba usadas para diseñar el modelo; se documenta la escala
+    real en `report.md` y en `summary.csv`.
+12. Los niveles exactos de los barridos H3 (`shell_abundance`) y H4 (`transport_cost`), el
+    resultado de las 4 hipótesis con sus números, y la distribución del bien dominante sobre las
+    100 semillas quedan en `experiments/results/core_hito1/report.md` (versionado junto con
+    `summary.csv` y los PNG de `plots/`; los 280 JSON crudos por semilla NO se versionan, ver
+    `.gitignore`, y se reproducen con los comandos `republica core batch` listados al pie del
+    reporte).
