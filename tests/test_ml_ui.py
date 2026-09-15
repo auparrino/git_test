@@ -114,23 +114,98 @@ def test_dataset_accepts_history_objects_directly(tmp_path):
     assert {"position", "intensity", "role", "actor_id"} <= rows[0].keys()
 
 
+# 1b. split por (fuente, semilla) -------------------------------------
+
+
+def test_split_group_seeds_groups_by_source_not_raw_seed_value():
+    """Hallazgo #2 de REVIEW_003: semillas coincidentes entre dos fuentes
+    (ej. `fiscal_rule` 0-19 y `central_bank_independence` 0-49) no deben
+    mezclarse en el mismo split -- cada fuente parte 70/15/15 POR SU
+    CUENTA."""
+    from republica.ml.surrogate import _split_group_seeds
+
+    pairs = [("fiscal_rule/base", s) for s in range(20)] + [("cbi/dependent", s) for s in range(20)]
+    train, val, test = _split_group_seeds(pairs)[:3]
+    for source in ("fiscal_rule/base", "cbi/dependent"):
+        train_n = sum(1 for s, seed in train if s == source)
+        val_n = sum(1 for s, seed in val if s == source)
+        test_n = sum(1 for s, seed in test if s == source)
+        assert train_n == 14, (source, train_n)  # round(20*0.7)
+        assert val_n == 3, (source, val_n)  # round(20*0.15)
+        assert test_n == 3, (source, test_n)
+        assert train_n + val_n + test_n == 20
+    # las dos fuentes NO comparten (fuente, semilla): val/test de una no
+    # dependen de cuantas filas trajo la otra (el bug viejo: la fuente mas
+    # grande se "comia" el split de la mas chica).
+    assert train.isdisjoint(val) and val.isdisjoint(test) and train.isdisjoint(test)
+
+
+def test_split_group_seeds_raises_on_two_or_fewer_seeds_by_default():
+    """Hallazgo #11 de REVIEW_003: antes, <=2 semillas degeneraba en
+    train == val == test EN SILENCIO (metricas in-sample presentadas como
+    held-out)."""
+    from republica.ml.surrogate import _split_group_seeds
+
+    with pytest.raises(ValueError, match="in_sample"):
+        _split_group_seeds([("solo_una_fuente", 0), ("solo_una_fuente", 1)])
+
+
+def test_split_group_seeds_allow_in_sample_flags_the_source():
+    from republica.ml.surrogate import _split_group_seeds
+
+    train, val, test, in_sample_sources = _split_group_seeds(
+        [("chica", 0), ("chica", 1)], allow_in_sample=True
+    )
+    assert in_sample_sources == {"chica"}
+    assert train == val == test == {("chica", 0), ("chica", 1)}
+
+
 # 2. train / evaluate ----------------------------------------------------
 
 
 @needs_sklearn
 def test_train_and_evaluate_agreement(tmp_path):
+    """Hallazgo #1 de REVIEW_003: `agreement_rate` solo (contra actores por
+    reglas, `position = neutral` en > 98 % de las filas) es casi trivial --
+    esta prueba asierta sobre `balanced_agreement` (restringido a las
+    (actor, mes) donde `rules` NO dio `neutral`), la metrica informativa.
+    `months=48` (no 24, como antes) en train Y eval: con 24 meses las 60
+    corridas reales -y estas 30 de juguete- casi no generan posiciones no
+    neutrales (ver `FASE9_RESULTS.md` §2/§7), y `balanced_agreement` queda
+    `nan` sobre 0 casos -- no hay nada que asertar. Con 48 meses (semillas
+    1005-1009, elegidas a mano por tener actor-meses no neutrales reales,
+    ver Notas de implementacion de ADR 009) el caso de juguete SI reproduce
+    el fenomeno del hallazgo #1: `agreement_rate`/`majority_baseline` casi
+    empatados (~0.995-0.997, la clase mayoritaria sola ya explica casi todo)
+    contra `balanced_agreement` bastante mas bajo (~0.74 medido) -- el
+    umbral de abajo es ese numero medido MENOS margen, no un objetivo de
+    diseno: un `balanced_agreement` mas bajo todavia es el numero honesto,
+    no una falla de esta prueba."""
     from republica.ml.surrogate import evaluate_surrogate, train_surrogate
 
     train_seeds = list(range(30))
-    runs_dir = _write_runs(tmp_path, train_seeds, months=24)
+    runs_dir = _write_runs(tmp_path, train_seeds, months=48)
     model_path = tmp_path / "surrogate.joblib"
     result = train_surrogate([runs_dir], model_path, brain="rules")
     assert result["roles"]
     assert Path(result["manifest_path"]).exists()
 
-    eval_result = evaluate_surrogate(model_path, list(range(500, 505)), months=24)
+    eval_result = evaluate_surrogate(model_path, list(range(1005, 1010)), months=48)
     assert eval_result["n_actor_months"] > 0
     assert eval_result["agreement_rate"] >= 0.85, eval_result
+    # Piso, no techo (hallazgo #1): un predictor CONSTANTE (la posicion mas
+    # frecuente) ya llega ahi -- comparar `agreement_rate` solo contra esto
+    # es lo que hacia trivial al DoD viejo.
+    assert eval_result["majority_baseline"] > 0.9, eval_result
+    # La metrica informativa: SOLO las (actor, mes) donde `rules` no dio
+    # `neutral` (la clase mayoritaria queda afuera).
+    assert eval_result["n_balanced_actor_months"] > 0, eval_result
+    assert eval_result["balanced_agreement"] >= 0.6, eval_result  # ~0.74 medido, con margen
+    # Excluye los roles que delegan a reglas (media/central_bank/roles sin
+    # variedad, ver ML_ROLES/RULE_PASSTHROUGH_ROLES): no deberia superar el
+    # 1.0 (imposible) y con roles entrenados de verdad debe estar definido.
+    assert eval_result["n_ml_actor_months"] > 0, eval_result
+    assert 0.0 <= eval_result["agreement_ml_roles_only"] <= 1.0, eval_result
 
 
 # 3. surrogate brain produce ActionRecord con brain=surrogate ---------------
@@ -433,7 +508,18 @@ def test_app_loads_shows_12_tabs_and_advances_a_month():
 def test_surrogate_throughput_proxy(tmp_path):
     """Proxy chico (no las 1.000/200 corridas del DoD -- ver docstring del
     modulo) que deja un numero medible de corridas/segundo para `rules` y
-    `surrogate`, sin imponer un piso estricto (el hardware de CI varia)."""
+    `surrogate`, sin imponer un PISO de velocidad (el hardware de CI varia:
+    un piso estricto en segundos absolutos seria fragil). Hallazgo #10 de
+    REVIEW_003: si asierta algo, que sea un TECHO laxo sobre el ratio
+    `surrogate`/`rules` -- adimensional, no depende del hardware tanto como
+    un tiempo absoluto. La medicion real (`FASE9_RESULTS.md` §4, 30 corridas
+    de 48 meses, modelo de 60 semillas) da ~34x; el techo de 60x deja margen
+    (proxy mas chico, mas ruido) sin dejar pasar una regresion real de
+    orden de magnitud. `SurrogateActor.decide()` predice por ACTOR, por MES
+    (no en lote de 29 actores, ver ADR 009 secc. 3 y la nota de
+    implementacion 11b de `docs/ADR_009_surrogate_ui.md`) -- batchear eso
+    (la tarea de "predecir en lote" que esa nota deja como trabajo futuro,
+    fuera de alcance de REVIEW_003) es lo que bajaria este ratio."""
     import time
 
     from republica.ml.surrogate import train_surrogate
@@ -466,5 +552,9 @@ def test_surrogate_throughput_proxy(tmp_path):
     t_surrogate = _time_n_runs(f"surrogate:{model_path}", n)
     assert t_rules > 0
     assert t_surrogate > 0
-    # Solo se deja constancia (ver docs/FASE9_RESULTS.md para la medicion
-    # real a mayor escala); no se afirma un piso de velocidad aca.
+    # Techo laxo (hallazgo #10), no piso: ~34x medido a escala real
+    # (FASE9_RESULTS.md §4); 60x deja margen para el ruido de un proxy
+    # chico sin dejar pasar una regresion de orden de magnitud (ej. volver
+    # a cargar el .joblib entero por actor, ver ADR 009 nota 11b).
+    ratio = t_surrogate / t_rules
+    assert ratio <= 60, f"surrogate {ratio:.1f}x mas lento que rules (techo laxo: 60x)"

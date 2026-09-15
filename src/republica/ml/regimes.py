@@ -101,8 +101,26 @@ def build_vectors_from_db(con: Any) -> list[dict[str, Any]]:
 
         neg = con.execute("SELECT result FROM negotiations WHERE run_id = ?", [run_id]).fetchall()
         row["n_agreements"] = sum(1 for (r,) in neg if r == "agreement")
+        #: Rupturas REALES (hallazgo #8 de REVIEW_003): `negotiations.result`
+        #: solo toma `{"no_agreement", "agreement", "walk_away"}` (`engine/
+        #: negotiation.py`) -- "walk_away" es una negociacion que nunca
+        #: llego a acuerdo, no un acuerdo roto despues; los literales viejos
+        #: `broken_by_actor`/`broken_by_president` NUNCA aparecen ahi (el
+        #: valor real que toma `Agreement.status` es `broken_by_actor`/
+        #: `broken_by_government`, ADR 005 secc. 2, y ninguno de los dos es
+        #: un `NegotiationRecord.result`). La ruptura de un acuerdo YA
+        #: vigente es un evento `agreement_broken:<actor>:<concesion>:
+        #: <actor|government>` en `MonthRecord.events` (misma definicion que
+        #: `experiments/runner.py::extract_run_metrics`, columna
+        #: `agreements_broken` de `metrics.csv`).
+        month_events = con.execute(
+            "SELECT events_json FROM months WHERE run_id = ?", [run_id]
+        ).fetchall()
         row["n_broken"] = sum(
-            1 for (r,) in neg if r in ("walk_away", "broken_by_actor", "broken_by_president")
+            1
+            for (events_json,) in month_events
+            for ev in (json.loads(events_json) if events_json else [])
+            if ev.startswith("agreement_broken:")
         )
 
         gaps = con.execute(
@@ -131,6 +149,14 @@ def build_vectors_from_db(con: Any) -> list[dict[str, Any]]:
             if result.get("winner") != result.get("incumbent_party"):
                 turnovers += 1
         row["electoral_turnover"] = turnovers
+        #: Etiqueta de crisis SIN mezclar (hallazgo #12 de REVIEW_003): a
+        #: diferencia de `outcome_severity` (abajo, pensada para aportar
+        #: distancia al clustering y por eso pondera `defeated = 0.3`), esta
+        #: es binaria y solo para `describe_cluster` -- promediar
+        #: `outcome_severity` en un centroide con muchas corridas `defeated`
+        #: puede acercarse a 0.3 sin que haya habido ninguna crisis real,
+        #: volviendo fragil un corte "> 0.3" sobre esa mezcla.
+        row["is_crisis"] = 1.0 if outcome in ("collapse", "hyperinflation") else 0.0
 
         vectors.append(row)
     return vectors
@@ -172,13 +198,24 @@ class RegimeResult:
     centroids: list[dict[str, float]]
     pc1: list[float]
     pc2: list[float]
+    #: Cuantos componentes de PCA se usaron para clustering/silhouette
+    #: (hallazgo #3 de REVIEW_003) y cuanta varianza retienen entre los dos.
+    n_components: int = 2
+    explained_variance: float = 0.0
 
 
 def fit_regimes(
     vectors: list[dict[str, Any]], *, k_range: tuple[int, int] = (3, 8)
 ) -> RegimeResult:
-    """Estandariza -> PCA(2) -> k-means con `k` elegido por silhouette en
-    `k_range` (ADR 009 secc. 6)."""
+    """Estandariza -> PCA -> k-means con `k` elegido por silhouette en
+    `k_range` (ADR 009 secc. 6). El clustering y el silhouette corren sobre
+    la PROYECCION de PCA (`coords`, hallazgo #3 de REVIEW_003: antes corrian
+    sobre la matriz estandarizada de 38 dimensiones, contradiciendo el ADR y
+    el docstring viejo de esta funcion), con tantos componentes como haga
+    falta para retener >= 90 % de la varianza (`n_components=0.90`,
+    `svd_solver="full"`) -- `pc1`/`pc2` (las primeras dos columnas de
+    `coords`) siguen siendo solo para graficar en 2D, sean o no las unicas
+    que se usaron para clusterizar."""
     import numpy as np
     from sklearn.cluster import KMeans
     from sklearn.decomposition import PCA
@@ -192,8 +229,10 @@ def fit_regimes(
     x = np.array([[float(row.get(c, 0.0)) for c in cols] for row in vectors], dtype=float)
     x_scaled = StandardScaler().fit_transform(x)
 
-    pca = PCA(n_components=min(2, x_scaled.shape[1]))
+    pca = PCA(n_components=0.90, svd_solver="full")
     coords = pca.fit_transform(x_scaled)
+    n_components = coords.shape[1]
+    explained_variance = float(np.sum(pca.explained_variance_ratio_))
     pc1 = coords[:, 0].tolist()
     pc2 = coords[:, 1].tolist() if coords.shape[1] > 1 else [0.0] * len(pc1)
 
@@ -205,10 +244,10 @@ def fit_regimes(
         if k >= n:
             break
         km = KMeans(n_clusters=k, random_state=0, n_init=10)
-        labels = km.fit_predict(x_scaled)
+        labels = km.fit_predict(coords)
         if len(set(labels)) < 2:
             continue
-        score = silhouette_score(x_scaled, labels)
+        score = silhouette_score(coords, labels)
         if score > best_score:
             best_k, best_score, best_labels = k, score, labels
 
@@ -223,6 +262,7 @@ def fit_regimes(
         centroid = {c: statistics.mean(float(m.get(c, 0.0)) for m in members) for c in cols}
         centroid["n_runs"] = len(members)
         centroid["cluster"] = cluster_id
+        centroid["crisis_share"] = statistics.mean(float(m.get("is_crisis", 0.0)) for m in members)
         centroids.append(centroid)
 
     return RegimeResult(
@@ -232,6 +272,8 @@ def fit_regimes(
         centroids=centroids,
         pc1=pc1,
         pc2=pc2,
+        n_components=n_components,
+        explained_variance=explained_variance,
     )
 
 
@@ -244,7 +286,15 @@ def describe_cluster(centroid: dict[str, float]) -> str:
     infl = centroid.get("inflation_p50", 0.0)
     growth = centroid.get("gdp_growth_p50", 0.0)
     approval = centroid.get("government_approval_p50", 0.0)
-    severity = centroid.get("outcome_severity", 0.0)
+    #: Hallazgo #12 de REVIEW_003: `outcome_severity` promedia `defeated =
+    #: 0.3` junto con `collapse`/`hyperinflation = 1.0` (pensado para el
+    #: clustering, no para esto), asi que un cluster con muchas corridas
+    #: `defeated` y CERO crisis podia rozar/cruzar "> 0.3" igual. `
+    #: crisis_share` (fraccion de corridas del cluster que terminaron en
+    #: `collapse`/`hyperinflation`, ver `build_vectors_from_db`) es
+    #: inambiguo: > 0 significa que al menos una corrida del cluster
+    #: tuvo una crisis real.
+    crisis_share = centroid.get("crisis_share", 0.0)
     stability = centroid.get("political_stability_p50", 0.0)
     parts = [
         f"inflacion mediana {infl:.1f} %/mes",
@@ -252,7 +302,7 @@ def describe_cluster(centroid: dict[str, float]) -> str:
         f"aprobacion mediana {approval:.0f}",
         f"estabilidad mediana {stability:.0f}",
     ]
-    crisis_note = " (con crisis en el camino)" if severity > 0.3 else " (sin crisis)"
+    crisis_note = " (con crisis en el camino)" if crisis_share > 0.0 else " (sin crisis)"
     return f"{int(centroid.get('n_runs', 0))} corridas -- " + ", ".join(parts) + crisis_note
 
 
@@ -297,6 +347,8 @@ def run_regimes(
         "k": result.k,
         "silhouette": result.silhouette,
         "centroids": result.centroids,
+        "n_components": result.n_components,
+        "explained_variance": result.explained_variance,
     }
     if describe:
         out["descriptions"] = [

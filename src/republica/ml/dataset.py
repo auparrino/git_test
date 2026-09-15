@@ -46,6 +46,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from republica.actors.rule_based import INTENSITY_SCALE
 from republica.actors.sheet import ActorSheet, load_actors
 from republica.engine.actions import ActionType
 from republica.engine.narrate import KEY_INDICATORS
@@ -167,7 +168,7 @@ def _derive_intensity(actions: list[dict[str, Any]]) -> float:
     for a in actions:
         score = a.get("score")
         if score is not None:
-            return max(0.0, min(1.0, abs(score.get("total", 0.0)) / 80.0))
+            return max(0.0, min(1.0, abs(score.get("total", 0.0)) / INTENSITY_SCALE))
     return 0.0
 
 
@@ -272,6 +273,12 @@ class _RunRows:
     records: list[dict[str, Any]]
     actions_by_month: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
     memory_by_month: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
+    #: Grupo para el split 70/15/15 de `ml/surrogate.py::_split_group_seeds`
+    #: (hallazgo #2 de REVIEW_003): el directorio padre del `.jsonl`
+    #: (tipicamente `<experimento>/<brazo>`, como escribe `experiments/
+    #: runner.py`), para no mezclar semillas de fuentes distintas que
+    #: reusan los mismos numeros.
+    source: str = ""
 
 
 def _group_sidecars(
@@ -314,6 +321,7 @@ def load_run_jsonl(path: str | Path) -> _RunRows:
         records=records,
         actions_by_month=actions_by_month,
         memory_by_month=memory_by_month,
+        source=str(p.parent),
     )
 
 
@@ -334,6 +342,7 @@ def load_run_history(history: Any, run_id: str | None = None) -> _RunRows:
         records=records,
         actions_by_month=actions_by_month,
         memory_by_month=memory_by_month,
+        source=run_id or "history",
     )
 
 
@@ -392,6 +401,7 @@ def rows_from_run(
             row: dict[str, Any] = {
                 "run_id": run.run_id,
                 "seed": run.seed,
+                "source": run.source,
                 "month": month,
                 "actor_id": actor_id,
                 "role": sheet.role,

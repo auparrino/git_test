@@ -44,7 +44,7 @@ republica experiment resume <dir>          # reanuda por (arm, seed) faltante
 | Tabla | Clave | Contenido |
 |---|---|---|
 | `runs` | `run_id` | experimento, brazo, semilla, outcome, meses, config_hash, paquete, timestamp |
-| `months` | `run_id, month` | las 20 variables + exógenas + policy + aux (una columna por variable) |
+| `months` | `run_id, month` | las 20 variables + exógenas + policy + aux + eventos del mes (`events_json`, agregada tras REVIEW_003 hallazgo #8: la usa `ml/regimes.py` para contar rupturas `agreement_broken:...`) |
 | `actions` | `run_id, month, seq` | actor, tipo, params (JSON), razón, autorizada, motivo de denegación, score |
 | `negotiations` | `run_id, month, actor` | rondas (JSON), resultado, concesión |
 | `votes` | `run_id, month, bill` | por partido (JSON), total, aprobada |
@@ -245,10 +245,12 @@ subcomando `republica experiment` y las 3 corridas reales de `experiments/result
 21. **`central_bank_independence` (50 semillas x 2 brazos, 48 meses, todas las features,
     `--workers 4`) corrió en ~6 s** (no ~2 min: el motor por reglas es liviano, ver el objetivo de
     tiempo de la secc. 2 -- "100 corridas... en < 2 min" resultó muy conservador para actores por
-    reglas). La hipótesis registrada en el YAML se cumplió PARCIALMENTE: inflación anualizada final
-    mediana más baja en el brazo independiente (22.06 vs. 40.27, IC de la diferencia
-    `[-33.24, -5.86]`, Cliff's delta -0.53) y desempleo final más alto (11.08 vs. 8.82, IC
-    `[1.53, 2.82]`, delta +0.78) -- las dos direcciones previstas. Lo que NO se cumplió es "sin
+    reglas). La hipótesis registrada en el YAML se cumplió PARCIALMENTE (números refrescados contra
+    el `report.md` commiteado, `experiments/results/central_bank_independence/report.md`): inflación
+    anualizada final mediana más baja en el brazo independiente (23.48 vs. 38.86 del dependiente, IC
+    de la diferencia `[-29.07, -4.94]`, Cliff's delta -0.50) y desempleo final más alto en el
+    independiente (10.96 vs. 8.85 del dependiente, IC `[1.46, 2.82]`, delta +0.76) -- las dos
+    direcciones previstas. Lo que NO se cumplió es "sin
     diferencia clara en supervivencia": el brazo dependiente tuvo 8/50 corridas que terminaron en
     crisis (`collapse`+`hyperinflation`) antes de llegar a una elección, el independiente 0/50 --
     una diferencia real, documentada tal cual en `report.md` en vez de forzarla a calzar con la

@@ -142,6 +142,13 @@ def build_early_warning_rows(
             month_perceptions[0].get("perception_gap", 0.0) if month_perceptions else 0.0
         )
         row["crisis_12m"] = int(is_crisis_run and month < final_month <= month + HORIZON_MONTHS)
+        #: Grupo para el split 70/15/15 de `ml/surrogate.py::
+        #: _split_group_seeds` (hallazgo #2 de REVIEW_003): el directorio
+        #: padre del `.jsonl` (`<experimento>/<brazo>`), para no mezclar
+        #: semillas de experimentos distintos que reusan los mismos
+        #: numeros (ej. `fiscal_rule` 0-19 y `central_bank_independence`
+        #: 0-49 combinados en un mismo entrenamiento).
+        row["source"] = str(Path(path).parent)
         rows.append(row)
     return rows
 
@@ -185,10 +192,18 @@ def train_early_warning(
     *,
     country: Country | None = None,
     random_state: int = 0,
+    allow_in_sample: bool = False,
 ) -> dict[str, Any]:
     """`republica ml early-warning train --runs <dir> --out ...` (ADR 009
-    secc. 5/8). Split 70/15/15 por semilla, igual criterio que
-    `ml/surrogate.py::train_surrogate` (generalizacion a mundos no vistos)."""
+    secc. 5/8). Split 70/15/15 por `(fuente, semilla)` -- `ml/surrogate.py::
+    _split_group_seeds`, hallazgo #2 de REVIEW_003: agrupar por FUENTE (el
+    directorio `<experimento>/<brazo>` de cada `.jsonl`) antes de partir es
+    lo que evita que, al combinar `fiscal_rule` (semillas 0-19) con
+    `central_bank_independence` (semillas 0-49), los numeros de semilla
+    coincidentes entre las dos fuentes degeneren el split (ver el docstring
+    de `_split_group_seeds`). `allow_in_sample` (hallazgo #11): igual que
+    `train_surrogate`, permite entrenar con una fuente de <=2 semillas
+    (queda `manifest['in_sample'] = True`) en vez de levantar `ValueError`."""
     _sklearn()
     import joblib
     from sklearn.calibration import CalibratedClassifierCV
@@ -196,7 +211,7 @@ def train_early_warning(
     from sklearn.inspection import permutation_importance
     from sklearn.metrics import roc_auc_score
 
-    from republica.ml.surrogate import _split_seeds
+    from republica.ml.surrogate import _sorted_pairs, _split_group_seeds
 
     country = country if country is not None else load_country()
     paths = _iter_jsonl_paths(sources)
@@ -212,11 +227,13 @@ def train_early_warning(
         except (ValueError, KeyError, IndexError):
             continue
 
-    seeds = sorted({r["seed"] for r in rows})
-    train_seeds, val_seeds, test_seeds = _split_seeds(seeds)
-    train_rows = [r for r in rows if r["seed"] in train_seeds]
-    val_rows = [r for r in rows if r["seed"] in val_seeds]
-    test_rows = [r for r in rows if r["seed"] in test_seeds]
+    pairs = sorted({(r["source"], r["seed"]) for r in rows})
+    train_keys, val_keys, test_keys, in_sample_sources = _split_group_seeds(
+        pairs, allow_in_sample=allow_in_sample
+    )
+    train_rows = [r for r in rows if (r["source"], r["seed"]) in train_keys]
+    val_rows = [r for r in rows if (r["source"], r["seed"]) in val_keys]
+    test_rows = [r for r in rows if (r["source"], r["seed"]) in test_keys]
 
     cols = feature_columns()
     x_train = _vectorize(train_rows, cols)
@@ -257,7 +274,14 @@ def train_early_warning(
         "n_source_runs": n_runs,
         "n_rows": len(rows),
         "n_positive": sum(r["crisis_12m"] for r in rows),
-        "seeds": {"train": train_seeds, "val": val_seeds, "test": test_seeds},
+        #: `[fuente, semilla]` por tramo (hallazgo #2 de REVIEW_003).
+        "seeds": {
+            "train": _sorted_pairs(train_keys),
+            "val": _sorted_pairs(val_keys),
+            "test": _sorted_pairs(test_keys),
+        },
+        "in_sample": bool(in_sample_sources),
+        "in_sample_sources": sorted(in_sample_sources),
         "auc_val": auc_val,
         "auc_test": auc_test,
         "top_features": top_features,

@@ -1249,11 +1249,13 @@ def experiment_load(
     """`republica experiment load <dir> --db <archivo>` (ADR 008 secc. 3):
     carga las corridas del experimento en DuckDB (idempotente). Requiere el
     extra opcional `analysis` (`uv sync --group dev --extra analysis`)."""
-    try:
-        from republica.experiments.store import load_experiment
-    except ImportError as exc:  # pragma: no cover - falta el extra
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(code=1) from exc
+    # Hallazgo #6 de REVIEW_003: `experiments/store.py` importa `duckdb` de
+    # forma PEREZOSA (dentro de `_duckdb()`), nunca a nivel de modulo, asi
+    # que `from republica.experiments.store import load_experiment` nunca
+    # levanta `ImportError` -- el guard de import de abajo era codigo
+    # muerto; el extra faltante recien se nota adentro de `load_experiment`,
+    # como `RuntimeError` (mensaje en castellano), que es lo que se atrapa.
+    from republica.experiments.store import load_experiment
 
     try:
         result = load_experiment(out, db)
@@ -1277,7 +1279,15 @@ def experiment_report(
     console.print(f"[green]OK[/green] reporte -> {path}")
 
 
-def _ml_import_error(exc: ImportError) -> None:
+def _ml_runtime_error(exc: RuntimeError) -> None:
+    """Hallazgo #6 de REVIEW_003: `ml/*.py` importa sklearn/duckdb de forma
+    PEREZOSA (dentro de cada funcion que los necesita), nunca a nivel de
+    modulo -- `from republica.ml.X import fn` nunca levanta `ImportError`
+    (por eso el viejo `try/except ImportError` alrededor del import de cada
+    comando de abajo era codigo muerto: el extra faltante recien se nota
+    ADENTRO de `fn(...)`, como `RuntimeError` con el mensaje en castellano
+    de `_MISSING_SKLEARN_MSG`/`_MISSING_DUCKDB_MSG` -- es ESA llamada la que
+    hay que envolver)."""
     console.print(f"[red]{exc}[/red]")
     raise typer.Exit(code=1) from exc
 
@@ -1316,17 +1326,25 @@ def ml_train_cmd(
     brain: Annotated[
         str, typer.Option("--brain", help="Cerebro que imitan las corridas (metadata).")
     ] = "rules",
+    allow_in_sample: Annotated[
+        bool,
+        typer.Option(
+            "--allow-in-sample",
+            help="Permitir fuentes con <=2 semillas (val/test quedan in-sample, ADR 009 secc. 3).",
+        ),
+    ] = False,
 ) -> None:
     """`republica ml train --runs <dir|jsonl...> --brain rules --out
     data/ml/surrogate_rules.joblib` (ADR 009 secc. 3): un pipeline sklearn
     por rol. Requiere el extra opcional `ml`."""
+    from republica.ml.surrogate import train_surrogate
+
     try:
-        from republica.ml.surrogate import train_surrogate
-    except ImportError as exc:
-        _ml_import_error(exc)
+        result = train_surrogate(runs, out, brain=brain, allow_in_sample=allow_in_sample)
+    except RuntimeError as exc:
+        _ml_runtime_error(exc)
         return
 
-    result = train_surrogate(runs, out, brain=brain)
     n_skipped = len(result["roles"]) - len(result["metrics"])
     skipped_note = f", {n_skipped} sin suficiente variedad de 'position'" if n_skipped else ""
     console.print(
@@ -1353,19 +1371,25 @@ def ml_evaluate_cmd(
 ) -> None:
     """`republica ml evaluate --model ... --seeds 100:130` (ADR 009 secc.
     3): agreement rate en semillas held-out, re-simulando `rules` vs
-    `surrogate:<model>`."""
-    try:
-        from republica.ml.surrogate import evaluate_surrogate
-    except ImportError as exc:
-        _ml_import_error(exc)
-        return
+    `surrogate:<model>`. Reporta las 4 metricas del hallazgo #1 de
+    REVIEW_003 (`agreement_rate` solo, sin baseline, es casi trivial contra
+    actores por reglas)."""
+    from republica.ml.surrogate import evaluate_surrogate
 
     start_s, _, end_s = seeds.partition(":")
     seed_range = list(range(int(start_s), int(end_s)))
-    result = evaluate_surrogate(model, seed_range, months=months, fallback=fallback)
+    try:
+        result = evaluate_surrogate(model, seed_range, months=months, fallback=fallback)
+    except RuntimeError as exc:
+        _ml_runtime_error(exc)
+        return
     console.print(
         f"[green]OK[/green] agreement_rate={result['agreement_rate']:.3f} "
-        f"sobre {result['n_actor_months']} (actor, mes) de {len(seed_range)} semillas"
+        f"(majority_baseline={result['majority_baseline']:.3f}, "
+        f"ml_roles_only={result['agreement_ml_roles_only']:.3f}, "
+        f"balanced={result['balanced_agreement']:.3f}) "
+        f"sobre {result['n_actor_months']} (actor, mes) de {len(seed_range)} semillas "
+        f"({result['n_missing_actor_months']} sin contraparte en 'surrogate')"
     )
     for role, rate in sorted(result["per_role_agreement"].items()):
         console.print(f"  {role}: {rate:.3f}")
@@ -1388,13 +1412,13 @@ def ml_retrain_cmd(
 ) -> None:
     """`republica ml retrain --queue` (ADR 009 secc. 4): reentrena sumando
     `active_queue.jsonl` al split de entrenamiento."""
-    try:
-        from republica.ml.active import retrain_with_queue
-    except ImportError as exc:
-        _ml_import_error(exc)
-        return
+    from republica.ml.active import retrain_with_queue
 
-    result = retrain_with_queue(model, out, queue_path=queue, sources=runs)
+    try:
+        result = retrain_with_queue(model, out, queue_path=queue, sources=runs)
+    except RuntimeError as exc:
+        _ml_runtime_error(exc)
+        return
     console.print(
         f"[green]OK[/green] reentrenado con {result['n_queue_rows_added']} filas de la cola "
         f"-> {out}"
@@ -1413,16 +1437,17 @@ def ml_regimes_cmd(
 ) -> None:
     """`republica ml regimes --db ... [--describe]` (ADR 009 secc. 6):
     clustering de regimenes sobre lo ya cargado en DuckDB."""
-    try:
-        from republica.ml.regimes import run_regimes
-    except ImportError as exc:
-        _ml_import_error(exc)
-        return
+    from republica.ml.regimes import run_regimes
 
-    result = run_regimes(db, describe=describe)
+    try:
+        result = run_regimes(db, describe=describe)
+    except RuntimeError as exc:
+        _ml_runtime_error(exc)
+        return
     console.print(
         f"[green]OK[/green] {result['n_runs']} corridas, k={result['k']} "
-        f"(silhouette={result['silhouette']:.3f})"
+        f"(silhouette={result['silhouette']:.3f}, "
+        f"{result['n_components']} comp. PCA, {result['explained_variance']:.1%} varianza)"
         if result["n_runs"]
         else "[yellow]sin corridas[/yellow]"
     )
@@ -1443,16 +1468,23 @@ def ml_early_warning_train_cmd(
     out: Annotated[Path, typer.Option("--out", help="Archivo .joblib de salida.")] = Path(
         "data/ml/early_warning.joblib"
     ),
+    allow_in_sample: Annotated[
+        bool,
+        typer.Option(
+            "--allow-in-sample",
+            help="Permitir fuentes con <=2 semillas (val/test quedan in-sample, ADR 009 secc. 5).",
+        ),
+    ] = False,
 ) -> None:
     """`republica ml early-warning train --runs <dir> --out ...` (ADR 009
     secc. 5)."""
-    try:
-        from republica.ml.early_warning import train_early_warning
-    except ImportError as exc:
-        _ml_import_error(exc)
-        return
+    from republica.ml.early_warning import train_early_warning
 
-    result = train_early_warning(runs, out)
+    try:
+        result = train_early_warning(runs, out, allow_in_sample=allow_in_sample)
+    except RuntimeError as exc:
+        _ml_runtime_error(exc)
+        return
     console.print(
         f"[green]OK[/green] AUC(val)={result['auc_val']:.3f} AUC(test)={result['auc_test']:.3f} "
         f"sobre {result['n_rows']} filas ({result['n_positive']} positivas) -> {out}"
@@ -1468,13 +1500,13 @@ def ml_early_warning_predict_cmd(
     month: Annotated[int, typer.Option(help="Mes a evaluar.")],
 ) -> None:
     """`republica ml early-warning predict --run run.jsonl --month N`."""
-    try:
-        from republica.ml.early_warning import predict_from_run, risk_sentence
-    except ImportError as exc:
-        _ml_import_error(exc)
-        return
+    from republica.ml.early_warning import predict_from_run, risk_sentence
 
-    result = predict_from_run(model, run, month)
+    try:
+        result = predict_from_run(model, run, month)
+    except RuntimeError as exc:
+        _ml_runtime_error(exc)
+        return
     console.print(risk_sentence(result["probability"], result["top_features"]))
 
 

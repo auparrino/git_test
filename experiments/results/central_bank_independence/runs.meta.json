@@ -1,7 +1,7 @@
 {
   "experiment_name": "central_bank_independence",
   "description": "Hipotesis: el brazo independiente (autonomy=4, el Banco Central fija la tasa sin pasar por el presidente) tiene menor inflacion anualizada final mediana y mayor desempleo final que el brazo dependiente (autonomy=2, solo recomienda), sin diferencia clara en la tasa de supervivencia entre los dos brazos.\n",
-  "experiment_yaml": "/home/user/git_test/experiments/central_bank_independence.yaml",
+  "experiment_yaml": "experiments/central_bank_independence.yaml",
   "seeds": {
     "start": 0,
     "count": 50

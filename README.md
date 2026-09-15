@@ -144,9 +144,13 @@ está en [`docs/PLAN.md`](docs/PLAN.md) y [`docs/PASO_A_PASO.md`](docs/PASO_A_PA
 
 ## Lo que viene
 
-- **Fase 9** ([`ADR_009`](docs/ADR_009_surrogate_ui.md)): modelo sustituto entrenado sobre las decisiones
-  de los actores, active learning cuando el sustituto duda, early-warning de crisis a 12 meses,
-  clustering de regímenes políticos e interfaz Streamlit.
+- **Fase 9** ([`ADR_009`](docs/ADR_009_surrogate_ui.md), resultados en
+  [`FASE9_RESULTS.md`](docs/FASE9_RESULTS.md)): modelo sustituto entrenado sobre las decisiones de los
+  actores (el acuerdo se mide contra un baseline de clase mayoritaria, no solo, porque con actores por
+  reglas casi todo es `neutral` y el problema es casi trivial: 0.9986 de acuerdo agregado vs. 0.9959 de
+  ese baseline, contra 0.67 en los casos donde el actor de verdad toma partido — el sustituto recién es
+  informativo imitando a un LLM), active learning cuando el sustituto duda, early-warning de crisis a 12
+  meses (AUC 0.996/0.998 en validación/test), clustering de regímenes políticos e interfaz Streamlit.
 - **Fase 10**: dejar de hardcodear instituciones. Definir 10–20 primitivas (`GRANT`, `DELEGATE`,
   `AGGREGATE`, `SANCTION`, `MODIFY_RULE`…) con las que los agentes puedan inventar sus propias reglas, y
   ver qué formas de organización emergen.

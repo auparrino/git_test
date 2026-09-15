@@ -58,6 +58,7 @@ _SCHEMA_SQL: tuple[str, ...] = (
         policy_json VARCHAR,
         aux_json VARCHAR,
         cohorts_json VARCHAR,
+        events_json VARCHAR,
         PRIMARY KEY (run_id, month)
     )""",
     """CREATE TABLE IF NOT EXISTS actions (
@@ -131,6 +132,12 @@ def open_db(db_path: str | Path):
     con = duckdb.connect(str(db_path))
     for stmt in _SCHEMA_SQL:
         con.execute(stmt)
+    # `events_json` en `months` (hallazgo #8 de REVIEW_003, agregado despues
+    # de la carga inicial de ADR 008): `CREATE TABLE IF NOT EXISTS` no toca
+    # un `.duckdb` YA cargado con el esquema viejo (7 columnas) -- sin este
+    # `ALTER TABLE`, `ml/regimes.py` fallaria con "column events_json does
+    # not exist" sobre cualquier base cargada antes de este cambio.
+    con.execute("ALTER TABLE months ADD COLUMN IF NOT EXISTS events_json VARCHAR")
     return con
 
 
@@ -192,10 +199,15 @@ def _load_one_run(con: Any, meta: dict[str, Any], arm: str, seed: int, jsonl_pat
             json.dumps(r.get("policy", {}), ensure_ascii=False),
             json.dumps(r.get("aux", {}), ensure_ascii=False),
             json.dumps(r.get("cohorts", {}), ensure_ascii=False),
+            #: Eventos del mes (hallazgo #8 de REVIEW_003): rupturas de
+            #: acuerdo (`agreement_broken:...`) viven aca, no en
+            #: `negotiations.result` -- ver `ml/regimes.py::
+            #: build_vectors_from_db`.
+            json.dumps(r.get("events", []), ensure_ascii=False),
         )
         for r in loaded.records
     ]
-    _bulk_insert(con, "months", 7, months_rows)
+    _bulk_insert(con, "months", 8, months_rows)
 
     action_rows = []
     for month, actions in loaded.actions_by_month.items():

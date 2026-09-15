@@ -1,7 +1,7 @@
 {
   "experiment_name": "brain_comparison",
   "description": "Hipotesis: `fake:rules` reproduce las metricas de `rules` (misma tuberia de decision, solo mediada por un `FakeBackend`) -- sirve de control del experimento. Los brazos `llm:ollama:qwen3:8b`/`llm:ollama:qwen3:32b` (comentados: necesitan un servidor Ollama local, ADR 008 secc. 5.2) miden si un modelo mas grande produce mas `diversity`/menos `authority_violations` que las reglas, a costo de mas `agreements_broken`.\n",
-  "experiment_yaml": "/home/user/git_test/experiments/brain_comparison.yaml",
+  "experiment_yaml": "experiments/brain_comparison.yaml",
   "seeds": {
     "start": 0,
     "count": 30

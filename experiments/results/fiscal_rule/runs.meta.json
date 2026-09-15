@@ -1,7 +1,7 @@
 {
   "experiment_name": "fiscal_rule",
   "description": "Hipotesis: la supervivencia cae y la inflacion anualizada final sube a medida que aumenta `c_f` (mas traspaso de deficit a precios) y/o `primary_spending` (mas gasto primario, a igual `tax_rate`) -- el mapa de calor deberia mostrar el peor cuadrante en c_f=0.16 x primary_spending=27 y el mejor en c_f=0.08 x primary_spending=23.\n",
-  "experiment_yaml": "/home/user/git_test/experiments/fiscal_rule.yaml",
+  "experiment_yaml": "experiments/fiscal_rule.yaml",
   "seeds": {
     "start": 0,
     "count": 20

@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import json
 import platform
+import statistics
 import warnings
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -49,6 +50,7 @@ from republica.actors.rule_based import (
 )
 from republica.actors.rule_based import (
     ACTION_BUDGET_PER_TURN,
+    CONCESSION_COOLDOWN_MONTHS,
     NEGOTIATE_CAPABLE_ROLES,
     STATEMENT_MIN_INTENSITY,
     RuleBasedActor,
@@ -98,23 +100,73 @@ def _joblib():
     return joblib
 
 
-def _split_seeds(seeds: list[int]) -> tuple[list[int], list[int], list[int]]:
-    """70/15/15 por semilla (ADR 009 secc. 3, deliverable 2), secuencial (no
-    mezclado) sobre las semillas ORDENADAS -- reproducible sin depender de
-    una semilla propia de split. Con pocas semillas (tests), cada tramo
-    minimo es 1 si hay al menos 3 semillas."""
-    seeds = sorted(set(seeds))
-    n = len(seeds)
-    if n <= 2:
-        return seeds, seeds, seeds
-    n_train = max(1, round(n * 0.7))
-    n_val = max(1, round(n * 0.15))
-    n_train = min(n_train, n - 2)
-    n_val = min(n_val, n - n_train - 1)
-    train = seeds[:n_train]
-    val = seeds[n_train : n_train + n_val]
-    test = seeds[n_train + n_val :]
-    return train, val, test
+def _split_group_seeds(
+    pairs: list[tuple[str, int]], *, allow_in_sample: bool = False
+) -> tuple[set[tuple[str, int]], set[tuple[str, int]], set[tuple[str, int]], set[str]]:
+    """70/15/15 por `(fuente, semilla)` (hallazgo #2 de REVIEW_003), secuencial
+    (no mezclado) sobre las semillas ORDENADAS dentro de cada fuente --
+    reemplaza a la vieja `_split_seeds(seeds)`, que particionaba sobre la
+    UNION de valores de semilla SIN mirar la fuente: con `fiscal_rule`
+    (semillas 0-19) y `central_bank_independence` (semillas 0-49) cargados
+    juntos, "semilla 5" de una y de la otra caian en el MISMO tramo del split
+    por pura coincidencia numerica, y como `fiscal_rule` (180 filas) domina
+    en cantidad sobre `central_bank_independence` (100 filas), casi todo
+    `central_bank_independence` terminaba en train y val/test quedaban casi
+    sin sus corridas (por eso `AUC(test) = nan`: sin las dos clases
+    representadas). Agrupar por `(fuente, semilla)` -- `fuente` tipicamente
+    el directorio del `.jsonl` (`<experimento>/<brazo>`, ver `dataset.
+    _RunRows.source`/`early_warning.build_early_warning_rows`) -- hace un
+    split 70/15/15 POR fuente y despues une los tres tramos: cada fuente
+    aporta su propia porcion a train/val/test, sin que una fuente mas grande
+    se coma el split de las demas.
+
+    Con <=2 semillas en una fuente el split 70/15/15 degenera en
+    train == val == test para esa fuente (metricas in-sample presentadas
+    como si fueran held-out, hallazgo #11): levanta `ValueError` salvo que
+    `allow_in_sample=True` (uso explicito -- el llamador debe marcarlo
+    `in_sample=True` en el manifest, nunca dejarlo pasar en silencio).
+    Devuelve `(train, val, test, in_sample_sources)`, el ultimo el subset de
+    fuentes que cayeron en el caso degenerado con `allow_in_sample=True`."""
+    by_source: dict[str, list[int]] = {}
+    for source, seed in sorted(set(pairs)):
+        by_source.setdefault(source, []).append(seed)
+
+    train: set[tuple[str, int]] = set()
+    val: set[tuple[str, int]] = set()
+    test: set[tuple[str, int]] = set()
+    in_sample_sources: set[str] = set()
+    for source, seeds in by_source.items():
+        seeds = sorted(seeds)
+        n = len(seeds)
+        if n <= 2:
+            if not allow_in_sample:
+                raise ValueError(
+                    f"la fuente {source!r} tiene solo {n} semilla(s): un split "
+                    "70/15/15 no puede armar val/test held-out reales (train "
+                    "== val == test). Pasar allow_in_sample=True para "
+                    "permitirlo explicitamente (queda marcado in_sample=True "
+                    "en el manifest)."
+                )
+            in_sample_sources.add(source)
+            group = {(source, s) for s in seeds}
+            train |= group
+            val |= group
+            test |= group
+            continue
+        n_train = max(1, round(n * 0.7))
+        n_val = max(1, round(n * 0.15))
+        n_train = min(n_train, n - 2)
+        n_val = min(n_val, n - n_train - 1)
+        train |= {(source, s) for s in seeds[:n_train]}
+        val |= {(source, s) for s in seeds[n_train : n_train + n_val]}
+        test |= {(source, s) for s in seeds[n_train + n_val :]}
+    return train, val, test, in_sample_sources
+
+
+def _sorted_pairs(pairs: set[tuple[str, int]]) -> list[list[Any]]:
+    """`{(fuente, semilla), ...}` -> `[[fuente, semilla], ...]` ordenado,
+    para que el manifest (JSON) sea legible y estable entre corridas."""
+    return [[source, seed] for source, seed in sorted(pairs)]
 
 
 def _vectorize(rows: list[dict[str, Any]], columns: list[str]):
@@ -301,6 +353,7 @@ def train_surrogate(
     country: Country | None = None,
     random_state: int = 0,
     queue_rows: list[dict[str, Any]] | None = None,
+    allow_in_sample: bool = False,
 ) -> dict[str, Any]:
     """`republica ml train --runs <dir|jsonl...> --brain rules --out
     data/ml/surrogate_rules.joblib` (ADR 009 secc. 3/8). `queue_rows` (ADR
@@ -308,7 +361,10 @@ def train_surrogate(
     del formato de `dataset.rows_from_run` (de `active_queue.jsonl`) que se
     agregan al split de ENTRENAMIENTO (nunca a val/test: son casos donde el
     sustituto ya fallo, reentrenar sobre ellos no debe inflar la metrica de
-    generalizacion)."""
+    generalizacion). `allow_in_sample` (hallazgo #11 de REVIEW_003): permite
+    entrenar igual cuando alguna fuente trae <=2 semillas (val/test quedan
+    in-sample para esa fuente) en vez de levantar `ValueError` -- queda
+    marcado `manifest['in_sample'] = True`."""
     _sklearn()
     joblib = _joblib()
     actors = actors if actors is not None else load_actors()
@@ -324,11 +380,13 @@ def train_surrogate(
         rows.extend(ml_dataset.rows_from_run(run, actors, country))
         n_runs += 1
 
-    seeds = sorted({r["seed"] for r in rows})
-    train_seeds, val_seeds, test_seeds = _split_seeds(seeds)
-    train_rows = [r for r in rows if r["seed"] in train_seeds]
-    val_rows = [r for r in rows if r["seed"] in val_seeds]
-    test_rows = [r for r in rows if r["seed"] in test_seeds]
+    pairs = sorted({(r["source"], r["seed"]) for r in rows})
+    train_keys, val_keys, test_keys, in_sample_sources = _split_group_seeds(
+        pairs, allow_in_sample=allow_in_sample
+    )
+    train_rows = [r for r in rows if (r["source"], r["seed"]) in train_keys]
+    val_rows = [r for r in rows if (r["source"], r["seed"]) in val_keys]
+    test_rows = [r for r in rows if (r["source"], r["seed"]) in test_keys]
     if queue_rows:
         train_rows = train_rows + list(queue_rows)
 
@@ -358,7 +416,18 @@ def train_surrogate(
         "n_source_runs": n_runs,
         "n_rows": len(rows),
         "n_queue_rows": len(queue_rows or []),
-        "seeds": {"train": train_seeds, "val": val_seeds, "test": test_seeds},
+        #: Lista de `[fuente, semilla]` por tramo (hallazgo #2 de REVIEW_003:
+        #: el split es por `(fuente, semilla)`, no por semilla sola).
+        "seeds": {
+            "train": _sorted_pairs(train_keys),
+            "val": _sorted_pairs(val_keys),
+            "test": _sorted_pairs(test_keys),
+        },
+        #: Hallazgo #11: `True` si alguna fuente tenia <=2 semillas y
+        #: `allow_in_sample=True` la dejo pasar igual -- val/test de esa
+        #: fuente son in-sample, no held-out real.
+        "in_sample": bool(in_sample_sources),
+        "in_sample_sources": sorted(in_sample_sources),
         "roles": roles_present,
         "feature_columns": feature_cols,
         "metrics": metrics,
@@ -425,6 +494,16 @@ class SurrogateActor:
     #: memoria (tests) sin pasar por esa fabrica.
     model_path: str = ""
     _rule_fallback: RuleBasedActor | None = field(default=None, repr=False)
+    #: `{concesion: mes_hasta_el_que_esta_en_cooldown}` (hallazgo #12 de
+    #: REVIEW_003, mismo mecanismo que `RuleBasedActor._concession_cooldowns`
+    #: / `note_concession_granted`, ADR 003 secc. 6, hallazgo #5 de
+    #: REVIEW_001): la rama `NEGOTIATE` de abajo lo respeta igual que
+    #: `_decide_generic`, y `engine/scheduler.py::run_actor_turn` llama
+    #: `note_concession_granted` de forma duck-typed (`getattr(recipient,
+    #: "note_concession_granted", None)`), asi que alcanza con tener el
+    #: mismo metodo/atributo para que el cooldown funcione igual con brain
+    #: `surrogate`.
+    _concession_cooldowns: dict[str, int] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
         if not self.parties_by_id:
@@ -436,6 +515,12 @@ class SurrogateActor:
     @property
     def role(self) -> str:
         return self.sheet.role
+
+    def note_concession_granted(self, concession: str, month: int) -> None:
+        """Igual que `RuleBasedActor.note_concession_granted` (hallazgo #12):
+        bloquea `NEGOTIATE` por la misma `concession` los proximos
+        `CONCESSION_COOLDOWN_MONTHS` meses."""
+        self._concession_cooldowns[concession] = month + CONCESSION_COOLDOWN_MONTHS
 
     @property
     def brain_name(self) -> str:
@@ -512,7 +597,16 @@ class SurrogateActor:
             )
             if rng.random() < actor.personality.risk_tolerance * intensity:
                 actions.extend(_escalate(actor, intensity, reason))
-        elif position == "negotiate" and role in NEGOTIATE_CAPABLE_ROLES:
+        elif (
+            position == "negotiate"
+            and role in NEGOTIATE_CAPABLE_ROLES
+            and perception.proposal is not None
+            and perception.proposal.delta
+            and perception.month
+            >= self._concession_cooldowns.get(
+                NEGOTIATE_CONCESSION.get(role, ConcessionType.DELAY_POLICY).value, -1
+            )
+        ):
             concession = NEGOTIATE_CONCESSION.get(role, ConcessionType.DELAY_POLICY)
             actions.append(
                 Action(
@@ -572,7 +666,39 @@ def evaluate_surrogate(
     a actor, mes a mes -- las dos corridas DIVERGEN mes a mes (las acciones
     distintas realimentan el mundo), asi que esto mide fidelidad de
     comportamiento sobre una trayectoria completa, no solo la exactitud del
-    clasificador en un dataset fijo (esa la reporta `manifest['metrics']`)."""
+    clasificador en un dataset fijo (esa la reporta `manifest['metrics']`).
+
+    Hallazgo #1 de REVIEW_003: con actores por reglas, `position = neutral`
+    domina el dataset (>98 % de las filas) y `media`/`central_bank`/los
+    roles sin pipeline propio delegan a reglas y dan agreement = 1.0 por
+    construccion -- un `agreement_rate` alto ahi es casi trivial, no
+    evidencia de que el sustituto aprendio algo. El resultado ahora reporta
+    CUATRO numeros en vez de uno:
+    - `agreement_rate`: el de antes (todas las (actor, mes), todos los
+      roles).
+    - `majority_baseline`: lo que lograria un predictor CONSTANTE (la
+      `position` mas frecuente entre las mismas (actor, mes) evaluadas) --
+      el piso contra el que hay que leer `agreement_rate`.
+    - `agreement_ml_roles_only`: igual que `agreement_rate` pero SOLO sobre
+      los roles que de verdad tienen un pipeline de ML entrenado (excluye
+      `media`/`central_bank`, ADR 009 Notas de implementacion punto 6, y
+      cualquier otro rol que `train_surrogate` haya saltado por falta de
+      variedad -- ej. `party` con `rules`, ver `FASE9_RESULTS.md` §2):
+      estos delegan a un `RuleBasedActor` interno, agreement = 1.0 por
+      construccion, y no deberian inflar la metrica.
+    - `balanced_agreement`: `agreement_rate` restringido a las (actor, mes)
+      donde la posicion de `rules` NO es `neutral` -- la clase dominante
+      queda afuera, asi que esta es la metrica INFORMATIVA sobre si el
+      sustituto distingue `support`/`oppose`/`negotiate`.
+
+    Hallazgo #7: antes, una (actor, mes) de `rules` sin contraparte en la
+    corrida de `surrogate` (la corrida con sustituto termino antes, ej. una
+    crisis que `rules` no tuvo) se DESCARTABA en silencio -- exactamente el
+    caso de mayor divergencia entre las dos trayectorias. Ahora cuenta como
+    desacuerdo (entra en `total` de todas las metricas de arriba, nunca en
+    `matches`), y se reporta `run_length_delta` (meses de `rules` menos
+    meses de `surrogate`, por semilla) para que la magnitud de esa
+    divergencia quede visible en vez de escondida."""
     from republica.engine.simulation import run as run_simulation
 
     country = country if country is not None else load_country()
@@ -580,11 +706,23 @@ def evaluate_surrogate(
         f"surrogate:{model_path}" if not fallback else f"surrogate:{model_path}+fallback:{fallback}"
     )
     actors_by_id = load_actors()
+    #: Roles con pipeline de ML realmente entrenado (hallazgo #1): union
+    #: dinamica, no solo `RULE_PASSTHROUGH_ROLES` -- un rol puede quedar
+    #: fuera de `bundle['models']` porque `train_surrogate` lo salto por
+    #: falta de variedad de `position` (ej. `party` con `rules`), y ese caso
+    #: tambien delega a reglas aunque no sea un passthrough "de diseno".
+    bundle = load_surrogate_bundle(model_path)
+    ml_trained_roles = set(bundle.get("models", {}).keys())
 
     total = 0
     matches = 0
+    n_missing = 0
     per_role_total: dict[str, int] = {}
     per_role_matches: dict[str, int] = {}
+    position_counts: dict[str, int] = {}
+    balanced_total = 0
+    balanced_matches = 0
+    run_length_delta: dict[int, int] = {}
     for seed in seeds:
         rules_history = run_simulation(
             seed=seed,
@@ -618,29 +756,71 @@ def evaluate_surrogate(
         sur_by_am: dict[tuple[int, str], set[str]] = {}
         for a in surrogate_history.action_records:
             sur_by_am.setdefault((a.month, a.actor), set()).add(a.type)
+
+        rules_final_month = rules_history.records[-1].month_index if rules_history.records else 0
+        surrogate_final_month = (
+            surrogate_history.records[-1].month_index if surrogate_history.records else 0
+        )
+        run_length_delta[seed] = rules_final_month - surrogate_final_month
+
         for key, r_types in rules_by_am.items():
-            s_types = sur_by_am.get(key)
-            if s_types is None:
-                continue
             actor_sheet = actors_by_id.get(key[1])
             role = actor_sheet.role if actor_sheet is not None else "unknown"
             r_pos = ml_dataset._derive_position(r_types)  # noqa: SLF001
-            s_pos = ml_dataset._derive_position(s_types)  # noqa: SLF001
+            position_counts[r_pos] = position_counts.get(r_pos, 0) + 1
+            is_balanced_case = r_pos != "neutral"
+
             total += 1
             per_role_total[role] = per_role_total.get(role, 0) + 1
+            if is_balanced_case:
+                balanced_total += 1
+
+            # Hallazgo #7: sin contraparte en la corrida de `surrogate`
+            # (termino antes) cuenta como desacuerdo, no se descarta.
+            s_types = sur_by_am.get(key)
+            if s_types is None:
+                n_missing += 1
+                continue
+            s_pos = ml_dataset._derive_position(s_types)  # noqa: SLF001
             if r_pos == s_pos:
                 matches += 1
                 per_role_matches[role] = per_role_matches.get(role, 0) + 1
+                if is_balanced_case:
+                    balanced_matches += 1
 
     agreement = matches / total if total else float("nan")
+
+    majority_count = max(position_counts.values()) if position_counts else 0
+    majority_baseline = majority_count / total if total else float("nan")
+
+    ml_total = sum(n for role, n in per_role_total.items() if role in ml_trained_roles)
+    ml_matches = sum(
+        per_role_matches.get(role, 0) for role in per_role_total if role in ml_trained_roles
+    )
+    agreement_ml_roles_only = ml_matches / ml_total if ml_total else float("nan")
+
+    balanced_agreement = balanced_matches / balanced_total if balanced_total else float("nan")
+
     per_role_agreement = {
         role: per_role_matches.get(role, 0) / n for role, n in per_role_total.items()
     }
+    deltas = list(run_length_delta.values())
     return {
         "seeds": seeds,
         "n_actor_months": total,
+        "n_missing_actor_months": n_missing,
         "agreement_rate": agreement,
+        "majority_baseline": majority_baseline,
+        "agreement_ml_roles_only": agreement_ml_roles_only,
+        "n_ml_actor_months": ml_total,
+        "balanced_agreement": balanced_agreement,
+        "n_balanced_actor_months": balanced_total,
         "per_role_agreement": per_role_agreement,
+        "run_length_delta": {
+            "mean": statistics.mean(deltas) if deltas else 0.0,
+            "max": max(deltas) if deltas else 0,
+            "per_seed": run_length_delta,
+        },
     }
 
 

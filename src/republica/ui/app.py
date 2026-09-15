@@ -19,7 +19,7 @@ import streamlit as st
 from republica.actors.sheet import load_actors
 from republica.engine import narrate as narrate_mod
 from republica.engine.dilemmas import render_text
-from republica.engine.game import CAPPED_INSTRUMENTS, Game
+from republica.engine.game import MONTHLY_CAPS, Game
 from republica.engine.narrate import KEY_INDICATORS, annualized_inflation
 from republica.engine.simulation import run as run_simulation
 
@@ -336,8 +336,10 @@ def _tab_regimenes() -> None:
 def _play_mode() -> None:
     """Modo jugable (ADR secc. 7): mismo `Game` que la CLI. Dilemas como
     tarjetas, instrumentos como sliders con los mismos topes mensuales
-    (`CAPPED_INSTRUMENTS`), estado en `st.session_state`, guardado con
-    `Game.save`."""
+    (`MONTHLY_CAPS`, los 5 instrumentos -- hallazgo #9 de REVIEW_003: antes
+    iteraba `CAPPED_INSTRUMENTS`, que omite `fx_intervention` a proposito
+    porque ese instrumento no tiene tope mensual, ver `engine/game.py`),
+    estado en `st.session_state`, guardado con `Game.save`."""
     st.header("Modo jugable")
     if "game" not in st.session_state:
         seed = st.number_input("Semilla", min_value=0, value=1, key="play_seed")
@@ -374,14 +376,22 @@ def _play_mode() -> None:
 
     st.subheader("Instrumentos")
     edits: dict[str, float] = {}
-    cols = st.columns(len(CAPPED_INSTRUMENTS))
-    for col, (instrument, cap) in zip(cols, CAPPED_INSTRUMENTS.items(), strict=True):
+    cols = st.columns(len(MONTHLY_CAPS))
+    for col, (instrument, cap) in zip(cols, MONTHLY_CAPS.items(), strict=True):
         current = getattr(game.policy, instrument)
+        if cap is None:
+            # `fx_intervention` no tiene tope mensual (hallazgo #9 de
+            # REVIEW_003: `MONTHLY_CAPS` lo incluye con `cap=None`, "sin
+            # limite mensual" -- el slider usa el rango absoluto del
+            # instrumento en vez de `current +- cap`).
+            lo, hi = game.country.policy_ranges[instrument]
+        else:
+            lo, hi = current - cap, current + cap
         with col:
             new_value = st.slider(
                 instrument,
-                min_value=current - cap,
-                max_value=current + cap,
+                min_value=lo,
+                max_value=hi,
                 value=current,
                 key=f"instr_{instrument}_{game.sim.month}",
             )

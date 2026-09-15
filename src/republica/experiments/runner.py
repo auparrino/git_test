@@ -180,11 +180,30 @@ def _write_failed(out_dir: Path, results: list[dict[str, Any]], *, merge: bool) 
     path.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
 
 
+def _relative_yaml_path(source_path: Path) -> str:
+    """Ruta del YAML para `runs.meta.json` (hallazgo #12 de REVIEW_003):
+    RELATIVA al directorio de trabajo actual cuando es posible, no absoluta
+    -- `config.source_path` (`ExperimentConfig.load`) siempre resuelve a
+    absoluta, y guardarla tal cual ataba `runs.meta.json` a la ruta exacta
+    de la maquina/checkout que corrio el experimento (`experiment resume`/
+    `experiment status` en OTRO checkout, o el mismo repo clonado en otro
+    lado, fallaba a buscar un YAML que ahi no existe). `os.path.relpath`
+    puede levantar `ValueError` en Windows si terminan en unidades (drive)
+    distintas -- ahi se guarda la absoluta como antes (mejor eso que
+    reventar el comando)."""
+    import os
+
+    try:
+        return os.path.relpath(source_path, Path.cwd())
+    except ValueError:
+        return str(source_path)
+
+
 def _write_meta(out_dir: Path, config: ExperimentConfig, arms: list[Arm], elapsed: float) -> None:
     meta = {
         "experiment_name": config.name,
         "description": config.description,
-        "experiment_yaml": str(config.source_path),
+        "experiment_yaml": _relative_yaml_path(config.source_path),
         "seeds": {"start": config.seeds.start, "count": config.seeds.count},
         "metrics": config.metrics,
         "arms": {
@@ -294,6 +313,26 @@ def run_experiment(
     }
 
 
+def _resolve_meta_yaml_path(meta_yaml: str) -> str:
+    """Resuelve `meta["experiment_yaml"]` con un fallback para archivos
+    VIEJOS de `runs.meta.json` (hallazgo #12 de REVIEW_003, antes de
+    `_relative_yaml_path`): si la ruta guardada (relativa a la ruta
+    original, o absoluta de un checkout viejo) no existe TAL CUAL desde el
+    directorio de trabajo actual, se prueba `experiments/<nombre del
+    archivo>.yaml` -- todos los YAML de experimento del repo viven ahi
+    (ver `experiments/*.yaml`), asi que es la ubicacion mas probable en un
+    checkout distinto al que corrio el experimento originalmente. Si
+    tampoco existe ahi, se devuelve la ruta original tal cual (el error de
+    `ExperimentConfig.load` de mas abajo es mas claro que uno de aca)."""
+    p = Path(meta_yaml)
+    if p.exists():
+        return meta_yaml
+    fallback = Path("experiments") / p.name
+    if fallback.exists():
+        return str(fallback)
+    return meta_yaml
+
+
 def resume_experiment(
     out_dir: str | Path, *, workers: int = 1, data_dir: Path | None = None
 ) -> dict[str, Any]:
@@ -306,9 +345,8 @@ def resume_experiment(
     if not meta_path.exists():
         raise FileNotFoundError(f"{out} no tiene {META_NAME} (¿se corrio 'experiment run' antes?)")
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    return run_experiment(
-        meta["experiment_yaml"], out, workers=workers, resume=True, data_dir=data_dir
-    )
+    yaml_path = _resolve_meta_yaml_path(meta["experiment_yaml"])
+    return run_experiment(yaml_path, out, workers=workers, resume=True, data_dir=data_dir)
 
 
 def experiment_status(out_dir: str | Path) -> dict[str, Any]:
