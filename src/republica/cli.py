@@ -293,6 +293,9 @@ def run(
     macro_coefficients = None
     macro_x0 = None
     macro_m0 = None
+    era_actors: dict | None = None
+    era_loyalty_table = None
+    era_gov_overrides: dict[str, str] = {}
     if country_id is None:
         country = load_country()
         regime_calendar = None
@@ -335,18 +338,47 @@ def run(
         country = pack.country
         regime_calendar = pack.regime_calendar
         bimonetary_coefficients = pack.bimonetary_coefficients
+        # ADR 013 secc. 1/3: si el paquete resolvio una epoca para `start`
+        # (`pack.era.parties is not None`), sus actores/lealtades reemplazan
+        # a los 29 de Aurora / `load_loyalty()` -- sin esto, `country.parties`
+        # ya saldria con los partidos de la epoca (escritos en
+        # `merged/parties.json` por `load_country_pack`) pero la eleccion
+        # usaria una `LoyaltyTable` sin ninguna entrada para esos partidos
+        # (lealtad 0.0 para todos, sin `era_boundaries`/`outsider_bonus`) y
+        # el `ActorEngine` seguiria teniendo los actores de Aurora. Sin
+        # epoca (`pack.era is None` o `pack.era.parties is None`, fallback
+        # a Aurora ya avisado por `load_country_pack` via `warnings.warn`):
+        # `era_actors`/`era_loyalty_table` quedan `None`, mismo
+        # comportamiento que siempre.
+        if pack.era is not None and pack.era.parties is not None:
+            era_actors = pack.era.actors
+            era_loyalty_table = pack.era.loyalty_table
+            # ADR 013 secc. 1/3: `governance.yaml` de la epoca reemplaza al
+            # de Aurora actor por actor, via `--governance-override`
+            # (unico mecanismo que ya llega a `load_governance` sin tocar
+            # `engine/simulation.py` -- ver `world/eras.py::
+            # era_governance_overrides`). Sin esto, cada actor de la epoca
+            # caeria a la ficha default sin restriccion (`autonomy: 5`,
+            # `read`/`write`/`execute` sin filtrar).
+            if pack.era.governance_path is not None and pack.era.governance_path.exists():
+                from republica.world.eras import era_governance_overrides
+
+                era_gov_overrides = era_governance_overrides(pack.era.governance_path)
+        calibrated_macro = None
         if calibration_run_id:
             from republica.calibration.run import load_calibrated_country
 
             try:
-                calibrated_coeff, bimonetary_coefficients = load_calibrated_country(
-                    country_id, calibration_run_id
+                calibrated_coeff, bimonetary_coefficients, calibrated_macro = (
+                    load_calibrated_country(country_id, calibration_run_id)
                 )
             except FileNotFoundError as exc:
                 raise typer.BadParameter(str(exc)) from exc
             country = country.model_copy(update={"coefficients": calibrated_coeff})
+            macro_note = " (con macro, ADR 012)" if calibrated_macro is not None else ""
             console.print(
-                f"[yellow]Coeficientes calibrados (A3)[/yellow]: run_id={calibration_run_id}"
+                f"[yellow]Coeficientes calibrados (A3/A5)[/yellow]{macro_note}: "
+                f"run_id={calibration_run_id}"
             )
         # ADR 012 deliverable 5: `--fx-regime auto` (default con --country,
         # ver `fx_regime_opt` mas abajo) resuelve el regimen segun
@@ -366,7 +398,17 @@ def run(
         # leyo: ver Notas de implementacion del ADR 012 sobre por que no se
         # replico ese patron).
         if country.features.get("macro_regime", False):
-            macro_coefficients = pack.macro_coefficients
+            # A5 (ADR 012 secc. 6): si `--calibration <run_id>` calibro el
+            # grupo "macro" (`calibrated_macro is not None`), esos
+            # coeficientes reemplazan a los del paquete (`pack.
+            # macro_coefficients`, los de ADR 012 sin calibrar) -- mismo
+            # criterio que ya aplica arriba a `coefficients`/`bimonetary_
+            # coefficients`. Una calibracion SIN macro (`a3_main`) deja
+            # `calibrated_macro is None` y usa el macro del paquete tal
+            # cual, igual que sin `--calibration`.
+            macro_coefficients = (
+                calibrated_macro if calibrated_macro is not None else pack.macro_coefficients
+            )
             macro_x0 = pack.macro_x0
             macro_m0 = pack.macro_m0
         if historical_shocks:
@@ -412,6 +454,13 @@ def run(
         and cohorts_enabled
     )
     brains_cfg = _resolve_brains(brain, brains)
+    # `--governance-override` explicito del usuario pisa el de la epoca en
+    # cualquier clave que coincida (mismo criterio que `--calibration` pisa
+    # los coeficientes del paquete mas arriba): se mergea DESPUES.
+    resolved_governance_overrides = {
+        **era_gov_overrides,
+        **parse_governance_overrides(governance_override),
+    } or None
     history = run_simulation(
         seed=seed,
         months=months,
@@ -419,6 +468,7 @@ def run(
         forced_shocks=forced_shocks or None,
         country=country,
         actors_enabled=actors_enabled,
+        actors=era_actors,
         brain_map=brains_cfg.actors,
         default_brain=brains_cfg.default,
         llm_temperature=brains_cfg.temperature,
@@ -429,7 +479,8 @@ def run(
         media_enabled=media_enabled,
         memory_enabled=memory_enabled,
         elections_enabled=elections_enabled,
-        governance_overrides=parse_governance_overrides(governance_override) or None,
+        loyalty_table=era_loyalty_table,
+        governance_overrides=resolved_governance_overrides,
         regime_calendar=regime_calendar,
         bimonetary_coefficients=bimonetary_coefficients,
         historical_exogenous=historical_exogenous_series,
@@ -1887,12 +1938,24 @@ def calibrate(
         int, typer.Option(help="Procesos del pool (paralelo por mes de arranque).")
     ] = 4,
     seed: Annotated[int, typer.Option(help="Semilla de CMA-ES.")] = 42,
+    loss: Annotated[
+        str,
+        typer.Option(
+            "--loss",
+            help="rmse (default, ADR 011) o heavy (cola pesada, A5/ADR 012 secc. 6: error "
+            "normalizado^1.5 sin raiz final, penaliza mas los episodios extremos). El reporte "
+            "siempre muestra las dos metricas; esto solo elige cual optimiza CMA-ES.",
+        ),
+    ] = "rmse",
 ) -> None:
     """`republica calibrate` (A3, ADR 011 secc. 7): CMA-ES sobre los
     coeficientes de `country.json` contra `history/`, con holdout evaluado
     una sola vez al final. Escribe `data/countries/<id>/calibration/<run_id>/`
     (`coefficients.json`, `report.md`, `history.csv`, `plots/`)."""
     from republica.calibration.run import CalibrationRunConfig, parse_range, run_calibration
+
+    if loss not in ("rmse", "heavy"):
+        raise typer.BadParameter(f"--loss debe ser 'rmse' o 'heavy', se pidio {loss!r}.")
 
     if quick:
         budget = 40
@@ -1913,10 +1976,11 @@ def calibrate(
         lambda_reg=lambda_reg,
         workers=workers,
         seed=seed,
+        loss=loss,
     )
     console.print(
         f"[cyan]Calibrando[/cyan] {country_id} train={train} holdout={holdout} "
-        f"budget={budget} stride={stride} workers={workers}"
+        f"budget={budget} stride={stride} workers={workers} loss={loss}"
     )
     run_dir = run_calibration(cfg)
     console.print(f"[green]OK[/green] -> {run_dir}")
@@ -2013,6 +2077,46 @@ def validate(
         f"[green]OK[/green] {time.time() - t0:.1f}s -> {out / 'report.md'} "
         f"(registro previo: {out / 'registration.json'})"
     )
+
+
+@app.command()
+def backtest(
+    country_id: Annotated[str, typer.Option("--country", help="Paquete de pais.")],
+    calibration_run_id: Annotated[
+        str, typer.Option("--calibration", help="run_id de `republica calibrate`.")
+    ],
+    run_id: Annotated[str, typer.Option("--run-id", help="Nombre de la corrida de salida.")],
+    from_year: Annotated[int, typer.Option("--from")] = 1916,
+    to_year: Annotated[int, typer.Option("--to")] = 2022,
+    horizons: Annotated[str, typer.Option("--horizons")] = "12,24,48",
+    seeds: Annotated[int, typer.Option()] = 30,
+    workers: Annotated[int, typer.Option()] = 4,
+    resume: Annotated[bool, typer.Option("--resume")] = False,
+) -> None:
+    """`republica backtest` (ADR 014): delega en `python -m republica.backtest`."""
+    from republica.backtest.__main__ import main as backtest_main
+
+    args = [
+        "--country",
+        country_id,
+        "--calibration",
+        calibration_run_id,
+        "--run-id",
+        run_id,
+        "--from",
+        str(from_year),
+        "--to",
+        str(to_year),
+        "--horizons",
+        horizons,
+        "--seeds",
+        str(seeds),
+        "--workers",
+        str(workers),
+    ]
+    if resume:
+        args.append("--resume")
+    raise SystemExit(backtest_main(args))
 
 
 @country_app.command("info")

@@ -10,17 +10,20 @@ import multiprocessing as mp
 from dataclasses import dataclass
 from pathlib import Path
 
-from republica.calibration.objective import start_months
+from republica.calibration.objective import start_month_weight, start_months
 from republica.calibration.optimizer import ParallelEvaluator, run_cma
 from republica.calibration.optimizer import _worker_init as optimizer_worker_init
 from republica.calibration.parameters import (
     bimonetary_from_vector,
     build_parameter_space,
     coefficients_from_vector,
+    load_aurora_macro_coefficients,
+    macro_from_vector,
     write_parameters_yaml,
 )
 from republica.world.bimonetary import BimonetaryCoefficients
-from republica.world.config import DEFAULT_DATA_DIR, load_country
+from republica.world.config import DEFAULT_DATA_DIR, Coefficients, load_country
+from republica.world.economy import MacroCoefficients
 
 CALIBRATION_ROOT = DEFAULT_DATA_DIR / "countries" / "argentina" / "calibration"
 
@@ -67,13 +70,35 @@ class CalibrationRunConfig:
     lambda_reg: float
     workers: int
     seed: int
+    #: A5 (ADR 012 secc. 6): `"rmse"` (default, igual que antes) o `"heavy"`
+    #: (cola pesada, `calibration/objective.py::HEAVY_TAIL_POWER`) -- cual
+    #: de las dos metricas por `(var, horizonte)` suma `scalar_objective`
+    #: para el escalar que minimiza CMA-ES. El reporte siempre muestra
+    #: AMBAS, independientemente de cual se optimizo (ver `report.py`).
+    loss: str = "rmse"
+
+
+def _country_raw(country_id: str) -> dict:
+    from republica.world.countries import country_pack_dir
+
+    path = country_pack_dir(country_id) / "country.json"
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def run_calibration(cfg: CalibrationRunConfig) -> Path:
     run_dir = CALIBRATION_ROOT / cfg.run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    params = build_parameter_space()
+    # A5 (ADR 012 secc. 6): el vector de calibracion incluye el grupo
+    # "macro" cuando el paquete tiene `features.macro_regime` prendido
+    # (Argentina, desde el ADR 012) -- mismo gate que usa `republica run`
+    # (`cli.py`) para decidir si arma `macro_coefficients`, asi que un
+    # `republica calibrate` normal de un pais con macro SIEMPRE calibra
+    # macro (no hay una forma de pedir "sin macro" para un pais que lo
+    # tiene -- `a3_main`, corrido antes del ADR 012, sigue siendo el
+    # unico run "sin macro" de Argentina, y no se re-corre).
+    include_macro = bool(_country_raw(cfg.country_id).get("features", {}).get("macro_regime"))
+    params = build_parameter_space(include_macro=include_macro)
     write_parameters_yaml(params, CALIBRATION_ROOT / "parameters.yaml")
 
     train_dates = start_months(cfg.train_start, cfg.train_end, horizon=12, stride=cfg.stride)
@@ -84,13 +109,18 @@ def run_calibration(cfg: CalibrationRunConfig) -> Path:
     all_dates = sorted(set(train_dates) | set(holdout_dates))
     base_coeff = load_country().coefficients
     base_bimon = BimonetaryCoefficients()
+    base_macro = load_aurora_macro_coefficients() if include_macro else None
 
     pool = mp.Pool(
         cfg.workers, initializer=optimizer_worker_init, initargs=(cfg.country_id, all_dates)
     )
     try:
-        train_eval = ParallelEvaluator(pool, train_dates, params, cfg.workers)
-        holdout_eval = ParallelEvaluator(pool, holdout_dates, params, cfg.workers)
+        train_eval = ParallelEvaluator(
+            pool, train_dates, params, cfg.workers, base_macro=base_macro, loss=cfg.loss
+        )
+        holdout_eval = ParallelEvaluator(
+            pool, holdout_dates, params, cfg.workers, base_macro=base_macro, loss=cfg.loss
+        )
 
         result = run_cma(
             train_eval,
@@ -105,6 +135,20 @@ def run_calibration(cfg: CalibrationRunConfig) -> Path:
         )
         calibrated_coeff_vec = result.best_x
 
+        # `a3_main` (A3, sin macro): re-evaluado en la ventana train/holdout
+        # de ESTA corrida (no se reusan los numeros de su propio report.md,
+        # calculados sobre OTRA ventana -- 1993-2015/2016-2023 -- para que
+        # la comparacion del punto 4 de la tarea A5 sea apples-to-apples,
+        # mismos meses de arranque, misma pérdida). `None` si no existe.
+        a3_path = CALIBRATION_ROOT / "a3_main" / "coefficients.json"
+        a3_arm: tuple[Coefficients, BimonetaryCoefficients] | None = None
+        if a3_path.exists():
+            a3_raw = json.loads(a3_path.read_text(encoding="utf-8"))
+            a3_arm = (
+                Coefficients(**a3_raw["coefficients"]),
+                BimonetaryCoefficients(**a3_raw["bimonetary"]),
+            )
+
         def table_for(evaluator: ParallelEvaluator, dates: list[str]) -> dict:
             calibrated = evaluator.evaluate_one(
                 calibrated_coeff_vec, base_coeff, base_bimon, cfg.lambda_reg
@@ -114,12 +158,17 @@ def run_calibration(cfg: CalibrationRunConfig) -> Path:
             persistence = evaluator.evaluate_one(
                 aurora_x, base_coeff, base_bimon, cfg.lambda_reg, persistence=True
             )
-            return {
+            out = {
                 "n_start_months": len(dates),
+                "n_weighted_pre_1997": sum(1 for d in dates if start_month_weight(d) < 1.0),
                 "calibrated": calibrated.metrics,
                 "aurora": aurora.metrics,
                 "persistence": persistence.metrics,
             }
+            if a3_arm is not None:
+                a3_coeff, a3_bimon = a3_arm
+                out["a3_main"] = evaluator.evaluate_raw(a3_coeff, a3_bimon, macro=None)
+            return out
 
         train_tables = table_for(train_eval, train_dates)
         holdout_tables = table_for(holdout_eval, holdout_dates)
@@ -129,6 +178,7 @@ def run_calibration(cfg: CalibrationRunConfig) -> Path:
 
     coeff = coefficients_from_vector(params, calibrated_coeff_vec, base_coeff)
     bimon = bimonetary_from_vector(params, calibrated_coeff_vec, base_bimon)
+    macro = macro_from_vector(params, calibrated_coeff_vec, base_macro) if include_macro else None
 
     coefficients_json = {
         "run_id": cfg.run_id,
@@ -139,12 +189,17 @@ def run_calibration(cfg: CalibrationRunConfig) -> Path:
         "evaluations": result.evaluations,
         "stride": cfg.stride,
         "lambda_reg": cfg.lambda_reg,
+        "loss": cfg.loss,
         "seed": cfg.seed,
         "wall_seconds": result.wall_seconds,
         "input_data_hash": input_data_hash(cfg.country_id),
         "coefficients": coeff.model_dump(),
         "bimonetary": {name: getattr(bimon, name) for name in bimon.__dataclass_fields__},
     }
+    if macro is not None:
+        coefficients_json["macro"] = {
+            name: getattr(macro, name) for name in macro.__dataclass_fields__
+        }
     (run_dir / "coefficients.json").write_text(
         json.dumps(coefficients_json, indent=2, ensure_ascii=False), encoding="utf-8"
     )
@@ -191,15 +246,20 @@ def run_calibration(cfg: CalibrationRunConfig) -> Path:
     return run_dir
 
 
-def load_calibrated_country(country_id: str, run_id: str):
-    """Para `republica run --calibration <run_id>`: `(Coefficients,
-    BimonetaryCoefficients)` calibrados, leidos de `coefficients.json`."""
-    from republica.world.config import Coefficients
-
+def load_calibrated_country(
+    country_id: str, run_id: str
+) -> tuple[Coefficients, BimonetaryCoefficients, MacroCoefficients | None]:
+    """Para `republica run --calibration <run_id>`/`republica validate
+    --calibration <run_id>`: `(Coefficients, BimonetaryCoefficients,
+    MacroCoefficients | None)` calibrados, leidos de `coefficients.json`.
+    El tercer elemento es `None` para una calibracion SIN macro (`a3_main`,
+    corrida antes del ADR 012: `coefficients.json` no tiene clave `"macro"`)
+    -- A5, ADR 012 secc. 6."""
     path = CALIBRATION_ROOT / run_id / "coefficients.json"
     if not path.exists():
         raise FileNotFoundError(f"No existe la calibracion '{run_id}' en {path}.")
     raw = json.loads(path.read_text(encoding="utf-8"))
     coeff = Coefficients(**raw["coefficients"])
     bimon = BimonetaryCoefficients(**raw["bimonetary"])
-    return coeff, bimon
+    macro = MacroCoefficients(**raw["macro"]) if raw.get("macro") else None
+    return coeff, bimon, macro

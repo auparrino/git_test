@@ -461,3 +461,252 @@ fracciones de punto en varias celdas (p.ej. `c_f=0.16 × primary_spending=25`: 2
 `perceived_inflation_agg`, retroalimenta congreso/actores/protestas dentro de la corrida). Diferencias
 menores al 2 % en casi todas las celdas, sin cambiar el orden relativo de ningún cuadrante del mapa de
 calor. **Veredicto: sin cambio en la conclusión cualitativa de ninguno de los dos experimentos.**
+
+## Argentina A5 (ADR 012): recalibración con la estructura macro (2026-09-15)
+
+Contexto: A4 (`data/countries/argentina/validation/a4_main/report.md`) dio negativo en las tres
+hipótesis registradas, con diagnóstico mecánico (ecuación de precios contractiva, `--fx-regime peg`
+inerte, reservas sin ancla de balance de pagos, calendario de shocks incompleto, ventana de
+calibración reversiva). ADR 012 (implementado en una ronda previa, ver
+`docs/ADR_012_argentine_macro.md`) corrigió los cuatro mecanismos DETRÁS de un flag
+(`features.macro_regime`, ya prendido en `data/countries/argentina/country.json`); esta ronda (A5)
+recalibra y revalida con esa estructura nueva.
+
+### Qué cambió respecto de A3/A4
+
+1. **Calendario de shocks completado** (`data/countries/argentina/politics/shocks_calendar.csv`,
+   20 → 28 filas): crisis rusa/devaluación brasileña 1998–99, corralito (dic-2001), default
+   soberano (dic-2001), salida de la convertibilidad (ene-2002), sequía de la campaña 2017/2018,
+   Plan Austral (jun-1985), devaluaciones de 1981 (Sigaut) y crisis de balanza de pagos de 1962.
+   Todas `source: general_knowledge`, `reviewed_by: pending`, documentadas en
+   `data/countries/argentina/politics/PENDING_FACTCHECK.md` §2.7. El cepo de 2011 NO se agregó
+   como shock: ya está modelado como `fx_regime = control` en `fx_regimes.csv` (deliverable 5 del
+   ADR 012), no como un evento puntual.
+2. **Espacio de calibración extendido** (`src/republica/calibration/parameters.py`): nuevo grupo
+   `"macro"` (58 de los 60 campos de `MacroCoefficients` — se excluyen los dos enteros de duración
+   institucional, `banking_crisis_months`/`ic_crisis_free_months`). Rango default `[v/3, 3v]` salvo
+   siete con razón física documentada (`w_adapt∈[0,1]`, `rho_pi∈[0.5,1.0]`, `rho_slope∈[0,0.3]`,
+   `rm∈[1,6]`, y tres probabilidades acotadas a `[0,1]`: `default_risk_threshold`,
+   `peg_default_risk_ceiling`, `exit_banking_crisis_p`). El bloque bimonetario viejo (`BIMONETARY_TUNABLE`,
+   10 coeficientes) se EXCLUYE del vector cuando se calibra con macro: `engine/simulation.py::run`
+   desactiva ese canal en cuanto hay `macro_coefficients` (Notas de implementación del ADR 012), así
+   que tunearlo gastaría presupuesto de CMA-ES en dimensiones sin ningún efecto. Vector final: 97
+   (económicos) + 58 (macro) = **155 parámetros** (vs. 107 de `a3_main`).
+3. **Ventana y pérdida nuevas** (ADR 012 §6): train `1992-01:2023-12` (incluye 2001 y 2018–2023,
+   en vez del `1993-01:2015-12` reversivo de A3), holdout `1983-12:1991-12` (hiperinflación y
+   convertibilidad temprana — NOTAR que el holdout es CRONOLÓGICAMENTE ANTERIOR al train, a
+   propósito: es la parte de la historia que esta estructura de precios/régimen nunca vio). Meses de
+   arranque anteriores a 1997 (`inflation_cpi_monthly.csv` arranca en 1997-02; antes se interpola de
+   la serie anual) pesan 0.5 en el objetivo
+   (`calibration/objective.py::start_month_weight`/`PRE_1997_WEIGHT`). Pérdida con cola pesada
+   (`--loss heavy`): error normalizado (por el desvío de la serie real) elevado a 1.5 y agregado SIN
+   volver a tomar raíz — ver el docstring de `HEAVY_TAIL_POWER` en el código para la cuenta de por
+   qué la raíz final (que convertiría esto en una norma L1.5, MENOS sensible a un outlier que la
+   RMSE) haría lo contrario de lo que pide el ADR ("que los episodios extremos pesen"). El reporte
+   de la corrida muestra SIEMPRE las dos métricas (`rmse` y `heavy`), sin importar cuál optimizó
+   CMA-ES.
+4. **Hallazgo previo a la corrida (agente de ADR 013, verificado acá)**: con los coeficientes macro
+   DEFAULT del paquete (sin calibrar) y `--fx-regime auto`, una corrida desde 2019-12 (48 meses,
+   20 semillas) entra en `hyperinflation` en **20/20 semillas (100 %)** antes del mes 13 — la
+   inflación real de 2020–2023 fue ~2–8 %/mes (picos de 25 % recién en dic-2023). Es el mismo
+   mecanismo de hiperinflación espuria que el test 2b del ADR 012 (2003-06 → 0/20, ya cubierto por
+   `tests/test_macro_regime.py`), pero disparado desde OTRA fecha con OTRO estado inicial (deuda/
+   déficit de 2019 distintos de los de 2003). El train `1992-01:2023-12` de esta ronda SÍ incluye
+   2019-12 como uno de los ~124 meses de arranque, así que la pérdida (más aún con `--loss heavy`)
+   debería castigarlo. Resultado tras calibrar: ver la sección de resultados de V1/V4 más abajo.
+
+### Identificabilidad rápida sobre sintético
+
+`tests/test_macro_regime.py::test_quick_synthetic_identifiability_recovers_half_of_perturbed_coefficients`
+(ADR 012 §7 test 6, ya existente, corrido de nuevo en esta ronda): CMA-ES directo sobre 10
+coeficientes macro perturbados ±40 %, 500 evaluaciones — **7/10 recuperados** (≥ 20 % del camino
+hacia el valor verdadero), sobre el umbral pedido (≥ 50 % de 10). `calibration/synthetic.py` se
+extendió con `IDENTIFIABLE_MACRO_COEFFICIENTS`/`perturb_macro_parameters`/
+`generate_synthetic_history_csvs_macro` (mismo patrón que `IDENTIFIABLE_COEFFICIENTS`/
+`perturb_parameters` de A3) para que el pipeline de calibración completo (no solo el mecanismo
+aislado de `step_macro_economy`) pueda correr el mismo tipo de chequeo; por restricción de cómputo
+(los 4 CPUs de la máquina estaban ocupados con la corrida real `a5_macro` durante esta ronda) no se
+corrió ese camino completo — queda como infraestructura lista para la próxima ronda, documentado
+como simplificación, no como resultado verificado.
+
+### Corrida `a5_macro` — DESCARTADA por un bug del objetivo, no usada para nada
+
+Corrida terminada: 418 evaluaciones (presupuesto 400), 1940.8s de pared (~32.3 min), `--loss heavy`,
+stride 3. **Se descarta por un bug encontrado en el propio reporte**, no se usa para calibrar ni
+para validar. Queda en disco (`data/countries/argentina/calibration/a5_macro/`) como evidencia.
+
+**Bug (grave): las corridas terminadas antes del horizonte `h` no penalizaban.**
+`calibration/objective.py::score_start_month` calculaba `model_target = state_by_h.get(h, {}).get(var)
+if h in state_by_h else None` y, si `model_target` era `None` (la corrida terminó por
+`hyperinflation`/`collapse` antes de llegar al mes `h`), el término de error se SALTEABA
+(`continue`) en vez de penalizarse. El reporte de `a5_macro` lo mostró sin ambigüedad: **"sin dato"
+en TODOS los horizontes de 12 meses de la columna calibrado** (inflación, PBI, desempleo, tipo de
+cambio, reservas), algo que ninguna otra columna (persistencia/Aurora sin calibrar/`a3_main`)
+mostraba — 0 de 124 meses de arranque del brazo calibrado llegaban al mes 12. El optimizador quedó
+premiado por hiperinflacionar/colapsar rápido: cuanto antes termina la corrida, menos términos de
+error tiene que pagar. Con `--loss heavy` (que además pondera más los errores extremos) el efecto se
+agrava: el escalar que minimiza CMA-ES bajó de 26.05 (aurora) a 11.12 en apenas 4 generaciones — una
+mejora artificial, no una mejora real del ajuste.
+
+**Fix**: `score_start_month` ahora, cuando la corrida terminó antes de `h`, extrapola (congela) el
+último estado disponible y aplica el error normal contra ese valor extrapolado, con un PISO de
+`EARLY_TERMINATION_ERROR_FLOOR_SIGMA = 3.0` (3 desvíos de la serie real, unidades normalizadas) —
+terminar antes tiene que costar por lo menos tanto como un outlier grande, nunca menos. Se agregó
+`MonthScore.ended_before_h`/`aggregate_scores` → `ended_before_h{1,3,6,12}` (fracción de meses de
+arranque que terminaron antes de cada horizonte, por brazo) y una tabla nueva en el reporte
+("Corridas que terminaron antes del horizonte"). Test de regresión:
+`tests/test_calibration_macro.py::test_run_ending_before_horizon_is_penalized_not_skipped` (una
+corrida canned que termina en el mes 5 recibe error ≠ 0, piso ≥ 3σ, en h=12) y
+`test_floor_early_termination_error_preserves_sign_and_respects_floor` (la función del piso en
+aislamiento).
+
+**Segundo bug (holdout sin dato de inflación)**: `RealData.value("inflation", ...)` solo miraba
+`inflation_cpi_monthly.csv` (arranca en 1997-02). El holdout completo (`1983-12:1991-12`) cae
+ENTERO antes de esa fecha, así que **ningún brazo** (calibrado/persistencia/Aurora/`a3_main`) tenía
+un solo dato de inflación en el holdout — la columna quedaba "sin dato" para los cuatro por igual,
+sin que eso fuera visible como anomalía (a diferencia del bug de arriba, que SÍ se notaba porque
+afectaba solo a un brazo). Fix: `RealData.inflation()` ahora cae a `inflation_cpi_annual_linked.csv`
+interpolada linealmente (mismo `interpolate_annual` que ya usa `calibration/initial_states.py::
+rule_inflation` para el estado inicial) y convertida a mensual equivalente
+(`(1+anual/100)^(1/12)-1`), cuando no hay mes exacto. El `sigma` de normalización de "inflation"
+sigue anclado SOLO a la serie mensual real (decisión documentada en el código: mezclar una serie de
+bajo ruido con una interpolada mucho más suave correría la escala sin una razón clara).
+
+**Por qué no se detectó en los smoke tests antes de la corrida real**: los tests existentes de A3/A5
+(`test_quick_calibration_runs_end_to_end`, `test_cli_calibrate_quick_and_run_with_calibration`) usan
+ventanas de 12-24 meses con `--quick` (stride 12, un solo mes de arranque cada uno) — la probabilidad
+de que ESE único mes de arranque particular termine antes del horizonte 12 por azar es baja, y el
+smoke test no compara métricas train/holdout entre sí (solo verifica que el pipeline corre de punta
+a punta), así que un patrón sistemático de "sin dato" en h=12 no saltaba a la vista salvo mirando el
+`report.md` de una corrida real con muchos meses de arranque — que es exactamente lo que pasó acá:
+se encontró leyendo el reporte de `a5_macro`, no con un test automatizado. Los dos tests nuevos de
+arriba sí lo cubren yendo hacia adelante.
+
+### Corrida `a5b_macro` (con los dos fixes)
+
+`republica calibrate --country argentina --train 1992-01:2023-12 --holdout 1983-12:1991-12 --loss
+heavy --budget 400 --stride 3 --workers 4 --run-id a5b_macro --seed 42`. **418 evaluaciones, 1912.9s
+de pared (~31.9 min, dentro del limite de 45 min pedido)**, mismo hash de datos de entrada que
+`a5_macro` (`55596cc...`). Reporte completo: `data/countries/argentina/calibration/a5b_macro/
+report.md` (incluye una adenda manual post-corrida con el diagnostico 2019-12 y la lectura honesta
+train/holdout).
+
+**Train** (n=124 meses de arranque, 20 con peso 0.5 pre-1997): 0 corridas terminan antes del
+horizonte 12 en NINGUN brazo salvo Aurora sin calibrar (4.8 % a h=12) -- el mecanismo funciona: el
+calibrado ya no "gana" terminando temprano.
+
+| variable | h | calibrado (rmse / heavy) | persistencia (rmse / heavy) | Aurora sin calibrar (rmse / heavy) | `a3_main` (rmse / heavy) |
+|---|---|---|---|---|---|
+| inflación mensual | 12 | 0.797 / 0.491 | 0.687 / 0.385 | 4.902 / 8.210 | 0.821 / 0.563 |
+| PBI (anualizado) | 12 | 0.982 / 0.819 | 1.404 / 1.258 | 1.214 / 1.099 | 0.965 / 0.792 |
+| desempleo | 12 | 0.751 / 0.489 | 0.636 / 0.416 | 1.126 / 0.885 | 0.818 / 0.537 |
+| tipo de cambio (log) | 12 | 4.360 / 6.365 | 5.017 / 8.273 | 8.257 / 19.282 | 3.421 / 4.952 |
+| reservas | 12 | 0.838 / 0.635 | 0.705 / 0.494 | 1.521 / 1.617 | 0.660 / 0.460 |
+
+**Lectura honesta (train)**: el calibrado queda A LA PAR o LEVEMENTE PEOR que la persistencia en la
+mayoría de las filas (inflación, reservas: peor en h=3/6/12; PBI: peor en h=1/3, mejor en h=6/12;
+desempleo/tipo de cambio: mejor en la mayoría). 155 parámetros calibrados no superan de forma
+consistente al baseline ingenuo de "no cambia nada" dentro de la propia ventana de ajuste. Sí supera
+claramente a Aurora sin calibrar y, en inflación/tipo de cambio/reservas a horizontes largos, también
+a `a3_main` (que no tiene macro).
+
+**Holdout** (n=29 meses de arranque, TODOS con peso 0.5: 1983-1991 es enteramente pre-1997).
+Desempleo/tipo de cambio/reservas: **sin dato** en los 4 brazos (`exchange_rate_official_monthly.csv`
+arranca en 1992-01; la única serie anual de tipo de cambio del paquete, `exchange_rate_annual.csv`,
+termina en 1951 — no alcanza para el mismo fallback que se implementó para inflación; ver "Pendiente"
+más abajo). Único bloque con dato real: inflación y PBI.
+
+| variable | h | calibrado (rmse / heavy) | persistencia (rmse / heavy) | Aurora sin calibrar (rmse / heavy) | `a3_main` (rmse / heavy) |
+|---|---|---|---|---|---|
+| inflación mensual | 1 | 0.636 / 0.458 | 0.465 / 0.237 | 1.205 / 1.183 | 2.938 / 4.600 |
+| inflación mensual | 3 | 1.283 / 1.165 | 1.139 / 1.003 | 6.487 / 14.768 | 5.174 / 10.841 |
+| inflación mensual | 6 | 2.696 / 3.965 | 2.178 / 2.721 | 8.073 / 21.808 | 6.548 / 15.199 |
+| inflación mensual | 12 | 4.369 / 8.424 | 4.005 / 7.101 | 9.752 / 28.755 | 6.691 / 15.396 |
+| PBI (anualizado) | 12 | 2.354 / 3.321 | 1.050 / 0.962 | 3.000 / 5.196 | 0.880 / 0.761 |
+
+**Corridas terminadas antes del horizonte, holdout** (hiperinflación/colapso: 1983-1991 es
+justamente el tramo que ADR 012 diseñó para poder divergir): h=6, calibrado 37.9 %, Aurora sin
+calibrar 75.9 %, `a3_main` 0 %; h=12, calibrado 58.6 %, Aurora sin calibrar **100 %**, `a3_main` 0 %.
+Confirma el diagnóstico mecánico de A4: `a3_main` (sin macro, ecuación de precios contractiva) NUNCA
+puede divergir — por diseño, no por acierto —, mientras que con macro activo la mayoría de los meses
+de arranque del holdout SÍ terminan en un colapso/hiperinflación antes de 12 meses, calibrado o no
+(58.6 % vs 100 %): la calibración reduce la frecuencia de divergencia temprana pero no la elimina.
+
+**Lectura honesta (holdout)**: el calibrado mejora MUCHO a Aurora sin calibrar y a `a3_main` en
+inflación (h=12 RMSE: 4.369 vs 9.752 vs 6.691) pero SIGUE POR DETRÁS de la persistencia en casi todos
+los horizontes de inflación y de PBI. Excepción notable: en PBI del holdout, `a3_main` da MEJOR
+resultado que `a5b_macro` en h=6/12 (0.900/0.880 contra 1.965/2.354) — el PBI no está gobernado por
+la capa macro (ADR 012 no lo toca), así que calibrar 155 parámetros conjuntamente (económicos +
+macro) sobre una pérdida dominada por precios/reservas/cambiario parece empeorar el ajuste de
+variables que no dependen de esos mecanismos, respecto de calibrar solo el bloque económico
+(`a3_main`). No se investigó más a fondo en esta ronda — queda como hallazgo para la próxima.
+
+**Diagnóstico 2019-12 (con los coeficientes calibrados)**: desde 2019-12, 20 semillas, 48 meses,
+`--fx-regime auto`: **0/20 (0 %) en `hyperinflation`** (vs. 20/20 con los coeficientes macro sin
+calibrar — la calibración elimina la hiperinflación espuria de este tramo) pero **20/20 (100 %) en
+`collapse`** (`political_stability < 15` tres meses seguidos), mediana de colapso en el mes 25
+(rango 20-27). El fallo cambia de canal (precios → estabilidad política), no desaparece: ninguna
+semilla sobrevive los 48 meses. Relevante para V4 (ver más abajo): si el colapso ocurre siempre antes
+de la elección de fin de mandato, la hipótesis electoral de V4 no se puede evaluar con la misma
+confianza que la de inflación.
+
+**Pendiente, no implementado en esta ronda**: serie de tipo de cambio 1983-1991 (oficial o "dólar
+bolsa" de la época; `exchange_rate_annual.csv` actual termina en 1951, `exchange_rate_parallel_
+monthly_linked.csv` arranca en 2008, ninguna de las dos cubre el holdout) — si aparece, aplicar el
+mismo patrón de `RealData.inflation()` (interpolación anual + fallback documentado).
+
+
+### Validación `a6_macro` (V1–V4, ADR 011 §8 + A5 ADR 012 §6)
+
+`republica validate --country argentina --calibration a5b_macro --run-id a6_macro --tests
+V1,V2,V3,V4`. **52.5s de pared total** (V1 7.4s, V2 17.7s, V3 13.4s, V4 13.6s), 50 semillas por
+prueba y brazo. Reporte completo: `data/countries/argentina/validation/a6_macro/report.md`.
+`registration.json` escrito antes de correr, no reescrito.
+
+**Declaración in-sample/holdout (importante, no solo V3)**: de las 4 pruebas, **solo V1 (1988→1990)
+cae en el holdout real** (`1983-12:1991-12`) de esta calibración. V2 (1998-01, 54 meses → hasta
+2002-06), V3 (2016→2023) y **también V4 (2019-12→2023-11)** caen DENTRO del train
+(`1992-01:2023-12`) — in-sample las tres, no solo V3. Esto es más restrictivo de lo que
+`PLAN_ARGENTINA.md` (antes de esta ronda) daba a entender ("V3 ahora es in-sample"): con la ventana
+de train ampliada a 1992-2023, de las cuatro pruebas históricas sólo una es una prueba de
+generalización real.
+
+| prueba | hipótesis | calibrado | Aurora sin calibrar | veredicto calibrado | veredicto Aurora | muestra |
+|---|---|---:|---:|---|---|---|
+| V1 | hyperinflation >50% en 12-24m | 0.0% | 100.0% | **NO CUMPLIDA** | CUMPLIDA | HOLDOUT |
+| V2 | default/collapse >50% en 36-54m | 56.0% [42,68] | 22.0% [12,34] | **CUMPLIDA** | NO CUMPLIDA | in-sample |
+| V3 | inflación final >80%, pierde en 2019 y 2023 | 47.5% infl, 0% aciertos | 1709.8% infl, 0% aciertos | NO CUMPLIDA | NO CUMPLIDA | in-sample |
+| V4 | derrota >70%, inflación final >100% | infl 56.7%, derrota 0.0% | infl 1319.4%, derrota 0.0% | NO CUMPLIDA | NO CUMPLIDA | in-sample |
+| C | Aurora falla al menos 1 de 3 | — | falla 3 de 4 (V2,V3,V4) | — | **CUMPLIDA** | — |
+
+**Hallazgo transversal, el más importante de esta ronda**: en V1, V3 y V4 el brazo CALIBRADO termina
+en `collapse` en el 100% de las semillas (50/50, 50/50, 50/50) — nunca en `hyperinflation`, a
+diferencia de Aurora sin calibrar (que sí hiperinflaciona: 100% en V1, 100% en V3, 94% en V4). Solo
+en V2 hay un resultado mixto (37 `collapse` / 13 `survived` de 50). La calibración desplazó el modo
+de falla de "precios" (hiperinflación) a "estabilidad política" (`collapse`, `political_stability <
+15` tres meses seguidos) en casi toda la validación, consistente con el diagnóstico 2019-12 de
+arriba (0% hyperinflation, 100% collapse). Esto es lo que hace que V1 pase de "Aurora CUMPLE, sin
+calibrar" a "calibrado NO CUMPLE" — el calibrado técnicamente evita la hiperinflación específica que
+pedía V1, pero mediante colapso institucional generalizado, no mediante estabilización real (la
+inflación mensual final del calibrado en V1 es 14.97%, todavía alta, y las semillas nunca sobreviven
+para mostrar una trayectoria completa de 24 meses).
+
+**V4 — la hipótesis electoral NO se pudo evaluar**: 50 de 50 semillas calibradas (y 50 de 50 de
+Aurora) terminan en `collapse`/`hyperinflation` antes del mes 48 (mediana calibrado: mes 29). NINGUNA
+semilla, en ningún brazo, llega a celebrar la elección de fin de mandato dentro de la ventana. La
+"derrota electoral 0.0%" de la tabla NO significa "el oficialismo gana": significa que no hay
+denominador (cero elecciones celebradas). Coherente con el diagnóstico 2019-12 de arriba.
+
+**V2 (único veredicto CUMPLIDO)**: el RMSE de reservas del calibrado (14 875 USD M) es MEJOR que el
+de Aurora (26 098) pero mucho PEOR que el baseline de persistencia (4 342 USD M congelando el nivel
+real de 1998-01) — igual patrón que el resto de la calibración: mejora respecto de Aurora, no
+respecto de "no hacer nada".
+
+**Diagnóstico `fx_regime_inertness` (V2)**: verificado empíricamente (3 semillas) que `peg` y
+`float` dan trayectorias DISTINTAS con macro activo — a diferencia de A4 (ADR 011), donde `--fx-
+regime peg` no tenía ningún efecto.
+
+**Qué queda para V4 futuro**: nada pendiente de ADR 013 — la época de partidos 2015-2023 (con LLA)
+cargó y corrió correctamente. Lo que falta es un modelo que sobreviva más allá del colapso
+institucional temprano para poder medir la hipótesis electoral en absoluto; eso es un problema del
+mecanismo de recuperación/colapso (ADR 012 secc. 5), no de la integración de partidos.

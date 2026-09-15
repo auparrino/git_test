@@ -17,7 +17,7 @@ El cruce completo de `regimes.csv` contra V-Dem está en **`REGIME_CROSSCHECK.md
 | `regimes.csv` | 214 | `vdem_regime` completo (199/214); 6 años corregidos | 1810-1824 sin contraste; 1825-1899 con `vdem_regime` derivado |
 | `provinces.csv` | 24 | Córdoba corregida; suma a 0,08 % del total INDEC | los 23 valores restantes siguen sin archivo oficial |
 | `regions.csv` | 8 | población recalculada desde `provinces.csv` | `gdp_share_approx` sigue siendo estimación del analista |
-| `shocks_calendar.csv` | 20 | 2 notas corregidas (hiper-1989, FMI-2018) | `magnitude` es y seguirá siendo juicio del analista |
+| `shocks_calendar.csv` | 28 | 2 notas corregidas (hiper-1989, FMI-2018) | `magnitude` es y seguirá siendo juicio del analista; 8 filas nuevas (ADR 012, recalibración A5) sin revisión independiente |
 | `parties/*.json` | 33 | ejes revisados: **sin errores groseros** | los 33 `seats_share` siguen sin fuente |
 
 ---
@@ -138,6 +138,42 @@ valores que llaman la atención y deberían verificarse primero:
   pero sin confirmar.
 - Contraste positivo: `1983-2001` UCR 0,51 / PJ 0,44 **sí** coincide con la composición
   real de Diputados en 1983 (129 y 111 de 254).
+
+### 2.7 `shocks_calendar.csv` — 8 filas nuevas (recalibración A5, ADR 012)
+
+Completadas a partir del diagnóstico de `data/countries/argentina/validation/a4_main/report.md`
+(calendario incompleto) y `docs/PLAN_ARGENTINA.md` §6. Todas `source: general_knowledge`,
+`reviewed_by: pending` — hechos públicos ampliamente documentados, pero sin la revisión
+independiente (estilo Opus) que ya pasaron las 20 filas originales:
+
+- **1962-04-01** `currency_run`: crisis de balanza de pagos y devaluación tras la caída de
+  Frondizi. `confidence: medium` — la fecha es la del mes de la caída (29-mar-1962), no el
+  día exacto de una devaluación puntual (fue un proceso, no un anuncio único como el
+  Rodrigazo).
+- **1981-02-01** `currency_run`: devaluaciones de la gestión Sigaut. `confidence: medium` —
+  mismo motivo (proceso de varias devaluaciones durante 1981, no un evento de un solo día;
+  se cargó con precisión de mes).
+- **1985-06-14** `imf_program`: Plan Austral. `confidence: medium` — la fecha de lanzamiento
+  (14-jun-1985) es precisa y bien conocida; `medium` porque no se verificó el monto/fecha
+  exacta de aprobación del acompañamiento del FMI (mismo problema que las 10 filas
+  `imf_agreement` de `events.csv`, ver 2.2).
+- **1998-08-17** `international_crisis`: contagio ruso + devaluación brasileña. `confidence:
+  medium` — las dos fechas ancla (default ruso 17-ago-1998, fin de la banda brasileña
+  13-ene-1999) son precisas; `medium` por la duración elegida (17 meses) para cubrir ambos
+  eventos en una sola fila, una simplificación del analista.
+- **2001-12-01** `banking_crisis` (Corralito) y **2001-12-23** `sovereign_default` (default
+  Rodríguez Saá): `confidence: high` — fechas ancla muy conocidas y verificables (Res.
+  1570/2001, discurso del 23-dic-2001 ante la Asamblea Legislativa).
+- **2002-01-06** `currency_run` (salida de la convertibilidad, Ley 25.561): `confidence: high`
+  — fecha de sanción de la ley, verificable.
+- **2018-01-01** `drought`: sequía de la campaña 2017/2018. `confidence: medium` — el hecho
+  (sequía que redujo la cosecha) es público; la fecha es la del inicio nominal de la campaña
+  agrícola, no un día verificado de una fuente agropecuaria primaria (INDEC/Bolsa de
+  Cereales, bloqueadas desde este entorno).
+
+No se agregó una fila para el cepo cambiario de 2011: por diseño (ADR 012 §3, deliverable 5)
+es un **régimen** (`fx_regime = control` en `fx_regimes.csv`, filas 2011-11:2015-12 y
+2019-09:2023-12), no un shock puntual — ya estaba cargado antes de esta ronda.
 
 ### 2.6 `provinces.csv` / `regions.csv`
 

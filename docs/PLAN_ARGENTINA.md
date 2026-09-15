@@ -83,15 +83,33 @@ contra V-Dem. Paquete de país, calibración y validación: hechos y corridos. *
 validación: negativo en las tres pruebas**, con diagnóstico mecánico en
 `data/countries/argentina/validation/a4_main/report.md`. Lo que aprendimos manda los próximos pasos:
 
-| Causa estructural encontrada | Cambio necesario en el motor (ADR 012, pendiente) |
-|---|---|
-| La ecuación de precios es contractiva (`rho_pi + c_e < 1`): la hiperinflación endógena es algebraicamente imposible | Expectativas con régimen: indexación y persistencia que suben con la inflación pasada (`rho_pi` función de π), o un término de dominancia fiscal no lineal (emisión ∝ déficit / demanda de dinero, con demanda de dinero que cae con π) |
-| `--fx-regime peg` es inerte: `fx_regime` no entra en `step_economy` | Que el régimen cambiario gobierne `de_raw`, la intervención y `k_k`; un `peg` con reservas cayendo debe terminar en salida forzada (devaluación) |
-| Reservas sin ancla de balance de pagos: `reserves_target` fijo de Aurora (10.000) no muerde con 27.914 reales | Reservas = cuenta corriente (exportaciones ∝ commodities y tipo de cambio real, importaciones ∝ PIB) + cuenta capital (∝ tasa real, riesgo, `dollar_demand`); `default_risk` sobre deuda en USD / exportaciones |
-| Calendario incompleto: sin crisis 1998–99, sin corralito/default 2001, sin sequía 2018 | Completar `shocks_calendar.csv` desde `events.csv` (ya tiene los eventos) |
-| Calibrar sobre 1993–2015 (ventana reversiva) empeora los episodios extremos | Calibrar con ventanas que incluyan al menos un episodio extremo y con pérdida ponderada por colas; o calibrar por regímenes |
-| Aprobación cae a 0 y 50/50 corridas colapsan antes de 2023 | Mecanismos de recuperación de largo plazo de confianza y tensión (también pendiente en Aurora) |
+| Causa estructural encontrada (A4) | Cambio en el motor (ADR 012) | Estado tras A5 (recalibración, este reporte) |
+|---|---|---|
+| La ecuación de precios es contractiva (`rho_pi + c_e < 1`): la hiperinflación endógena es algebraicamente imposible | Expectativas con régimen: `rho_eff = rho_pi + rho_slope·clamp(...)`, dominancia fiscal no lineal (`c_s·seigniorage_pressure/money_demand`) | **Resuelto a nivel de mecanismo** (`tests/test_macro_regime.py`, ADR 012 §7 test 2: hiperinflación alcanzable desde 1988-06 en 20/20 semillas, no espuria desde 2003-06 en 0/20) — con los coeficientes SIN calibrar, el mismo mecanismo genera hiperinflación **espuria** desde 2019-12 (20/20 semillas, hallazgo del agente de ADR 013). Con los coeficientes CALIBRADOS de `a5b_macro`: 0/20 en `hyperinflation` desde 2019-12, pero **20/20 en `collapse`** (política, no precios) antes del mes 27 — la calibración desplaza el modo de falla, no lo elimina (ver `data/countries/argentina/calibration/a5b_macro/report.md` y V1/V3/V4 abajo). |
+| `--fx-regime peg` es inerte: `fx_regime` no entra en `step_economy` | `fx_regime` gobierna `de`, la intervención y `k_k`; salida forzada con reservas bajo `R_min` | **Resuelto** (ADR 012 §7 test 3: `peg` y `float` dan trayectorias distintas; salida forzada en 17/20 semillas desde 1998-01). `validation/argentina.py::run_test_arm` usa `fx_regime=pack.fx_regime_auto` (el régimen real por fecha) en vez de un default fijo; verificado de nuevo en A6 (`fx_regime_inertness` de V2: `peg` ≠ `float`). |
+| Reservas sin ancla de balance de pagos | `reserves' = reserves + current_account + capital_account − intervention_usd`, con `exports`/`imports` reales y `default_risk` sobre deuda USD/exportaciones | **Resuelto a nivel de mecanismo** (ADR 012 §7 test 4). `default_risk` arranca alto incluso en períodos solventes (documentado como hallazgo honesto en las Notas de implementación del ADR 012); no se corrigió porque el intento rompía el test de recuperación — pendiente de la próxima ronda. |
+| Calendario incompleto: sin crisis 1998–99, sin corralito/default 2001, sin sequía 2018 | — | **Resuelto** (A5, punto 1 de esta recalibración): 8 filas nuevas en `shocks_calendar.csv` (1962, 1981, Plan Austral 1985, crisis 1998–99, corralito/default/salida de la convertibilidad dic-2001/ene-2002, sequía 2018), todas `reviewed_by: pending` en `politics/PENDING_FACTCHECK.md`. |
+| Calibrar sobre 1993–2015 (ventana reversiva) empeora los episodios extremos | Ventana con episodios extremos + pérdida ponderada por colas | **Implementado, con resultado mixto y honesto** (A5, punto 3): train `1992-01:2023-12`, holdout `1983-12:1991-12`, `--loss heavy`. En TRAIN el calibrado queda a la par o levemente peor que la persistencia en la mayoría de las variables. En HOLDOUT mejora mucho a Aurora sin calibrar y a `a3_main` en inflación (h=12 RMSE: 4.37 vs 9.75 vs 6.69) pero sigue por detrás de la persistencia (4.37 vs 4.01) — 155 parámetros calibrados no baten al baseline ingenuo. Detalle completo: `docs/CALIBRATION_LOG.md` sección "Corrida `a5b_macro`". |
+| Aprobación cae a 0 y 50/50 corridas colapsan antes de 2023 | Recuperación de largo plazo de confianza/tensión (ADR 012 §5) | **Mecanismo presente pero NO evita el colapso en la validación** (ADR 012 §7 test 5 aislado: 20/20 semillas de 2003-06 a 2015-12 sin colapso — pero en A6, arrancando de estados iniciales REALES con shocks forzados reales, V1/V3/V4 dan 50/50 `collapse` cada una). El mecanismo de recuperación no alcanza a compensar el punto de partida real (aprobación/confianza/tensión de 1988, 2016 o 2019) combinado con la calibración actual. |
 
-Orden sugerido: ADR 012 (precios con expectativas, régimen cambiario efectivo, balance de pagos) →
-completar calendario → recalibrar con ventana 1975–2023 y holdout por episodios → repetir A4 con las
-mismas hipótesis. Después, A5 (actores argentinos) y A6 (contrafácticos) tienen sentido; antes, no.
+**A6 (`data/countries/argentina/validation/a6_macro/`): V1–V4 corridas, 52.5s de pared, 50 semillas.**
+
+| prueba | veredicto calibrado | veredicto Aurora | muestra (train/holdout de `a5b_macro`) |
+|---|---|---|---|
+| V1 (1988→1990, hiperinflación) | NO CUMPLIDA (0% vs. pedido >50%) | CUMPLIDA (100%) | **HOLDOUT** (única prueba genuina de generalización) |
+| V2 (1998→2002, default/colapso) | **CUMPLIDA** (56% vs. pedido >50%) | NO CUMPLIDA (22%) | in-sample |
+| V3 (2016→2023, inflación+elecciones) | NO CUMPLIDA (47.5% infl. vs. pedido >80%) | NO CUMPLIDA (1710%, pero 0% aciertos) | in-sample |
+| V4 (2019-12→2023, partidos por época ADR 013) | NO CUMPLIDA (infl. 56.7% vs. >100%; derrota 0% vs. >70%) | NO CUMPLIDA | in-sample |
+| C (control) | — | **CUMPLIDA** (Aurora falla 3 de 4) | — |
+
+De las cuatro pruebas, **solo V1 cae en el holdout real** (`1983-12:1991-12`) de `a5b_macro`; V2, V3
+Y V4 caen dentro del train (`1992-01:2023-12`) — más restrictivo de lo que se pensaba antes de correr
+A6 (no solo V3). Hallazgo transversal: en V1/V3/V4 el brazo calibrado termina en `collapse` en el
+**100 % de las semillas** (nunca en `hyperinflation`, a diferencia de Aurora); en V4 esto significa
+que NINGUNA semilla (calibrada ni Aurora) llega a celebrar la elección de fin de mandato — la
+hipótesis electoral de V4 no se pudo evaluar por falta de denominador, no porque el oficialismo haya
+ganado. Detalle completo, incluida la lectura mecánica de por qué, en
+`data/countries/argentina/validation/a6_macro/report.md` y `docs/CALIBRATION_LOG.md`.
+
+Estos resultados describen el comportamiento de República Artificial calibrada con datos de
+Argentina; no son evidencia sobre lo que hubiera pasado.

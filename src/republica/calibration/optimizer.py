@@ -37,9 +37,11 @@ from republica.calibration.parameters import (
     Parameter,
     bimonetary_from_vector,
     coefficients_from_vector,
+    macro_from_vector,
 )
 from republica.world.bimonetary import BimonetaryCoefficients
 from republica.world.config import Coefficients
+from republica.world.economy import MacroCoefficients
 
 #: Estado global de un worker de `multiprocessing.Pool` (poblado UNA vez
 #: por proceso via `_worker_init`, reusado en cada tarea -- evita reconstruir
@@ -54,14 +56,45 @@ def _worker_init(country_id: str, dates: list[str]) -> None:
 
 
 def _worker_score(
-    task: tuple[str, list[float], list[Parameter], Coefficients, BimonetaryCoefficients, bool, int],
+    task: tuple[
+        str,
+        list[float],
+        list[Parameter],
+        Coefficients,
+        BimonetaryCoefficients,
+        MacroCoefficients | None,
+        bool,
+        int,
+    ],
 ) -> tuple[str, MonthScore]:
-    date, x, params, base_coeff, base_bimon, persistence, seed = task
+    date, x, params, base_coeff, base_bimon, base_macro, persistence, seed = task
     ctx: StartMonthContext = _WORKER["contexts"][date]
     real: RealData = _WORKER["real"]
     coeff = coefficients_from_vector(params, x, base_coeff)
     bimon = bimonetary_from_vector(params, x, base_bimon)
-    return date, score_start_month(ctx, real, coeff, bimon, persistence=persistence, seed=seed)
+    macro = macro_from_vector(params, x, base_macro) if base_macro is not None else None
+    score = score_start_month(
+        ctx, real, coeff, bimon, persistence=persistence, seed=seed, macro=macro
+    )
+    return date, score
+
+
+def _worker_score_raw(
+    task: tuple[str, Coefficients, BimonetaryCoefficients, MacroCoefficients | None, bool, int],
+) -> tuple[str, MonthScore]:
+    """Version de `_worker_score` que NO reconstruye `coeff`/`bimon`/`macro`
+    desde un vector `x` sino que los toma tal cual (A5, ADR 012 secc. 6):
+    usada por `ParallelEvaluator.evaluate_raw` para re-evaluar coeficientes
+    FIJOS que no viven en el espacio de parametros de la corrida actual
+    (p.ej. `a3_main`, calibrado sin macro, comparado contra la ventana
+    train/holdout de una corrida macro -- ver `calibration/run.py`)."""
+    date, coeff, bimon, macro, persistence, seed = task
+    ctx: StartMonthContext = _WORKER["contexts"][date]
+    real: RealData = _WORKER["real"]
+    score = score_start_month(
+        ctx, real, coeff, bimon, persistence=persistence, seed=seed, macro=macro
+    )
+    return date, score
 
 
 @dataclass
@@ -79,11 +112,26 @@ class ParallelEvaluator:
     TODAS las tareas `(candidato, mes)` de la generacion en una sola
     llamada a `pool.map`)."""
 
-    def __init__(self, pool, dates: list[str], params: list[Parameter], workers: int):
+    def __init__(
+        self,
+        pool,
+        dates: list[str],
+        params: list[Parameter],
+        workers: int,
+        base_macro: MacroCoefficients | None = None,
+        loss: str = "rmse",
+    ):
         self.pool = pool
         self.dates = dates
         self.params = params
         self.workers = workers
+        #: A5 (ADR 012 secc. 6): `None` (default, compatibilidad con A3) ->
+        #: `params` sin grupo `"macro"`, cada tarea corre con
+        #: `macro_coefficients=None` (bimonetario viejo, igual que siempre).
+        #: Distinto de `None` -> cada tarea calcula `macro_from_vector` y
+        #: corre con `step_macro_economy` (ver `_worker_score`).
+        self.base_macro = base_macro
+        self.loss = loss
 
     def evaluate_population(
         self,
@@ -94,7 +142,7 @@ class ParallelEvaluator:
         seed: int = 0,
     ) -> list[EvalResult]:
         tasks = [
-            (date, x, self.params, base_coeff, base_bimon, False, seed)
+            (date, x, self.params, base_coeff, base_bimon, self.base_macro, False, seed)
             for x in xs
             for date in self.dates
         ]
@@ -114,7 +162,7 @@ class ParallelEvaluator:
         out = []
         for i, x in enumerate(xs):
             metrics = aggregate_scores(per_candidate[i], real)
-            scalar = scalar_objective(metrics, self.params, x, lambda_reg)
+            scalar = scalar_objective(metrics, self.params, x, lambda_reg, loss=self.loss)
             out.append(EvalResult(x=x, scalar=scalar, metrics=metrics))
         return out
 
@@ -128,7 +176,8 @@ class ParallelEvaluator:
         seed: int = 0,
     ) -> EvalResult:
         tasks = [
-            (date, x, self.params, base_coeff, base_bimon, persistence, seed) for date in self.dates
+            (date, x, self.params, base_coeff, base_bimon, self.base_macro, persistence, seed)
+            for date in self.dates
         ]
         raw = (
             self.pool.map(_worker_score, tasks)
@@ -139,9 +188,36 @@ class ParallelEvaluator:
         real = RealData.load()
         metrics = aggregate_scores(scores, real)
         scalar = (
-            float("nan") if persistence else scalar_objective(metrics, self.params, x, lambda_reg)
+            float("nan")
+            if persistence
+            else scalar_objective(metrics, self.params, x, lambda_reg, loss=self.loss)
         )
         return EvalResult(x=x, scalar=scalar, metrics=metrics)
+
+    def evaluate_raw(
+        self,
+        coeff: Coefficients,
+        bimon: BimonetaryCoefficients,
+        macro: MacroCoefficients | None,
+        persistence: bool = False,
+        seed: int = 0,
+    ) -> dict[str, float]:
+        """Evalua coeficientes FIJOS (`Coefficients`/`BimonetaryCoefficients`/
+        `MacroCoefficients` concretos, no un vector `x` de este espacio de
+        parametros) sobre `self.dates` -- A5 (ADR 012 secc. 6): usado para
+        comparar `a3_main` (calibrado SIN macro, en otro run de CMA-ES) en
+        la ventana train/holdout de la corrida actual, sin escalar (no hay
+        `x`/`params` de referencia contra los que regularizar -- solo las
+        metricas, no el escalar de CMA-ES, ver `calibration/run.py`)."""
+        tasks = [(date, coeff, bimon, macro, persistence, seed) for date in self.dates]
+        raw = (
+            self.pool.map(_worker_score_raw, tasks)
+            if self.pool is not None
+            else [_worker_score_raw(t) for t in tasks]
+        )
+        scores = [r[1] for r in raw]
+        real = RealData.load()
+        return aggregate_scores(scores, real)
 
 
 @dataclass

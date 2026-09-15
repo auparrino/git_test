@@ -23,34 +23,110 @@ def _fmt(v: float) -> str:
     return f"{v:.3f}"
 
 
-def _metric_table(tables: dict) -> str:
-    lines = [
-        f"n = {tables['n_start_months']} meses de arranque.",
-        "",
-        "| variable | horizonte | calibrado | persistencia | Aurora sin calibrar |",
-        "|---|---|---|---|---|",
-    ]
+def _n_header(tables: dict) -> str:
+    n = tables["n_start_months"]
+    weighted = tables.get("n_weighted_pre_1997")
+    if weighted is None:
+        return f"n = {n} meses de arranque."
+    return (
+        f"n = {n} meses de arranque ({weighted} con peso 0.5: series mensuales interpoladas "
+        "de anuales antes de 1997, A5/ADR 012 secc. 6)."
+    )
+
+
+def _metric_table(tables: dict, suffix: str, title: str) -> str:
+    """Una tabla por METRICA (`suffix`: `""` = RMSE normalizada, `"_heavy"`
+    = perdida cola pesada, A5/ADR 012 secc. 6): calibrado vs. persistencia
+    vs. Aurora sin calibrar vs. `a3_main` (columna extra solo si `tables`
+    la trae -- `a3_main` es sin macro, no tiene metrica `_heavy` propia mas
+    alla de la misma formula aplicada a sus errores crudos, asi que se
+    muestra igual en las dos tablas)."""
+    has_a3 = "a3_main" in tables
+    header = "| variable | horizonte | calibrado | persistencia | Aurora sin calibrar |"
+    sep = "|---|---|---|---|---|"
+    if has_a3:
+        header += " `a3_main` (sin macro) |"
+        sep += "---|"
+    lines = [f"### {title}", "", header, sep]
     for var in VARIABLES:
         for h in HORIZONS:
-            key = f"{var}_h{h}"
-            calibrated_v = _fmt(tables["calibrated"].get(key, float("nan")))
-            persistence_v = _fmt(tables["persistence"].get(key, float("nan")))
-            aurora_v = _fmt(tables["aurora"].get(key, float("nan")))
-            lines.append(
-                f"| {VARIABLE_LABEL[var]} | {h} | {calibrated_v} | {persistence_v} | {aurora_v} |"
+            key = f"{var}_h{h}{suffix}"
+            cal_v = _fmt(tables["calibrated"].get(key, float("nan")))
+            row = (
+                f"| {VARIABLE_LABEL[var]} | {h} | {cal_v} "
+                f"| {_fmt(tables['persistence'].get(key, float('nan')))} "
+                f"| {_fmt(tables['aurora'].get(key, float('nan')))} |"
             )
-    lines.append("")
-    lines.append(
-        f"| regimen (acierto democracia/no) | - | "
-        f"{_fmt(tables['calibrated'].get('regime_accuracy', float('nan')))} | - | "
-        f"{_fmt(tables['aurora'].get('regime_accuracy', float('nan')))} |"
-    )
-    lines.append(
-        f"| elecciones (acierto reelegido/derrotado) | - | "
-        f"{_fmt(tables['calibrated'].get('election_accuracy', float('nan')))} | - | "
-        f"{_fmt(tables['aurora'].get('election_accuracy', float('nan')))} |"
-    )
+            if has_a3:
+                row += f" {_fmt(tables['a3_main'].get(key, float('nan')))} |"
+            lines.append(row)
+    if suffix == "":
+        lines.append("")
+        regime_row = (
+            f"| regimen (acierto democracia/no) | - | "
+            f"{_fmt(tables['calibrated'].get('regime_accuracy', float('nan')))} | - | "
+            f"{_fmt(tables['aurora'].get('regime_accuracy', float('nan')))} |"
+        )
+        election_row = (
+            f"| elecciones (acierto reelegido/derrotado) | - | "
+            f"{_fmt(tables['calibrated'].get('election_accuracy', float('nan')))} | - | "
+            f"{_fmt(tables['aurora'].get('election_accuracy', float('nan')))} |"
+        )
+        if has_a3:
+            regime_row += f" {_fmt(tables['a3_main'].get('regime_accuracy', float('nan')))} |"
+            election_row += f" {_fmt(tables['a3_main'].get('election_accuracy', float('nan')))} |"
+        lines.append(regime_row)
+        lines.append(election_row)
     return "\n".join(lines)
+
+
+def _ended_before_table(tables: dict) -> str:
+    """Fraccion de meses de arranque cuya corrida termino ANTES de cada
+    horizonte (A5b, ADR 012 secc. 6: fix del bug de `a5_macro` -- antes de
+    esto una corrida que hiperinflacionaba/colapsaba temprano no aportaba
+    NINGUN error a los horizontes que no alcanzaba, y CMA-ES quedaba
+    premiado por eso). `persistencia` no tiene nocion de "terminar antes"
+    (no corre una simulacion), se omite."""
+    has_a3 = "a3_main" in tables
+    header = "| horizonte | calibrado | Aurora sin calibrar |"
+    sep = "|---|---|---|"
+    if has_a3:
+        header += " `a3_main` (sin macro) |"
+        sep += "---|"
+    lines = [
+        "### Corridas que terminaron antes del horizonte (hiperinflacion/colapso)",
+        "",
+        header,
+        sep,
+    ]
+    for h in HORIZONS:
+        key = f"ended_before_h{h}"
+        row = (
+            f"| {h} | {_fmt(tables['calibrated'].get(key, float('nan')))} "
+            f"| {_fmt(tables['aurora'].get(key, float('nan')))} |"
+        )
+        if has_a3:
+            row += f" {_fmt(tables['a3_main'].get(key, float('nan')))} |"
+        lines.append(row)
+    return "\n".join(lines)
+
+
+def _both_metric_tables(tables: dict) -> str:
+    return "\n\n".join(
+        [
+            _n_header(tables),
+            "",
+            _metric_table(tables, "", "RMSE normalizada (misma formula que `a3_main`)"),
+            "",
+            _metric_table(
+                tables,
+                "_heavy",
+                "Pérdida cola pesada (`|error/sigma|^1.5`, A5/ADR 012 secc. 6)",
+            ),
+            "",
+            _ended_before_table(tables),
+        ]
+    )
 
 
 def _drift_table(params: list[Parameter], calibrated_x: list[float], top_n: int = 15) -> str:
@@ -116,21 +192,48 @@ def write_report(
     train_tables: dict,
     holdout_tables: dict,
     result,
+    extra_notes: list[str] | None = None,
 ) -> None:
     from republica.calibration.run import input_data_hash
+
+    include_macro = any(p.group == "macro" for p in params)
+    loss = getattr(cfg, "loss", "rmse")
+    macro_note = (
+        "Vector de calibracion CON el grupo `macro` (A5, ADR 012 secc. 6): simula con "
+        "`step_macro_economy` (regimen cambiario efectivo + balance de pagos), "
+        "`fx_regime=pack.fx_regime_auto` (regimen real de cada fecha, `fx_regimes.csv`) y el "
+        "bloque bimonetario viejo DESACTIVADO (`engine/simulation.py::run` lo apaga en cuanto "
+        "hay `macro_coefficients`, ver Notas de implementacion del ADR 012)."
+        if include_macro
+        else "Vector de calibracion SIN el grupo `macro` (bloque bimonetario viejo, ADR 011): "
+        "compatibilidad con `a3_main`."
+    )
+    holdout_order_note = (
+        "El holdout (`" + cfg.holdout_start + ":" + cfg.holdout_end + "`) es ANTERIOR en el "
+        "calendario al train (`" + cfg.train_start + ":" + cfg.train_end + "`) -- a proposito "
+        "(A5, ADR 012 secc. 6): el holdout es la hiperinflacion/convertibilidad temprana "
+        "(1983-1991), nunca vista por esta estructura de precios/regimen cambiario; el orden "
+        "cronologico no importa para el protocolo de honestidad, solo que el holdout se corra "
+        "UNA sola vez, DESPUES de fijar los coeficientes con train."
+        if cfg.holdout_start < cfg.train_start
+        else "Holdout corrido UNA SOLA VEZ, al final, despues de fijar los coeficientes con "
+        "train -- protocolo de honestidad, PLAN_ARGENTINA.md #0.3/#4."
+    )
 
     lines = [
         f"# Calibracion Argentina -- run `{cfg.run_id}`",
         "",
         f"Pais: `{cfg.country_id}`. Train: `{cfg.train_start}:{cfg.train_end}`. "
-        f"Holdout: `{cfg.holdout_start}:{cfg.holdout_end}` (corrido UNA SOLA VEZ, al final, "
-        "despues de fijar los coeficientes con train -- protocolo de honestidad, "
-        "PLAN_ARGENTINA.md #0.3/#4).",
+        f"Holdout: `{cfg.holdout_start}:{cfg.holdout_end}`. {holdout_order_note}",
         f"Presupuesto: {cfg.budget} evaluaciones (usadas: {result.evaluations}). "
-        f"Stride: {cfg.stride} meses. lambda_reg: {cfg.lambda_reg}. Semilla: {cfg.seed}.",
+        f"Stride: {cfg.stride} meses. lambda_reg: {cfg.lambda_reg}. Semilla: {cfg.seed}. "
+        f"Perdida optimizada por CMA-ES: `{loss}` (el reporte muestra ambas metricas, RMSE y "
+        "cola pesada, para cualquier corrida -- A5, ADR 012 secc. 6).",
         f"Tiempo de pared del optimizador: {result.wall_seconds:.1f}s.",
         f"Hash de los datos de entrada (`history/*.csv` + `politics/*.csv`): "
         f"`{input_data_hash(cfg.country_id)}`.",
+        "",
+        macro_note,
         "",
         "## Shocks forzados en el periodo",
         "",
@@ -143,11 +246,11 @@ def write_report(
         "",
         "## Train",
         "",
-        _metric_table(train_tables),
+        _both_metric_tables(train_tables),
         "",
         "## Holdout",
         "",
-        _metric_table(holdout_tables),
+        _both_metric_tables(holdout_tables),
         "",
         "## Drift de parametros (Aurora -> calibrado)",
         "",
@@ -156,6 +259,11 @@ def write_report(
         "Tabla completa en `coefficients.json`.",
         "",
         _drift_table(params, calibrated_x),
+    ]
+    if extra_notes:
+        lines += ["", "## Notas adicionales de esta corrida", ""]
+        lines += [f"- {note}" for note in extra_notes]
+    lines += [
         "",
         "## Limitaciones",
         "",

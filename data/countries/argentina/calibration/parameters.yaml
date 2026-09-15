@@ -487,56 +487,301 @@ parameters:
     aurora_value: 6.0
     lo: 2.0
     hi: 18.0
+  - name: w_adapt
+    group: macro
+    aurora_value: 0.7
+    lo: 0.0
+    hi: 1.0
+    reason: "peso de una combinacion convexa (pi_exp = w_adapt*inflation_lag1 + (1-w_adapt)*pi_anchor, ADR 012 secc. 2): fuera de [0,1] deja de ser un promedio ponderado."
+  - name: rho_pi
+    group: macro
+    aurora_value: 0.85
+    lo: 0.5
+    hi: 1.0
+    reason: "persistencia base de la inflacion (ADR 012 secc. 2): < 0.5 contradice la inercia inflacionaria observada, >= 1 satura rho_eff sin inflacion alta. Acotado a [0.5, 1.0] (pedido explicito de la recalibracion A5)."
+  - name: rho_slope
+    group: macro
+    aurora_value: 0.1
+    lo: 0.0
+    hi: 0.3
+    reason: "cuanto sube la persistencia por encima de pi_hi (ADR 012 secc. 2): un valor grande satura rho_eff con cualquier inflacion moderada. Acotado a [0, 0.3] (pedido explicito de la recalibracion A5)."
+  - name: pi_hi
+    group: macro
+    aurora_value: 5.0
+    lo: 1.6666666666666667
+    hi: 15.0
+  - name: md_0
+    group: macro
+    aurora_value: 0.12
+    lo: 0.04
+    hi: 0.36
+  - name: md_pi
+    group: macro
+    aurora_value: 0.08
+    lo: 0.02666666666666667
+    hi: 0.24
+  - name: c_e
+    group: macro
+    aurora_value: 0.06
+    lo: 0.02
+    hi: 0.18
+  - name: c_g
+    group: macro
+    aurora_value: 0.5
+    lo: 0.16666666666666666
+    hi: 1.5
+  - name: c_r
+    group: macro
+    aurora_value: 1.0
+    lo: 0.3333333333333333
+    hi: 3.0
+  - name: c_s
+    group: macro
+    aurora_value: 0.0045
+    lo: 0.0014999999999999998
+    hi: 0.013499999999999998
+  - name: c_gap
+    group: macro
+    aurora_value: 1.0
+    lo: 0.3333333333333333
+    hi: 3.0
+  - name: financeable_normal
+    group: macro
+    aurora_value: 2.0
+    lo: 0.6666666666666666
+    hi: 6.0
+  - name: financeable_default
+    group: macro
+    aurora_value: 0.0
+    lo: -0.1
+    hi: 0.1
+  - name: pi_anchor_ema_months
+    group: macro
+    aurora_value: 36.0
+    lo: 12.0
+    hi: 108.0
+  - name: x_d
+    group: macro
+    aurora_value: 5.0
+    lo: 1.6666666666666667
+    hi: 15.0
+  - name: rm
+    group: macro
+    aurora_value: 3.0
+    lo: 1.0
+    hi: 6.0
+    reason: "meses de importaciones que definen R_min (ADR 012 secc. 3): fuera de [1,6] deja de ser un multiplo de importaciones con interpretacion razonable de reservas. Acotado a [1, 6] (pedido explicito de la recalibracion A5)."
+  - name: k_int
+    group: macro
+    aurora_value: 100.0
+    lo: 33.333333333333336
+    hi: 300.0
+  - name: crawl_rate
+    group: macro
+    aurora_value: 2.0
+    lo: 0.6666666666666666
+    hi: 6.0
+  - name: control_de_admin
+    group: macro
+    aurora_value: 3.0
+    lo: 1.0
+    hi: 9.0
+  - name: g1
+    group: macro
+    aurora_value: 0.05
+    lo: 0.016666666666666666
+    hi: 0.15000000000000002
+  - name: g2
+    group: macro
+    aurora_value: 0.05
+    lo: 0.016666666666666666
+    hi: 0.15000000000000002
+  - name: g3
+    group: macro
+    aurora_value: 0.05
+    lo: 0.016666666666666666
+    hi: 0.15000000000000002
+  - name: k_gap
+    group: macro
+    aurora_value: 5.0
+    lo: 1.6666666666666667
+    hi: 15.0
+  - name: peg_capital_boost
+    group: macro
+    aurora_value: 3.0
+    lo: 1.0
+    hi: 9.0
+  - name: peg_default_risk_ceiling
+    group: macro
+    aurora_value: 0.3
+    lo: 0.0
+    hi: 1.0
+    reason: "umbral de default_risk (probabilidad, acotada a [0,1] por step_macro_economy) que habilita peg_capital_boost (ADR 012 secc. 3)."
+  - name: exit_shock_conf
+    group: macro
+    aurora_value: -15.0
+    lo: -45.0
+    hi: -5.0
+  - name: exit_banking_crisis_p
+    group: macro
+    aurora_value: 0.5
+    lo: 0.0
+    hi: 1.0
+    reason: "probabilidad de que la salida de un peg dispare banking_crisis (ADR 012 secc. 3, columna 'Salida'): es una probabilidad, acotada a [0,1]."
+  - name: banking_crisis_k_k_multiplier
+    group: macro
+    aurora_value: 0.0
+    lo: -0.1
+    hi: 0.1
+  - name: banking_crisis_tension_bump
+    group: macro
+    aurora_value: 10.0
+    lo: 3.3333333333333335
+    hi: 30.0
+  - name: gap_perception_k
+    group: macro
+    aurora_value: 0.05
+    lo: 0.016666666666666666
+    hi: 0.15000000000000002
   - name: dd_pi
-    group: bimonetary
+    group: macro
     aurora_value: 0.01
     lo: 0.0033333333333333335
     hi: 0.03
   - name: dd_r
-    group: bimonetary
+    group: macro
     aurora_value: 0.004
     lo: 0.0013333333333333333
     hi: 0.012
   - name: dd_conf
-    group: bimonetary
+    group: macro
     aurora_value: 0.006
     lo: 0.002
     hi: 0.018000000000000002
   - name: dd_gap
-    group: bimonetary
+    group: macro
     aurora_value: 0.15
     lo: 0.049999999999999996
     hi: 0.44999999999999996
   - name: dd_persistence
-    group: bimonetary
+    group: macro
     aurora_value: 0.9
     lo: 0.3
     hi: 0.99
     reason: "AR(1) de dollar_demand: persistencia >= 1 es no estacionaria (explota)."
-  - name: gap_control
-    group: bimonetary
+  - name: x0_m0_pct_gdp
+    group: macro
+    aurora_value: 0.18
+    lo: 0.06
+    hi: 0.54
+  - name: ex_c
+    group: macro
+    aurora_value: 0.5
+    lo: 0.16666666666666666
+    hi: 1.5
+  - name: ex_e
+    group: macro
+    aurora_value: 0.5
+    lo: 0.16666666666666666
+    hi: 1.5
+  - name: im_y
+    group: macro
+    aurora_value: 1.0
+    lo: 0.3333333333333333
+    hi: 3.0
+  - name: im_e
+    group: macro
+    aurora_value: 0.5
+    lo: 0.16666666666666666
+    hi: 1.5
+  - name: im_gap
+    group: macro
+    aurora_value: 0.3
+    lo: 0.09999999999999999
+    hi: 0.8999999999999999
+  - name: debt_interest_rate_usd
+    group: macro
+    aurora_value: 0.06
+    lo: 0.02
+    hi: 0.18
+  - name: k_k_bop
+    group: macro
+    aurora_value: 50.0
+    lo: 16.666666666666668
+    hi: 150.0
+  - name: k_flight
+    group: macro
+    aurora_value: 200.0
+    lo: 66.66666666666667
+    hi: 600.0
+  - name: k_flight_peg
+    group: macro
+    aurora_value: 3000.0
+    lo: 1000.0
+    hi: 9000.0
+  - name: amort_rate
+    group: macro
+    aurora_value: 0.004
+    lo: 0.0013333333333333333
+    hi: 0.012
+  - name: imf_disbursement
+    group: macro
+    aurora_value: 300.0
+    lo: 100.0
+    hi: 900.0
+  - name: default_risk_a
+    group: macro
+    aurora_value: 1.0
+    lo: 0.3333333333333333
+    hi: 3.0
+  - name: default_risk_b
+    group: macro
+    aurora_value: 1.0
+    lo: 0.3333333333333333
+    hi: 3.0
+  - name: default_risk_c
+    group: macro
+    aurora_value: 0.3
+    lo: 0.09999999999999999
+    hi: 0.8999999999999999
+  - name: default_risk_threshold
+    group: macro
     aurora_value: 0.5
     lo: 0.0
     hi: 1.0
-    reason: "fraccion de la brecha cambiaria trasladada a inflacion percibida: no puede superar 1 por construccion."
-  - name: debt_fx_share
-    group: bimonetary
-    aurora_value: 0.65
-    lo: 0.21666666666666667
-    hi: 1.9500000000000002
-  - name: default_risk_debt_reserves
-    group: bimonetary
-    aurora_value: 0.35
-    lo: 0.11666666666666665
-    hi: 1.0499999999999998
-  - name: default_risk_fiscal
-    group: bimonetary
-    aurora_value: 0.03
-    lo: 0.01
-    hi: 0.09
-  - name: default_risk_threshold
-    group: bimonetary
-    aurora_value: 0.7
-    lo: 0.0
-    hi: 1.0
     reason: "se compara contra default_risk, acotado a [0,1] (es una probabilidad); un umbral fuera de [0,1] nunca o siempre dispara el default endogeno."
+  - name: ic_rec
+    group: macro
+    aurora_value: 0.01
+    lo: 0.0033333333333333335
+    hi: 0.03
+  - name: ic_target_base
+    group: macro
+    aurora_value: 45.0
+    lo: 15.0
+    hi: 135.0
+  - name: ic_target_bonus
+    group: macro
+    aurora_value: 10.0
+    lo: 3.3333333333333335
+    hi: 30.0
+  - name: t_rec
+    group: macro
+    aurora_value: 0.02
+    lo: 0.006666666666666667
+    hi: 0.06
+  - name: recovery_inflation_max
+    group: macro
+    aurora_value: 3.0
+    lo: 1.0
+    hi: 9.0
+  - name: recovery_unemployment_max
+    group: macro
+    aurora_value: 10.0
+    lo: 3.3333333333333335
+    hi: 30.0
+  - name: e_rev_sentiment_k
+    group: macro
+    aurora_value: 10.0
+    lo: 3.3333333333333335
+    hi: 30.0

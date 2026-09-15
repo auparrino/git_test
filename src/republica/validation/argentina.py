@@ -53,11 +53,17 @@ from republica.world.countries import (
 #: `tests/test_validation_argentina.py::test_hypotheses_match_adr_text` las
 #: compara caracter a caracter contra `docs/ADR_011_country_pack_argentina.md`:
 #: si alguien edita el ADR despues de correr A4, el test falla y obliga a
-#: re-registrar (no se puede reescribir la hipotesis para que de).
+#: re-registrar (no se puede reescribir la hipotesis para que de). `V4` (A5,
+#: ADR 012 secc. 6) NO viene de esa tabla -- es la hipotesis registrada en
+#: la tarea de recalibracion misma, textual, y por eso queda FUERA del
+#: alcance de ese test (que solo itera sobre las filas que encuentra en el
+#: ADR 011, `V1`/`V2`/`V3`/`C`).
 HYPOTHESES: dict[str, str] = {
     "V1": "el modelo entra en `hyperinflation` en 12–24 meses en > 50 % de semillas",
     "V2": "`sovereign_default` o `collapse` en 36–54 meses en > 50 %",
     "V3": "inflación anual final > 80 % en la mediana y el oficialismo pierde en 2019 y 2023",
+    "V4": "el oficialismo pierde en > 70 % de semillas y la inflación anual final mediana "
+    "supera 100 %",
     "C": "Aurora sin calibrar falla al menos una de las tres",
 }
 
@@ -66,6 +72,7 @@ METRICS: dict[str, str] = {
     "V1": "fracción de semillas, mes mediano",
     "V2": "idem + trayectoria de reservas vs real",
     "V3": "error de inflación, aciertos electorales",
+    "V4": "fracción de semillas con derrota electoral, inflación anual final mediana",
     "C": 'la diferencia con el calibrado es el "valor" de la calibración',
 }
 
@@ -74,8 +81,16 @@ ADR_FORCED_SHOCKS: dict[str, str] = {
     "V1": "solo exógenos (commodities, mundo) — **no** se fuerza la hiper",
     "V2": "crisis internacional 1998–99 (Rusia, Brasil)",
     "V3": "sequía 2018, pandemia 2020, sequía 2023",
+    "V4": "pandemia 2020, sequía 2023, FMI 2022 (todos exógenos)",
     "C": "los mismos",
 }
+
+#: Pruebas que se corren por default (`republica validate` sin `--tests`):
+#: V4 (A5, ADR 012 secc. 6) queda AFUERA -- depende de que el paquete traiga
+#: partidos argentinos por epoca (ADR 013, en curso en paralelo, ver
+#: `_v4_blocked_reason`). Pedirla explicito con `--tests V4` la intenta
+#: igual (y la salta con aviso si el paquete todavia no trae esa epoca)."""
+DEFAULT_TEST_IDS: tuple[str, ...] = ("V1", "V2", "V3")
 
 #: Brazos de cada prueba: `calibrated` usa `calibration/<run_id>/`,
 #: `aurora` los coeficientes de `country.json` sin tocar (la fila C del ADR).
@@ -159,6 +174,27 @@ TESTS: tuple[ValidationTest, ...] = (
         real_series_label="IPC, variación anual (Banco Mundial, serie empalmada)",
         y_label="inflación anualizada (%)",
     ),
+    #: V4 (A5, ADR 012 secc. 6): NO se corre todavia -- depende de ADR 013
+    #: (partidos argentinos por epoca), en curso en paralelo. Definicion
+    #: registrada AHORA, antes de tener resultados (mismo protocolo que
+    #: V1-V3), para que `--tests V4` no pueda "ajustarse" a los resultados
+    #: de A6/A7 en curso; `run_validation` la salta con aviso si el paquete
+    #: no trae epoca de partidos para `start` (`_v4_blocked_reason`).
+    ValidationTest(
+        test_id="V4",
+        title="V4 2019-12→2023-12: ¿pierde el oficialismo con partidos argentinos?",
+        start="2019-12",
+        months=48,
+        fx_regime=None,  # "auto" (ADR 012 deliverable 5): control desde 2019-09 (fx_regimes.csv)
+        shock_requests=(
+            ShockRequest("epidemic", "2020-01", "2020-12", "pandemia 2020"),
+            ShockRequest("drought", "2023-01", "2023-12", "sequía 2023"),
+            ShockRequest("imf_program", "2022-01", "2022-12", "FMI 2022"),
+        ),
+        real_series="inflation_annual",
+        real_series_label="IPC, variación anual (Banco Mundial, serie empalmada)",
+        y_label="inflación anualizada (%)",
+    ),
 )
 
 TESTS_BY_ID = {t.test_id: t for t in TESTS}
@@ -183,6 +219,23 @@ def month_date(start: str, month_index: int) -> str:
     return f"{sy + total // 12:04d}-{total % 12 + 1:02d}"
 
 
+#: Shocks ENDOGENOS (A5, ADR 012 secc. 6): lo que el motor deberia producir
+#: por su propia dinamica dado el estado inicial y los shocks EXOGENOS,
+#: no algo que se le fuerza desde afuera -- forzarlos convertiria la prueba
+#: en "reproduce 1989 porque se le forzo 1989", exactamente lo que
+#: `PLAN_ARGENTINA.md` #0.3 prohibe ("no predijo nada"). `resolve_forced_
+#: shocks` nunca los aplica, sin importar que pida `ValidationTest.
+#: shock_requests` (defensivo: hoy ningun `ShockRequest` de `TESTS` pide
+#: uno de estos, pero la lista existe para que un `ShockRequest` futuro mal
+#: escrito no los cuele en silencio). `coup`/`hyperinflation_regime` no son
+#: `shock_id` del catalogo (`hyperinflation_regime` SI lo es, ver
+#: `data/countries/argentina/shocks.json`); se incluyen los cuatro que
+#: podrian confundirse con "la crisis que se esta prediciendo" en V1/V2.
+ENDOGENOUS_SHOCKS: frozenset[str] = frozenset(
+    {"hyperinflation_regime", "sovereign_default", "banking_crisis", "coup"}
+)
+
+
 def _read_shocks_calendar(pack_dir: Path) -> list[dict[str, str]]:
     path = pack_dir / "politics" / "shocks_calendar.csv"
     if not path.exists():
@@ -198,6 +251,10 @@ class ForcedShockPlan:
 
     forced: dict[int, list[str]] = field(default_factory=dict)
     requested: list[dict] = field(default_factory=list)
+    #: `shock_id` que `test.shock_requests` pidio pero `resolve_forced_
+    #: shocks` REHUSO forzar por estar en `ENDOGENOUS_SHOCKS` (A5, ADR 012
+    #: secc. 6) -- vacia salvo que un `ShockRequest` futuro pida uno.
+    excluded_endogenous: list[str] = field(default_factory=list)
 
     @property
     def applied_rows(self) -> list[dict]:
@@ -211,10 +268,27 @@ class ForcedShockPlan:
 def resolve_forced_shocks(pack_dir: Path, test: ValidationTest, months: int) -> ForcedShockPlan:
     """Traduce los `ShockRequest` del ADR a `{mes: [shock_id]}` consultando
     `politics/shocks_calendar.csv`. Cada pedido queda registrado con las
-    filas del calendario que lo satisfacen (puede ser ninguna)."""
+    filas del calendario que lo satisfacen (puede ser ninguna). `shock_id`
+    en `ENDOGENOUS_SHOCKS` (A5, ADR 012 secc. 6) NUNCA se fuerza -- eso es
+    lo que la prueba mide, no un dato que se le regale al modelo; queda
+    registrado en `plan.excluded_endogenous`/`registration.json` para que
+    el reporte diga explicitamente que se exlcuyo."""
     rows = _read_shocks_calendar(pack_dir)
     plan = ForcedShockPlan()
+    excluded: list[str] = []
     for req in test.shock_requests:
+        if req.shock_id in ENDOGENOUS_SHOCKS:
+            excluded.append(req.shock_id)
+            plan.requested.append(
+                {
+                    "shock_id": req.shock_id,
+                    "label": req.label,
+                    "window": f"{req.date_from}:{req.date_to}",
+                    "matched": [],
+                    "excluded_endogenous": True,
+                }
+            )
+            continue
         matched: list[dict] = []
         for row in rows:
             if row["shock_id"] != req.shock_id:
@@ -243,6 +317,7 @@ def resolve_forced_shocks(pack_dir: Path, test: ValidationTest, months: int) -> 
                 "matched": matched,
             }
         )
+    plan.excluded_endogenous = excluded
     return plan
 
 
@@ -318,18 +393,63 @@ def run_test_arm(
     """Corre `seeds` semillas de `test` con el brazo `arm`
     (`calibrated`/`aurora`). Todo lo demas (estado inicial real, calendario
     de regimen, exogenas reales, features de `country.json`) es identico
-    entre brazos: la UNICA diferencia es el vector de coeficientes."""
+    entre brazos: la UNICA diferencia es el vector de coeficientes.
+
+    A5 (ADR 012 secc. 6): si `country.features.macro_regime` esta prendido
+    (Argentina, desde ADR 012), ambos brazos corren con `macro_coefficients`
+    -- `"aurora"` con el macro del paquete (`pack.macro_coefficients`, ADR
+    012 sin calibrar, mismo criterio que `cli.py`'s `republica run` sin
+    `--calibration`), `"calibrated"` con el macro de `calibration_run_id`
+    SI esa calibracion lo trae (`load_calibrated_country` devuelve `None`
+    para una calibracion vieja sin macro, p.ej. `a3_main`: en ese caso el
+    brazo `"calibrated"` queda sin macro, igual que antes de A5). El
+    regimen cambiario efectivo (`fx_regime`, ADR 012 secc. 3) se resuelve
+    `test.fx_regime` (V2 pide `peg`) o, si la prueba no fuerza uno,
+    `pack.fx_regime_auto` (el regimen REAL de `test.start` segun
+    `fx_regimes.csv`, deliverable 5 del ADR) -- mas fiel que el default fijo
+    de `BimonetaryCoefficients.fx_regime_default` que se usaba antes de A5.
+
+    ADR 013 secc. 1/3 (integrado en paralelo, HEAD `a2e0b6a`): si el
+    paquete resolvio una epoca de partidos para `test.start`
+    (`pack.era.parties is not None` -- hoy cubre las 4 pruebas: 1983-2001
+    para V1/V2, 2015-2023 para V3/V4), sus actores/lealtades/gobernanza
+    reemplazan a los de Aurora, MISMO criterio que `cli.py`'s `republica
+    run` (`era_actors`/`era_loyalty_table`/`era_gov_overrides`): sin esto,
+    `country.parties` ya saldria con los partidos de la epoca (via
+    `merged/parties.json`, hecho por `load_country_pack`) pero la eleccion
+    usaria una `LoyaltyTable` sin ninguna entrada para esos partidos
+    (lealtad 0 para todos) y el `ActorEngine` seguiria con los 29 actores
+    de Aurora -- el mismo bug que el fix de `cli.py` corrigio para
+    `republica run`."""
     from dataclasses import replace as dc_replace
 
     country = pack.country
     bimonetary = pack.bimonetary_coefficients
+    macro_active = country.features.get("macro_regime", False)
+    macro = pack.macro_coefficients if macro_active else None
     if arm == "calibrated":
         from republica.calibration.run import load_calibrated_country
 
-        coeff, bimonetary = load_calibrated_country("argentina", calibration_run_id)
+        coeff, bimonetary, calibrated_macro = load_calibrated_country(
+            "argentina", calibration_run_id
+        )
         country = country.model_copy(update={"coefficients": coeff})
+        if macro_active and calibrated_macro is not None:
+            macro = calibrated_macro
     if test.fx_regime:
         bimonetary = dc_replace(bimonetary, fx_regime_default=test.fx_regime)
+    resolved_fx_regime = test.fx_regime or pack.fx_regime_auto
+
+    era_actors = None
+    era_loyalty_table = None
+    era_gov_overrides: dict[str, str] = {}
+    if pack.era is not None and pack.era.parties is not None:
+        era_actors = pack.era.actors
+        era_loyalty_table = pack.era.loyalty_table
+        if pack.era.governance_path is not None and pack.era.governance_path.exists():
+            from republica.world.eras import era_governance_overrides
+
+            era_gov_overrides = era_governance_overrides(pack.era.governance_path)
 
     exogenous = historical_exogenous_series(
         pack.pack_dir, int(test.start[:4]), int(test.start[5:7]), months
@@ -352,15 +472,22 @@ def run_test_arm(
             forced_shocks={k: list(v) for k, v in plan.forced.items()} or None,
             country=country,
             actors_enabled=features.get("actors", True),
+            actors=era_actors,
             congress_enabled=features.get("congress", True),
             negotiation_enabled=features.get("negotiation", True),
             cohorts_enabled=features.get("cohorts", True),
             media_enabled=features.get("media", True),
             memory_enabled=features.get("memory", True),
             elections_enabled=features.get("elections", True),
+            loyalty_table=era_loyalty_table,
+            governance_overrides=era_gov_overrides or None,
             regime_calendar=pack.regime_calendar,
             bimonetary_coefficients=bimonetary,
             historical_exogenous=exogenous,
+            macro_coefficients=macro,
+            macro_x0=pack.macro_x0 if macro is not None else None,
+            macro_m0=pack.macro_m0 if macro is not None else None,
+            fx_regime=resolved_fx_regime if macro is not None else test.fx_regime,
         )
         runs.append(_history_to_seed_run(seed, history, forced_ids))
     return runs
@@ -540,6 +667,42 @@ def metrics_v3(runs: list[SeedRun], months: int, resamples: int) -> dict:
     }
 
 
+def metrics_v4(runs: list[SeedRun], months: int, resamples: int) -> dict:
+    """A5 (ADR 012 secc. 6), V4 (definicion registrada, NO se corre todavia
+    -- ver `TESTS`/`_v4_block_reason`): el oficialismo pierde en > 70 % de
+    semillas y la inflacion anual final mediana supera 100 %. A diferencia
+    de `metrics_v3` (que ata el acierto a DOS fechas nominales fijas,
+    `V3_REAL_ELECTIONS`), aca se busca CUALQUIER eleccion dentro de la
+    ventana con `outcome_type == "defeated"` -- V4 cubre un solo mandato
+    (48 meses desde una asuncion de diciembre), asi que se espera una sola
+    eleccion de fin de mandato, pero atarse a una fecha nominal exacta
+    (`month_date` da 2023-11, no 2023-12, para el mes 48 desde 2019-12) es
+    mas fragil que solo preguntar si HUBO una derrota."""
+    finals = [r.inflation_annual_final for r in runs]
+    med = statistics.median(finals)
+    lo, hi = bootstrap_ci(finals, statistics.median, resamples=resamples)
+    hits = [any(e["outcome_type"] == "defeated" for e in r.elections) for r in runs]
+    frac = _fraction(hits)
+    e_lo, e_hi = bootstrap_ci(
+        [1.0 if h else 0.0 for h in hits], statistics.mean, resamples=resamples
+    )
+    inflation_ok = med > 100.0
+    election_ok = frac > 0.7
+    return {
+        "inflation_annual_final_median": med,
+        "inflation_annual_final_ci": [lo, hi],
+        "inflation_threshold": 100.0,
+        "inflation_passes": inflation_ok,
+        "election_defeat_fraction": frac,
+        "election_defeat_fraction_ci": [e_lo, e_hi],
+        "election_threshold": 0.7,
+        "election_passes": election_ok,
+        "outcomes": _outcome_counts(runs),
+        "median_months_run": statistics.median([float(r.months_run) for r in runs]),
+        "passes": inflation_ok and election_ok,
+    }
+
+
 def _outcome_counts(runs: list[SeedRun]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for r in runs:
@@ -613,11 +776,43 @@ class ValidationResult:
     diagnostics: dict = field(default_factory=dict)
 
 
-def inflation_persistence() -> dict[str, float]:
+def macro_price_mechanism(calibration_run_id: str) -> dict | None:
+    """A5 (ADR 012 secc. 6): coeficientes de precios de la capa MACRO (ADR
+    012 secc. 2: `rho_eff = rho_pi + rho_slope·clamp(...)`, distinto de la
+    vieja `rho_pi + c_e` de `inflation_persistence`) para Aurora/Argentina
+    (`country.json -> macro`) y para `calibration_run_id`, si esa
+    calibracion trajo el grupo `"macro"` -- `None` si no (`a3_main`, y
+    entonces `_lessons_section` usa `inflation_persistence` como antes de
+    A5)."""
+    from republica.calibration.run import CALIBRATION_ROOT
+
+    country_raw = json.loads(
+        (country_pack_dir("argentina") / "country.json").read_text(encoding="utf-8")
+    )
+    aurora_macro = (country_raw.get("macro") or {}).get("coefficients", {})
+    path = CALIBRATION_ROOT / calibration_run_id / "coefficients.json"
+    if not path.exists():
+        return None
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    cal_macro = raw.get("macro")
+    if not cal_macro:
+        return None
+    fields = ("rho_pi", "rho_slope", "pi_hi", "c_e", "c_s", "w_adapt", "md_0", "md_pi")
+    return {
+        "aurora": {k: aurora_macro.get(k) for k in fields},
+        "calibrated": {k: cal_macro.get(k) for k in fields},
+    }
+
+
+def inflation_persistence(calibration_run_id: str = "a3_main") -> dict[str, float]:
     """`rho_pi + c_e`, el coeficiente TOTAL sobre la inflacion del mes
     anterior en `world/economy.py` (§4.3 + §4.2: `de` arranca en `π_t`), leido
     de disco para Aurora y para la calibracion. > 1 seria una dinamica
-    explosiva (hiperinflacion endogena posible); < 1 es una contraccion."""
+    explosiva (hiperinflacion endogena posible); < 1 es una contraccion.
+    Metrica de la ecuacion VIEJA (sin macro, ADR 011) -- se sigue calculando
+    igual para no romper reportes anteriores a A5, pero cuando la
+    calibracion trae macro (ver `macro_price_mechanism`) el mecanismo
+    operativo real es `rho_eff` (ADR 012 secc. 2), no esto."""
     from republica.calibration.run import CALIBRATION_ROOT
     from republica.world.config import DEFAULT_DATA_DIR
 
@@ -626,7 +821,7 @@ def inflation_persistence() -> dict[str, float]:
     ]
     out = {"aurora_rho_pi": aurora["rho_pi"], "aurora_c_e": aurora["c_e"]}
     out["aurora_total"] = out["aurora_rho_pi"] + out["aurora_c_e"]
-    path = CALIBRATION_ROOT / "a3_main" / "coefficients.json"
+    path = CALIBRATION_ROOT / calibration_run_id / "coefficients.json"
     if path.exists():
         cal = json.loads(path.read_text(encoding="utf-8"))["coefficients"]
         out["calibrated_rho_pi"] = cal["rho_pi"]
@@ -678,37 +873,122 @@ def initial_state_provenance(pack: CountryPack, start: str) -> dict:
     return {"counts": counts, "variables": by_kind, "n_variables": len(coverage)}
 
 
+def _calibration_window(calibration_run_id: str) -> dict[str, tuple[str, str]] | None:
+    """`train`/`holdout` de `calibration/<calibration_run_id>/
+    coefficients.json`, para declarar si una prueba de validacion cae
+    IN-SAMPLE (dentro de train) o en HOLDOUT (A5, ADR 012 secc. 6: V3
+    2016-2023 ahora esta dentro del train `1992-01:2023-12`, y V1 1988-1990
+    dentro del holdout `1983-12:1991-12` -- se declara explicitamente en vez
+    de dejarlo implicito)."""
+    from republica.calibration.run import CALIBRATION_ROOT
+
+    path = CALIBRATION_ROOT / calibration_run_id / "coefficients.json"
+    if not path.exists():
+        return None
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    train = raw.get("train")
+    holdout = raw.get("holdout")
+    if not train or not holdout:
+        return None
+    return {"train": (train[0], train[1]), "holdout": (holdout[0], holdout[1])}
+
+
+def sample_declaration(window: dict[str, tuple[str, str]] | None, test: ValidationTest) -> str:
+    """Declaracion IN-SAMPLE/HOLDOUT/fuera-de-ventana de `test` contra el
+    `train`/`holdout` de la calibracion usada (A5, ADR 012 secc. 6, pedido
+    explicito: "Declarar explícitamente que V3 ... ahora es in-sample ...
+    y que V1 ... está en el holdout")."""
+    if window is None:
+        return (
+            "sin ventana de train/holdout registrada (la calibracion no trae "
+            "`coefficients.json` con `train`/`holdout`, o es anterior a A5)."
+        )
+    end = month_date(test.start, test.months)
+
+    def within(rng: tuple[str, str]) -> bool:
+        return rng[0] <= test.start and end <= rng[1]
+
+    if within(window["train"]):
+        return (
+            f"IN-SAMPLE: {test.start}..{end} cae dentro del train de la calibracion "
+            f"({window['train'][0]}:{window['train'][1]}) -- el modelo VIO estos datos al "
+            "calibrarse; esta prueba no mide generalizacion."
+        )
+    if within(window["holdout"]):
+        return (
+            f"HOLDOUT: {test.start}..{end} cae dentro del holdout de la calibracion "
+            f"({window['holdout'][0]}:{window['holdout'][1]}) -- el modelo NO vio estos datos "
+            "al calibrarse (se corre una sola vez, PLAN_ARGENTINA.md #0.3/#4)."
+        )
+    return (
+        f"NI IN-SAMPLE NI HOLDOUT: {test.start}..{end} cae fuera de train "
+        f"({window['train'][0]}:{window['train'][1]}) y de holdout "
+        f"({window['holdout'][0]}:{window['holdout'][1]}) de la calibracion."
+    )
+
+
+def _v4_block_reason(pack: CountryPack) -> str | None:
+    """`None` si el paquete trae una epoca de partidos argentinos que cubre
+    `V4.start` (ADR 013, en curso en paralelo) -- si no, la razon por la
+    que V4 se salta (A5, ADR 012 secc. 6: "dejá la definición de V4 lista
+    ... detrás de una condición para que validate la salte con aviso si el
+    pack no trae época de partidos")."""
+    if pack.era is not None and pack.era.parties is not None:
+        return None
+    return (
+        "el paquete de Argentina todavía no trae una época de partidos (ADR 013, en curso "
+        f"en paralelo) que cubra {TESTS_BY_ID['V4'].start} -- se corre cuando ADR 013 esté "
+        "integrado."
+    )
+
+
 def build_registration(
-    tests: list[ValidationTest], months_cap: int | None, calibration_run_id: str, seeds: int
+    tests: list[ValidationTest],
+    months_cap: int | None,
+    calibration_run_id: str,
+    seeds: int,
+    v4_block_reasons: dict[str, str] | None = None,
 ) -> dict:
     """El registro que se escribe ANTES de correr nada (hipotesis, shocks
     forzados pedidos vs. efectivamente aplicables, procedencia del estado
-    inicial). Ver docstring del modulo."""
+    inicial). Ver docstring del modulo. `v4_block_reasons` (A5, ADR 012
+    secc. 6): `{test_id: razon}` de las pruebas que se registran pero NO se
+    corren (hoy solo puede pasar con `V4`) -- se documenta igual la
+    hipotesis/shocks pedidos (protocolo de honestidad: la definicion queda
+    fijada ANTES de saber si se puede correr), marcando `"skipped"`."""
+    v4_block_reasons = v4_block_reasons or {}
     pack_dir = country_pack_dir("argentina")
+    window = _calibration_window(calibration_run_id)
     entries = []
     for test in tests:
         months = min(test.months, months_cap) if months_cap else test.months
         plan = resolve_forced_shocks(pack_dir, test, months)
-        pack = _load_pack(test, months)
-        entries.append(
-            {
-                "test_id": test.test_id,
-                "title": test.title,
-                "hypothesis": HYPOTHESES[test.test_id],
-                "metric": METRICS[test.test_id],
-                "adr_forced_shocks": ADR_FORCED_SHOCKS[test.test_id],
-                "start": test.start,
-                "months": months,
-                "months_adr": test.months,
-                "fx_regime": test.fx_regime,
-                "forced_shocks_requested": plan.requested,
-                "forced_shocks_applied": {str(k): v for k, v in sorted(plan.forced.items())},
-                "initial_state_provenance": initial_state_provenance(pack, test.start),
-                "random_shocks_enabled": True,
-            }
-        )
+        skip_reason = v4_block_reasons.get(test.test_id)
+        entry = {
+            "test_id": test.test_id,
+            "title": test.title,
+            "hypothesis": HYPOTHESES[test.test_id],
+            "metric": METRICS[test.test_id],
+            "adr_forced_shocks": ADR_FORCED_SHOCKS[test.test_id],
+            "start": test.start,
+            "months": months,
+            "months_adr": test.months,
+            "fx_regime": test.fx_regime,
+            "forced_shocks_requested": plan.requested,
+            "forced_shocks_applied": {str(k): v for k, v in sorted(plan.forced.items())},
+            "forced_shocks_excluded_endogenous": plan.excluded_endogenous,
+            "sample_declaration": sample_declaration(window, test),
+            "random_shocks_enabled": True,
+            "skipped": skip_reason is not None,
+        }
+        if skip_reason is not None:
+            entry["skipped_reason"] = skip_reason
+        else:
+            pack = _load_pack(test, months)
+            entry["initial_state_provenance"] = initial_state_provenance(pack, test.start)
+        entries.append(entry)
     return {
-        "adr": "ADR 011 secc. 8 (A4)",
+        "adr": "ADR 011 secc. 8 (A4) / ADR 012 secc. 6 (A5, V4)",
         "registered_before_running": True,
         "country": "argentina",
         "calibration_run_id": calibration_run_id,
@@ -734,17 +1014,37 @@ def run_validation(
     make_plots: bool = True,
     progress=None,
 ) -> dict:
-    """Corre A4 completo y escribe `registration.json`, `results.json`,
-    `report.md` y `plots/` en `out_dir`."""
-    tests = [TESTS_BY_ID[t] for t in (test_ids or [t.test_id for t in TESTS])]
+    """Corre A4/A5 completo y escribe `registration.json`, `results.json`,
+    `report.md` y `plots/` en `out_dir`. `test_ids=None` corre
+    `DEFAULT_TEST_IDS` (V1-V3, NO V4 -- ver `TESTS`); pedir `V4`
+    explícitamente (`test_ids=["V4"]` o `--tests V1,V2,V3,V4`) la intenta
+    igual y la salta con aviso (`_v4_block_reason`) si el paquete no trae
+    partidos por época todavía (ADR 013, en curso en paralelo)."""
+    requested = [TESTS_BY_ID[t] for t in (test_ids or list(DEFAULT_TEST_IDS))]
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    registration = build_registration(tests, months_cap, calibration_run_id, seeds)
+    pack_dir = country_pack_dir("argentina")
+    v4_block_reasons: dict[str, str] = {}
+    tests: list[ValidationTest] = []
+    for test in requested:
+        if test.test_id == "V4":
+            months = min(test.months, months_cap) if months_cap else test.months
+            v4_pack = _load_pack(test, months)
+            reason = _v4_block_reason(v4_pack)
+            if reason is not None:
+                v4_block_reasons["V4"] = reason
+                if progress:
+                    progress(f"V4 SALTADA: {reason}")
+                continue
+        tests.append(test)
+
+    registration = build_registration(
+        requested, months_cap, calibration_run_id, seeds, v4_block_reasons
+    )
     (out_dir / "registration.json").write_text(
         json.dumps(registration, indent=2, ensure_ascii=False), encoding="utf-8"
     )
 
-    pack_dir = country_pack_dir("argentina")
     results: list[ValidationResult] = []
     t_start = time.perf_counter()
     for test in tests:
@@ -767,6 +1067,8 @@ def run_validation(
                 metrics_by_arm[arm] = metrics_v1(runs, months, resamples)
             elif test.test_id == "V2":
                 metrics_by_arm[arm] = metrics_v2(runs, months, resamples, real)
+            elif test.test_id == "V4":
+                metrics_by_arm[arm] = metrics_v4(runs, months, resamples)
             else:
                 metrics_by_arm[arm] = metrics_v3(runs, months, resamples)
         diagnostics: dict = {}
@@ -812,7 +1114,8 @@ def run_validation(
             for r in results
         ],
         "control_verdict": control_verdict(results),
-        "inflation_persistence": inflation_persistence(),
+        "inflation_persistence": inflation_persistence(calibration_run_id),
+        "v4_skipped_reasons": v4_block_reasons,
         "honesty_sentence": HONESTY_SENTENCE,
     }
     (out_dir / "results.json").write_text(
@@ -1019,10 +1322,10 @@ def _provenance_block(entry: dict) -> list[str]:
     return lines
 
 
-def _comparison_table(results: list[ValidationResult]) -> list[str]:
+def _comparison_table(results: list[ValidationResult], calibration_run_id: str) -> list[str]:
     lines = [
-        "| prueba | métrica principal | calibrado (`a3_main`) | Aurora sin calibrar | "
-        "veredicto calibrado | veredicto Aurora |",
+        f"| prueba | métrica principal | calibrado (`{calibration_run_id}`) | "
+        "Aurora sin calibrar | veredicto calibrado | veredicto Aurora |",
         "|---|---|---|---|---|---|",
     ]
     for res in results:
@@ -1048,6 +1351,18 @@ def _comparison_table(results: list[ValidationResult]) -> list[str]:
                 f"{_fmt_pct(aur['default_or_collapse_fraction'])} "
                 f"IC95 {_fmt_pct_ci(aur['default_or_collapse_fraction_ci'])}"
             )
+        elif res.test_id == "V4":
+            label = "inflación final (umbral 100 %) y derrota electoral (umbral 70 %)"
+            cv = (
+                f"infl {_fmt(cal['inflation_annual_final_median'], 1, ' %')}, derrota "
+                f"{_fmt_pct(cal['election_defeat_fraction'])} "
+                f"IC95 {_fmt_pct_ci(cal['election_defeat_fraction_ci'])}"
+            )
+            av = (
+                f"infl {_fmt(aur['inflation_annual_final_median'], 1, ' %')}, derrota "
+                f"{_fmt_pct(aur['election_defeat_fraction'])} "
+                f"IC95 {_fmt_pct_ci(aur['election_defeat_fraction_ci'])}"
+            )
         else:
             label = "mediana de la inflación anualizada final (umbral 80 %)"
             cv = (
@@ -1069,12 +1384,13 @@ def _test_section(res: ValidationResult, entry: dict, plot: str | None) -> list[
     test = TESTS_BY_ID[res.test_id]
     cal = res.metrics_by_arm["calibrated"]
     aur = res.metrics_by_arm["aurora"]
+    adr_ref = "ADR 011 §8" if test.test_id != "V4" else "A5, ADR 012 secc. 6"
     lines = [
         f"## {test.title}",
         "",
-        f"**Hipótesis registrada antes de correr (ADR 011 §8, literal):** *{entry['hypothesis']}*",
+        f"**Hipótesis registrada antes de correr ({adr_ref}, literal):** *{entry['hypothesis']}*",
         "",
-        f"**Métrica (ADR 011 §8, literal):** *{entry['metric']}*",
+        f"**Métrica ({adr_ref}, literal):** *{entry['metric']}*",
         "",
         f"Corrida: `--country argentina --start {test.start}` × "
         f"{entry['months']} meses × {len(res.runs_by_arm['calibrated'])} semillas por brazo"
@@ -1125,6 +1441,33 @@ def _test_section(res: ValidationResult, entry: dict, plot: str | None) -> list[
             "",
             "Baseline ingenuo de reservas (persistencia: reservas reales congeladas en el nivel "
             f"real de {test.start}): RMSE {_fmt(cal['reserves_rmse_persistence'], 0)} USD M.",
+        ]
+    elif res.test_id == "V4":
+        lines += [
+            "| brazo | inflación anualizada final (mediana) | IC95 | derrota electoral "
+            "(cualquier elección de la ventana) | IC95 | meses simulados (mediana) | outcomes |",
+            "|---|---|---|---|---|---|---|",
+        ]
+        for arm, m in (("calibrated", cal), ("aurora", aur)):
+            lines.append(
+                f"| {ARM_LABELS[arm]} | {_fmt(m['inflation_annual_final_median'], 1, ' %')} | "
+                f"{_fmt_ci(m['inflation_annual_final_ci'], 1, ' %')} | "
+                f"{_fmt_pct(m['election_defeat_fraction'])} | "
+                f"{_fmt_pct_ci(m['election_defeat_fraction_ci'])} | "
+                f"{_fmt(m['median_months_run'], 0)} | {m['outcomes']} |"
+            )
+        n_cal_total = sum(cal["outcomes"].values())
+        n_cal_collapse = cal["outcomes"].get("collapse", 0) + cal["outcomes"].get(
+            "hyperinflation", 0
+        )
+        lines += [
+            "",
+            f"Semillas calibradas que terminan antes de los {entry['months']} meses "
+            f"(`collapse`/`hyperinflation`, la elección de fin de mandato puede no llegar a "
+            f"celebrarse): {n_cal_collapse} de {n_cal_total}. Si esa fracción es alta, la "
+            "hipótesis electoral de V4 no se puede evaluar con la misma confianza que la de "
+            "inflación: en esas semillas la corrida termina antes de que se celebre la elección "
+            "de fin de mandato.",
         ]
     else:
         lines += [
@@ -1350,11 +1693,21 @@ def write_report(
 ) -> Path:
     entries = {e["test_id"]: e for e in registration["tests"]}
     control = control_verdict(results)
+    window = _calibration_window(calibration_run_id)
+    window_note = (
+        f"train `{window['train'][0]}:{window['train'][1]}`, holdout "
+        f"`{window['holdout'][0]}:{window['holdout'][1]}`"
+        if window
+        else "ventana de train/holdout no registrada en `coefficients.json`"
+    )
+    has_macro = macro_price_mechanism(calibration_run_id) is not None
+    adr_label = "ADR 012 secc. 6 (A5)" if has_macro else "ADR 011 §8 (A4)"
     lines: list[str] = [
-        "# Validación histórica de Argentina (A4) — ADR 011 §8",
+        f"# Validación histórica de Argentina — {adr_label}",
         "",
-        f"País: `argentina`. Calibración: `{calibration_run_id}` (A3, train `1993-01:2015-12`, "
-        "holdout `2016-01:2023-12`). Brazos: calibrado y **Aurora sin calibrar** (fila C del ADR).",
+        f"País: `argentina`. Calibración: `{calibration_run_id}` ({window_note}). "
+        f"Macro (ADR 012): {'activo' if has_macro else 'inactivo (bloque bimonetario viejo)'}. "
+        "Brazos: calibrado y **Aurora sin calibrar** (fila C del ADR).",
         f"Semillas por prueba y brazo: **{seeds}**. Tiempo de pared total: "
         f"**{wall_seconds:.1f} s** "
         f"({', '.join(f'{r.test_id} {r.wall_seconds:.1f} s' for r in results)}).",
@@ -1363,10 +1716,24 @@ def write_report(
         "en `registration.json` **antes** de correr la primera simulación; este reporte solo "
         "las lee. Métricas crudas por prueba y brazo: `results.json`.",
         "",
-        "## Resumen: los cuatro veredictos",
+    ]
+    skipped = [e for e in registration["tests"] if e.get("skipped")]
+    if skipped:
+        lines += [
+            "## Pruebas registradas pero NO corridas en este reporte",
+            "",
+        ]
+        for e in skipped:
+            lines.append(
+                f"- **{e['test_id']}** ({e['title']}). Hipótesis registrada (no evaluada aún): "
+                f"*{e['hypothesis']}*. Motivo: {e['skipped_reason']}"
+            )
+        lines += [""]
+    lines += [
+        f"## Resumen: los {len(results)} veredicto{'s' if len(results) != 1 else ''}",
         "",
     ]
-    lines += _comparison_table(results)
+    lines += _comparison_table(results, calibration_run_id)
     lines += [
         "",
         f"**C Control.** Hipótesis registrada (ADR 011 §8, literal): *{HYPOTHESES['C']}*. "
@@ -1377,27 +1744,24 @@ def write_report(
         "",
         '### El "valor" de la calibración (fila C del ADR)',
         "",
-        "Ninguno de los dos brazos cumple ninguna de las tres hipótesis, así que la fila C se "
-        "decide por la distancia a la historia métrica por métrica, no por veredictos. La "
-        "columna «real» es el dato histórico correspondiente y la última marca el brazo más "
-        "cercano a ese dato.",
+        "La columna «real» es el dato histórico correspondiente y la última marca el brazo más "
+        "cercano a ese dato métrica por métrica (independiente del veredicto binario de arriba).",
         "",
     ]
     lines += _value_of_calibration_table(results)
     lines += [
         "",
-        "Leído en conjunto: **la calibración de A3 casi no compró nada en el bloque "
-        "económico** (V1 y V3 quedan más lejos de la historia que Aurora sin calibrar; en V2 "
-        f"el RMSE de reservas mejora {_v2_rmse_note(results)}) **y compró mucho en el bloque "
-        f"político**: {_v3_election_note(results)}. El precio de ese mismo ajuste político es "
-        f"que {_v3_collapse_note(results)}.",
+        f"Notas puntuales: RMSE de reservas (V2) calibrado vs Aurora/persistencia: "
+        f"{_v2_rmse_note(results)}. Acierto electoral 2019 (V3): {_v3_election_note(results)}. "
+        f"Supervivencia (V3): {_v3_collapse_note(results)}. Ver la sección «Qué aprendimos del "
+        "modelo» más abajo para la lectura mecánica completa.",
         "",
     ]
     for res in results:
         lines += _test_section(res, entries[res.test_id], plots.get(res.test_id))
 
-    lines += _lessons_section(results)
-    lines += _cannot_conclude_section(results)
+    lines += _lessons_section(results, calibration_run_id)
+    lines += _cannot_conclude_section(results, calibration_run_id)
     lines += [
         "## Limitaciones",
         "",
@@ -1410,11 +1774,179 @@ def write_report(
     return path
 
 
-def _lessons_section(results: list[ValidationResult]) -> list[str]:
+def _lessons_section(results: list[ValidationResult], calibration_run_id: str) -> list[str]:
+    """Dispatcher A5 (ADR 012 secc. 6): `_lessons_section_macro` cuando
+    `calibration_run_id` trae el grupo `"macro"` (a5_macro y sucesores),
+    `_lessons_section_legacy` (la narrativa ORIGINAL de A4, ADR 011, sin
+    tocar) cuando no (`a3_main` -- las afirmaciones de esa narrativa,
+    p.ej. "`--fx-regime peg` es inerte", son ESPECIFICAS del motor sin ADR
+    012 y dejan de ser ciertas con macro activo, asi que NO se reusan para
+    una calibracion que si lo trae)."""
+    if macro_price_mechanism(calibration_run_id) is not None:
+        return _lessons_section_macro(results, calibration_run_id)
+    return _lessons_section_legacy(results)
+
+
+def _lessons_section_macro(results: list[ValidationResult], calibration_run_id: str) -> list[str]:
+    """Explicacion MECANICA para una calibracion CON macro (A5, ADR 012
+    secc. 6): a diferencia de `_lessons_section_legacy` (ADR 011, donde
+    `--fx-regime peg` no hacia nada y las reservas no tenian balance de
+    pagos), aca `step_macro_economy` gobierna precios/regimen cambiario/
+    balance de pagos de verdad -- la narrativa describe ESE mecanismo, con
+    los valores REALES de esta corrida (no reusa ningun numero de A3/A4)."""
+    by_id = {r.test_id: r for r in results}
+    mech = macro_price_mechanism(calibration_run_id) or {}
+    aurora_m = mech.get("aurora", {})
+    cal_m = mech.get("calibrated", {})
+
+    def mv(d: dict, k: str) -> str:
+        v = d.get(k)
+        return "sin dato" if v is None else f"{v:.4g}"
+
+    lines = ["## Qué aprendimos del modelo (A5, ADR 012)", "", "### V1 — hiperinflación", ""]
+    v1 = by_id.get("V1")
+    if v1:
+        cal = v1.metrics_by_arm["calibrated"]
+        aur = v1.metrics_by_arm["aurora"]
+        lines += [
+            "Con macro activo (ADR 012 secc. 2) la persistencia efectiva de la inflación es "
+            "`rho_eff = rho_pi + rho_slope·clamp((inflation_lag1 - pi_hi)/pi_hi, 0, 2)`, no la "
+            "`rho_pi + c_e` fija de la ecuación vieja (ADR 011): con inflación mensual alta "
+            "`rho_eff` puede superar 1 (hiperinflación como régimen alcanzable, no un shock). "
+            f"Valores de esta corrida (`rho_pi`/`rho_slope`/`pi_hi`/`c_s`): Aurora "
+            f"`{mv(aurora_m, 'rho_pi')}`/`{mv(aurora_m, 'rho_slope')}`/`{mv(aurora_m, 'pi_hi')}`/"
+            f"`{mv(aurora_m, 'c_s')}`, calibrado "
+            f"`{mv(cal_m, 'rho_pi')}`/`{mv(cal_m, 'rho_slope')}`/`{mv(cal_m, 'pi_hi')}`/"
+            f"`{mv(cal_m, 'c_s')}`.",
+            "",
+            f"Empíricamente, desde 1988-06 real ({v1.months} meses, sin shocks forzados): "
+            f"{_fmt_pct(cal['hyperinflation_fraction'])} de semillas calibradas "
+            f"(IC95 {_fmt_pct_ci(cal['hyperinflation_fraction_ci'])}) y "
+            f"{_fmt_pct(aur['hyperinflation_fraction'])} de Aurora "
+            f"(IC95 {_fmt_pct_ci(aur['hyperinflation_fraction_ci'])}) cruzan `hyperinflation`; "
+            "inflación mensual mediana final: "
+            f"{_fmt(cal['inflation_monthly_final_median'], 2, ' %')} "
+            f"(calibrado) vs {_fmt(aur['inflation_monthly_final_median'], 2, ' %')} (Aurora), "
+            "contra ~33 %/mes real de 1989 (Banco Mundial). Ver la tabla de arriba (Resumen) "
+            "para el veredicto formal contra la hipótesis registrada.",
+            "",
+        ]
+    lines += ["### V2 — régimen cambiario y balance de pagos", ""]
+    v2 = by_id.get("V2")
+    if v2:
+        cal = v2.metrics_by_arm["calibrated"]
+        inert = v2.diagnostics.get("fx_regime_inertness", {})
+        verdict = (
+            "idénticas estado a estado con la misma semilla (`peg` sigue sin efecto en ESTA "
+            "corrida -- revisar `k_flight_peg`/`k_int` calibrados)"
+            if inert.get("trajectories_identical")
+            else "DISTINTAS (esperado con macro activo: `fx_regime` gobierna `de`, la "
+            "intervención y `k_k` -- ADR 012 secc. 3)"
+        )
+        lines += [
+            "Con macro activo, `fx_regime` gobierna `de` (secc. 3): `peg` fija `de=0` mientras "
+            "`reserves > R_min = rm·importaciones_3m` e interviene vendiendo reservas; si "
+            "`reserves < R_min` salta a `float` (`fx_regime_exit`, `shock_conf` negativo, "
+            "`banking_crisis` con `exit_banking_crisis_p`). Las reservas (secc. 4) son "
+            "`reserves' = reserves + current_account + capital_account - intervention_usd`, "
+            "con `current_account`/`capital_account` dependientes de `commodity_price`/`rer`/"
+            "`r_gap`/`dollar_demand`/`default_risk` -- ya no una caminata sin ancla. "
+            f"Diagnóstico empírico (`fx_regime_inertness`, {inert.get('seeds', 0)} semillas): "
+            f"`peg` vs `float` dan trayectorias {verdict}.",
+            "",
+            f"Reservas: RMSE mediano calibrado {_fmt(cal['reserves_rmse_median'], 0)} USD M "
+            f"contra {_fmt(cal['reserves_rmse_persistence'], 0)} USD M del baseline de "
+            "persistencia (congelar el nivel de 1998-01). Fracción con "
+            f"`sovereign_default`/`collapse` en meses 36-54: "
+            f"{_fmt_pct(cal['default_or_collapse_fraction'])} "
+            f"(IC95 {_fmt_pct_ci(cal['default_or_collapse_fraction_ci'])}). Ver la tabla de "
+            "Resumen para el veredicto formal y `results.json` para la trayectoria completa de "
+            "reservas.",
+            "",
+        ]
+    lines += ["### V3 — inflación y elecciones (in-sample, ver registro)", ""]
+    v3 = by_id.get("V3")
+    if v3:
+        cal = v3.metrics_by_arm["calibrated"]
+        aur = v3.metrics_by_arm["aurora"]
+        applied = (
+            ", ".join(f"`{row['shock_id']}` {row['date']}" for row in v3.plan.applied_rows)
+            or "ninguno"
+        )
+        v3_runs = v3.runs_by_arm["calibrated"]
+        appr0 = statistics.median([r.government_approval[0] for r in v3_runs])
+        appr_last = statistics.median([r.government_approval[-1] for r in v3_runs])
+        n_collapse = cal["outcomes"].get("collapse", 0)
+        lines += [
+            "**Esta ventana (2016-01 + 96 meses) cae DENTRO del train de la calibración "
+            "(`1992-01:2023-12`, A5) -- es in-sample, no una prueba de generalización** (ver "
+            "`registration.json -> tests[].sample_declaration`). Un ajuste aquí puede reflejar "
+            "sobreajuste al propio período, no una propiedad general del modelo.",
+            "",
+            f"Shocks exógenos forzados: {applied}. Inflación anualizada final (mediana): "
+            f"{_fmt(cal['inflation_annual_final_median'], 1, ' %')} (calibrado) vs "
+            f"{_fmt(aur['inflation_annual_final_median'], 1, ' %')} (Aurora), contra ~135 % "
+            "anual real en 2023 (Banco Mundial). Canal electoral (aprobación→cohortes→voto, "
+            "sin cambios de ADR 012): aprobación mediana cae de "
+            f"{appr0:.0f} (2016-01) a {appr_last:.0f} (fin de corrida); oficialismo pierde en "
+            f"2019-12 en {_fmt_pct(cal['elections']['2019-12']['hit_fraction'])} de semillas "
+            f"calibradas vs {_fmt_pct(aur['elections']['2019-12']['hit_fraction'])} de Aurora. "
+            f"`collapse` en {n_collapse} de {sum(cal['outcomes'].values())} semillas "
+            "calibradas -- donde hay `collapse` la elección de 2023 no se celebra (ver "
+            "`elections['2023-12'].n_held` en `results.json`, denominador real del acierto "
+            "electoral de esa fecha).",
+            "",
+        ]
+    lines += ["### V4 — oficialismo y partidos por época (ADR 013)", ""]
+    v4 = by_id.get("V4")
+    if v4:
+        cal = v4.metrics_by_arm["calibrated"]
+        aur = v4.metrics_by_arm["aurora"]
+        n_cal_total = sum(cal["outcomes"].values())
+        n_cal_ended_early = cal["outcomes"].get("collapse", 0) + cal["outcomes"].get(
+            "hyperinflation", 0
+        )
+        lines += [
+            "Corrida desde 2019-12 con los partidos/actores/lealtades de la época 2015-2023 "
+            "(ADR 013, integrado en paralelo -- LLA con `founded 2021`/`outsider_bonus`), NO "
+            "los 29 actores fijos de Aurora. Inflación anualizada final (mediana): "
+            f"{_fmt(cal['inflation_annual_final_median'], 1, ' %')} (calibrado) vs "
+            f"{_fmt(aur['inflation_annual_final_median'], 1, ' %')} (Aurora), contra ~211 % "
+            "anual real dic-2023 (INDEC, diciembre contra diciembre). Derrota electoral "
+            f"(cualquier elección de la ventana): {_fmt_pct(cal['election_defeat_fraction'])} "
+            f"(calibrado) vs {_fmt_pct(aur['election_defeat_fraction'])} (Aurora). Semillas "
+            f"calibradas que terminan antes de los {v4.months} meses "
+            f"(`collapse`/`hyperinflation`): {n_cal_ended_early} de {n_cal_total} -- si esa "
+            "fracción es alta, la hipótesis electoral no se puede evaluar con la misma "
+            "confianza que la de inflación (la corrida termina antes de que se celebre la "
+            "elección de fin de mandato).",
+            "",
+        ]
+    lines += [
+        "### Lo transversal",
+        "",
+        "A diferencia de A4 (ADR 011), el motor con macro activo SI tiene los mecanismos no "
+        "lineales que las tres pruebas necesitan (indexación que se acelera con la inflación, "
+        "un régimen cambiario que puede romperse, reservas con balance de pagos real) -- ver "
+        "los veredictos de la tabla de Resumen para si la MAGNITUD calibrada alcanza los "
+        "umbrales registrados. Calibrar 155 coeficientes (97 económicos + 58 macro) sobre "
+        "`1992-01:2023-12` no garantiza que los umbrales se crucen: los tres episodios "
+        "extremos argentinos son eventos de cola, y la pérdida agregada (RMSE o cola pesada) "
+        "puede preferir un ajuste que promedie bien sobre TODO el período en vez de uno que "
+        "acierte los extremos.",
+        "",
+    ]
+    return lines
+
+
+def _lessons_section_legacy(results: list[ValidationResult]) -> list[str]:
     """Explicacion MECANICA de por que el modelo reprodujo (o no) cada
-    episodio. Los numeros que se citan salen de los coeficientes en disco
+    episodio, para una calibracion SIN macro (ADR 011, p.ej. `a3_main`).
+    Los numeros que se citan salen de los coeficientes en disco
     (`country.json` vs `calibration/a3_main/coefficients.json`) y de las
-    ecuaciones de `world/economy.py`, no de la narrativa del resultado."""
+    ecuaciones de `world/economy.py`, no de la narrativa del resultado. SIN
+    CAMBIOS de contenido respecto de A4 (ver `_lessons_section_macro` para
+    la version con `macro_coefficients`)."""
     by_id = {r.test_id: r for r in results}
     persist = inflation_persistence()
     lines = ["## Qué aprendimos del modelo", "", "### V1 — por qué NO hay hiperinflación", ""]
@@ -1585,7 +2117,75 @@ def _lessons_section(results: list[ValidationResult]) -> list[str]:
     return lines
 
 
-def _cannot_conclude_section(results: list[ValidationResult]) -> list[str]:
+def _cannot_conclude_section(results: list[ValidationResult], calibration_run_id: str) -> list[str]:
+    """Dispatcher A5 (ADR 012 secc. 6): mismo criterio que `_lessons_
+    section` -- los puntos 2/3 de la version legacy afirman cosas que son
+    FALSAS con macro activo (`peg` SI tiene efecto, la ecuacion operativa
+    de precios NO es `rho_pi + c_e`), asi que no se reusan tal cual."""
+    if macro_price_mechanism(calibration_run_id) is not None:
+        return _cannot_conclude_section_macro(results)
+    return _cannot_conclude_section_legacy(results)
+
+
+def _cannot_conclude_section_macro(results: list[ValidationResult]) -> list[str]:
+    by_id: dict[str, ValidationResult] = {r.test_id: r for r in results}
+    lines = [
+        "## Qué NO se puede concluir",
+        "",
+        "1. **Nada sobre la Argentina real.** Estas corridas dicen cómo se comporta República "
+        "Artificial calibrada con datos argentinos. Una hipótesis NO CUMPLIDA es evidencia "
+        "sobre el modelo, no sobre la historia.",
+        "2. **Que un veredicto NO CUMPLIDO signifique que el mecanismo sigue roto.** A "
+        "diferencia de A4 (ADR 011), `rho_eff`/`fx_regime`/balance de pagos (ADR 012) SI "
+        "afectan la simulación (ver `_lessons_section_macro` arriba y los tests de "
+        "`tests/test_macro_regime.py`, que verifican el mecanismo de forma aislada); si una "
+        "hipótesis no se cumple igual, es una cuestión de MAGNITUD/calibración, no de que el "
+        "canal no exista.",
+        "3. **Que V3 (2016→2023) mida generalización.** Esta ventana está DENTRO del train de "
+        "la calibración (`1992-01:2023-12`) -- es in-sample (ver "
+        "`registration.json -> tests[].sample_declaration`). Solo V1 (1988→1990) está en el "
+        "holdout real de esta calibración.",
+    ]
+    v2 = by_id.get("V2")
+    if v2 and v2.plan.unmatched:
+        lines.append(
+            "4. **Que el modelo «no reprodujo 2001 pese a la crisis rusa/brasileña».** Esa crisis "
+            "**no se aplicó**: `politics/shocks_calendar.csv` (dato de A1) no tiene ninguna fila "
+            "entre 1995-01 y 2003-01 — ni la crisis internacional de 1998–99 que pide el ADR, ni "
+            "el corralito/default de diciembre de 2001 que `PLAN_ARGENTINA.md` §1 lista como "
+            "shock histórico. No se agregó la fila para que la prueba «diera» "
+            "(PLAN_ARGENTINA.md §0.1): V2 corrió con cero shocks forzados y eso es lo que mide."
+        )
+    else:
+        lines.append(
+            "4. **Que los shocks forzados expliquen el resultado.** Los forzados están listados "
+            "prueba por prueba arriba; un episodio reproducido en un mes con shock forzado no es "
+            "mérito de la dinámica interna."
+        )
+    lines += [
+        "5. **Que el modelo «falle» la elección de 2023 en el brazo calibrado.** En las "
+        "semillas que terminan en `collapse` antes del mes 96 la elección no llega a ocurrir: "
+        "ese acierto mide supervivencia, no capacidad predictiva electoral.",
+        "6. **Que las elecciones del modelo sean las elecciones reales.** El motor las pone en "
+        "múltiplos de `term_length` desde `--start` (2019-12 y 2023-12), no en octubre de 2019 y "
+        "2023, y no tiene noción de qué partido sintético corresponde a qué lista real: se "
+        "compara sólo `reelected`/`defeated` (misma simplificación declarada en A3).",
+        "7. **Que estos números se generalicen a otras semillas o ventanas.** Los IC 95 % son "
+        "bootstrap sobre las semillas de ESTA corrida: cubren la variabilidad de Monte Carlo, no "
+        "la incertidumbre del estado inicial (con 9–15 de 21 variables `assumed`), ni la de los "
+        "coeficientes, ni la del calendario de shocks.",
+        "8. **Que un `collapse` del motor sea «una crisis argentina».** `collapse` es "
+        "`political_stability < 15` durante 3 meses, un umbral de diseño de Aurora sin "
+        "calibración contra ningún evento histórico.",
+        "",
+    ]
+    return lines
+
+
+def _cannot_conclude_section_legacy(results: list[ValidationResult]) -> list[str]:
+    """Version ORIGINAL de A4 (ADR 011, sin macro) -- SIN CAMBIOS de
+    contenido, ver `_cannot_conclude_section` (dispatcher) y
+    `_cannot_conclude_section_macro`."""
     by_id: dict[str, ValidationResult] = {r.test_id: r for r in results}
     lines = [
         "## Qué NO se puede concluir",

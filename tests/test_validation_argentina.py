@@ -86,7 +86,10 @@ def test_tests_match_adr_start_dates_and_regime() -> None:
     assert TESTS_BY_ID["V2"].start in rows["V2"][0]
     assert "peg" in rows["V2"][0] and TESTS_BY_ID["V2"].fx_regime == "peg"
     assert TESTS_BY_ID["V3"].start in rows["V3"][0]
-    assert [t.months for t in TESTS] == [24, 54, 96]
+    # V4 (A5, ADR 012 secc. 6) no viene del ADR 011: se compara aparte.
+    assert [t.months for t in TESTS if t.test_id != "V4"] == [24, 54, 96]
+    assert TESTS_BY_ID["V4"].start == "2019-12"
+    assert TESTS_BY_ID["V4"].months == 48
 
 
 def test_month_date_indexes_from_one() -> None:
@@ -98,26 +101,31 @@ def test_month_date_indexes_from_one() -> None:
 
 def test_resolve_forced_shocks_never_invents_a_row() -> None:
     """El resolvedor consulta `politics/shocks_calendar.csv`: lo que el
-    calendario no tiene, no se fuerza (PLAN_ARGENTINA.md secc. 0.1)."""
+    calendario no tiene, no se fuerza (PLAN_ARGENTINA.md secc. 0.1). Desde
+    A5 (ADR 012 secc. 6, "completar el calendario de shocks") el calendario
+    SI tiene las filas que V2/V3 piden -- a diferencia de A4, donde
+    quedaban `unmatched` (diagnostico que motivo esta ronda)."""
     pack_dir = country_pack_dir("argentina")
 
     v1 = resolve_forced_shocks(pack_dir, TESTS_BY_ID["V1"], 24)
     assert v1.forced == {}, "V1 no debe forzar ningun shock (ADR: solo exogenos)"
 
     v2 = resolve_forced_shocks(pack_dir, TESTS_BY_ID["V2"], 54)
-    # El calendario de A1 no tiene ninguna fila entre 1995-01 y 2003-01: la
-    # crisis internacional de 1998-99 que pide el ADR queda sin aplicar y
-    # registrada como faltante, no inventada.
-    assert v2.forced == {}
-    assert [req["shock_id"] for req in v2.unmatched] == ["international_crisis"]
+    # A5 agrego `international_crisis` 1998-08-17 (contagio ruso/brasileño)
+    # al calendario: ya no queda `unmatched`.
+    assert v2.forced == {8: ["international_crisis"]}
+    assert month_date("1998-01", 8) == "1998-08"
+    assert v2.unmatched == []
 
     v3 = resolve_forced_shocks(pack_dir, TESTS_BY_ID["V3"], 96)
     applied = {m: ids for m, ids in sorted(v3.forced.items())}
-    assert applied == {51: ["epidemic"], 85: ["drought"]}
+    # A5 agrego la sequia de la campaña 2017/2018 (mes 25); la de 2023 (mes
+    # 85) y la pandemia (mes 51) ya estaban desde A1.
+    assert applied == {25: ["drought"], 51: ["epidemic"], 85: ["drought"]}
+    assert month_date("2016-01", 25) == "2018-01"
     assert month_date("2016-01", 51) == "2020-03"
     assert month_date("2016-01", 85) == "2023-01"
-    # La sequia de 2018 que pide el ADR tampoco esta en el calendario.
-    assert [req["shock_id"] for req in v3.unmatched] == ["drought"]
+    assert v3.unmatched == []
 
 
 def test_hyperinflation_is_never_forced_in_any_test() -> None:
@@ -142,7 +150,7 @@ def test_bootstrap_ci_brackets_the_point_estimate() -> None:
 def test_registration_is_built_without_running_anything() -> None:
     """El registro previo trae hipotesis, shocks forzados y procedencia del
     estado inicial (deliverable 1: "record BEFORE the run")."""
-    reg = build_registration(list(TESTS), None, "a3_main", 50)
+    reg = build_registration([TESTS_BY_ID[t] for t in ("V1", "V2", "V3")], None, "a3_main", 50)
     assert reg["registered_before_running"] is True
     assert reg["honesty_sentence"] == HONESTY_SENTENCE
     by_id = {e["test_id"]: e for e in reg["tests"]}

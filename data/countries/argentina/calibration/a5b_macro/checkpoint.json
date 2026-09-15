@@ -1,0 +1,203 @@
+{
+  "evaluations": 418,
+  "history_rows": [
+    {
+      "evaluations": 19,
+      "generation": 1,
+      "popsize": 19,
+      "best_scalar_this_gen": 28.108912072412295,
+      "mean_scalar_this_gen": 62.476814464572215,
+      "best_scalar_so_far": 28.108912072412295,
+      "wall_seconds": 104.92708277702332
+    },
+    {
+      "evaluations": 38,
+      "generation": 2,
+      "popsize": 19,
+      "best_scalar_this_gen": 29.439796743283598,
+      "mean_scalar_this_gen": 46.68021485260823,
+      "best_scalar_so_far": 28.108912072412295,
+      "wall_seconds": 193.78967761993408
+    },
+    {
+      "evaluations": 57,
+      "generation": 3,
+      "popsize": 19,
+      "best_scalar_this_gen": 27.921748937117737,
+      "mean_scalar_this_gen": 44.05263626572613,
+      "best_scalar_so_far": 27.921748937117737,
+      "wall_seconds": 281.52168464660645
+    },
+    {
+      "evaluations": 76,
+      "generation": 4,
+      "popsize": 19,
+      "best_scalar_this_gen": 26.768755116775317,
+      "mean_scalar_this_gen": 33.66690390892757,
+      "best_scalar_so_far": 26.768755116775317,
+      "wall_seconds": 370.005339384079
+    },
+    {
+      "evaluations": 95,
+      "generation": 5,
+      "popsize": 19,
+      "best_scalar_this_gen": 22.566692014805763,
+      "mean_scalar_this_gen": 31.301381858814167,
+      "best_scalar_so_far": 22.566692014805763,
+      "wall_seconds": 456.1441354751587
+    },
+    {
+      "evaluations": 114,
+      "generation": 6,
+      "popsize": 19,
+      "best_scalar_this_gen": 24.860198185920567,
+      "mean_scalar_this_gen": 35.85757670355969,
+      "best_scalar_so_far": 22.566692014805763,
+      "wall_seconds": 542.8024916648865
+    },
+    {
+      "evaluations": 133,
+      "generation": 7,
+      "popsize": 19,
+      "best_scalar_this_gen": 24.70587569255829,
+      "mean_scalar_this_gen": 29.96813585899984,
+      "best_scalar_so_far": 22.566692014805763,
+      "wall_seconds": 630.8223853111267
+    },
+    {
+      "evaluations": 152,
+      "generation": 8,
+      "popsize": 19,
+      "best_scalar_this_gen": 21.437078671799416,
+      "mean_scalar_this_gen": 29.921276901210717,
+      "best_scalar_so_far": 21.437078671799416,
+      "wall_seconds": 717.0414998531342
+    },
+    {
+      "evaluations": 171,
+      "generation": 9,
+      "popsize": 19,
+      "best_scalar_this_gen": 21.966408917692508,
+      "mean_scalar_this_gen": 26.410077894968744,
+      "best_scalar_so_far": 21.437078671799416,
+      "wall_seconds": 803.6728057861328
+    },
+    {
+      "evaluations": 190,
+      "generation": 10,
+      "popsize": 19,
+      "best_scalar_this_gen": 19.310584526123844,
+      "mean_scalar_this_gen": 24.936214851932125,
+      "best_scalar_so_far": 19.310584526123844,
+      "wall_seconds": 888.134345293045
+    },
+    {
+      "evaluations": 209,
+      "generation": 11,
+      "popsize": 19,
+      "best_scalar_this_gen": 19.43414488029445,
+      "mean_scalar_this_gen": 24.14765239534507,
+      "best_scalar_so_far": 19.310584526123844,
+      "wall_seconds": 973.0750765800476
+    },
+    {
+      "evaluations": 228,
+      "generation": 12,
+      "popsize": 19,
+      "best_scalar_this_gen": 18.869220144249695,
+      "mean_scalar_this_gen": 23.51673968182954,
+      "best_scalar_so_far": 18.869220144249695,
+      "wall_seconds": 1059.4500727653503
+    },
+    {
+      "evaluations": 247,
+      "generation": 13,
+      "popsize": 19,
+      "best_scalar_this_gen": 17.907628930847213,
+      "mean_scalar_this_gen": 20.930452209155618,
+      "best_scalar_so_far": 17.907628930847213,
+      "wall_seconds": 1144.7269268035889
+    },
+    {
+      "evaluations": 266,
+      "generation": 14,
+      "popsize": 19,
+      "best_scalar_this_gen": 18.453246832932507,
+      "mean_scalar_this_gen": 21.35760789091039,
+      "best_scalar_so_far": 17.907628930847213,
+      "wall_seconds": 1229.5012562274933
+    },
+    {
+      "evaluations": 285,
+      "generation": 15,
+      "popsize": 19,
+      "best_scalar_this_gen": 17.77460789724728,
+      "mean_scalar_this_gen": 21.169766709166417,
+      "best_scalar_so_far": 17.77460789724728,
+      "wall_seconds": 1314.925317287445
+    },
+    {
+      "evaluations": 304,
+      "generation": 16,
+      "popsize": 19,
+      "best_scalar_this_gen": 17.30551634860094,
+      "mean_scalar_this_gen": 20.90365054001285,
+      "best_scalar_so_far": 17.30551634860094,
+      "wall_seconds": 1400.3136413097382
+    },
+    {
+      "evaluations": 323,
+      "generation": 17,
+      "popsize": 19,
+      "best_scalar_this_gen": 18.169925215421664,
+      "mean_scalar_this_gen": 20.424831212805906,
+      "best_scalar_so_far": 17.30551634860094,
+      "wall_seconds": 1485.4236133098602
+    },
+    {
+      "evaluations": 342,
+      "generation": 18,
+      "popsize": 19,
+      "best_scalar_this_gen": 17.591221658828953,
+      "mean_scalar_this_gen": 20.3026243526108,
+      "best_scalar_so_far": 17.30551634860094,
+      "wall_seconds": 1570.35231924057
+    },
+    {
+      "evaluations": 361,
+      "generation": 19,
+      "popsize": 19,
+      "best_scalar_this_gen": 17.417335858912036,
+      "mean_scalar_this_gen": 20.413472319887063,
+      "best_scalar_so_far": 17.30551634860094,
+      "wall_seconds": 1656.8506503105164
+    },
+    {
+      "evaluations": 380,
+      "generation": 20,
+      "popsize": 19,
+      "best_scalar_this_gen": 16.814770031909696,
+      "mean_scalar_this_gen": 21.053707841695818,
+      "best_scalar_so_far": 16.814770031909696,
+      "wall_seconds": 1742.593589067459
+    },
+    {
+      "evaluations": 399,
+      "generation": 21,
+      "popsize": 19,
+      "best_scalar_this_gen": 17.581765145579674,
+      "mean_scalar_this_gen": 20.286304303068636,
+      "best_scalar_so_far": 16.814770031909696,
+      "wall_seconds": 1828.0513517856598
+    },
+    {
+      "evaluations": 418,
+      "generation": 22,
+      "popsize": 19,
+      "best_scalar_this_gen": 17.44117953599567,
+      "mean_scalar_this_gen": 20.947688443422745,
+      "best_scalar_so_far": 16.814770031909696,
+      "wall_seconds": 1912.8471658229828
+    }
+  ]
+}
