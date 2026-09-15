@@ -1,0 +1,130 @@
+date,value,unit,source_id
+1820-01-01,534000,persons (Maddison),maddison2020
+1850-01-01,1100000,persons (Maddison),maddison2020
+1870-01-01,1796000,persons (Maddison),maddison2020
+1890-01-01,3376000,persons (Maddison),maddison2020
+1900-01-01,4693000,persons (Maddison),maddison2020
+1901-01-01,4873000,persons (Maddison),maddison2020
+1902-01-01,5060000,persons (Maddison),maddison2020
+1903-01-01,5254000,persons (Maddison),maddison2020
+1904-01-01,5455000,persons (Maddison),maddison2020
+1905-01-01,5664000,persons (Maddison),maddison2020
+1906-01-01,5881000,persons (Maddison),maddison2020
+1907-01-01,6107000,persons (Maddison),maddison2020
+1908-01-01,6341000,persons (Maddison),maddison2020
+1909-01-01,6584000,persons (Maddison),maddison2020
+1910-01-01,6836000,persons (Maddison),maddison2020
+1911-01-01,7098000,persons (Maddison),maddison2020
+1912-01-01,7370000,persons (Maddison),maddison2020
+1913-01-01,7653000,persons (Maddison),maddison2020
+1914-01-01,7885000,persons (Maddison),maddison2020
+1915-01-01,8072000,persons (Maddison),maddison2020
+1916-01-01,8226000,persons (Maddison),maddison2020
+1917-01-01,8374000,persons (Maddison),maddison2020
+1918-01-01,8518000,persons (Maddison),maddison2020
+1919-01-01,8672000,persons (Maddison),maddison2020
+1920-01-01,8861000,persons (Maddison),maddison2020
+1921-01-01,9092000,persons (Maddison),maddison2020
+1922-01-01,9368000,persons (Maddison),maddison2020
+1923-01-01,9707000,persons (Maddison),maddison2020
+1924-01-01,10054000,persons (Maddison),maddison2020
+1925-01-01,10358000,persons (Maddison),maddison2020
+1926-01-01,10652000,persons (Maddison),maddison2020
+1927-01-01,10965000,persons (Maddison),maddison2020
+1928-01-01,11282000,persons (Maddison),maddison2020
+1929-01-01,11592000,persons (Maddison),maddison2020
+1930-01-01,11896000,persons (Maddison),maddison2020
+1931-01-01,12167000,persons (Maddison),maddison2020
+1932-01-01,12402000,persons (Maddison),maddison2020
+1933-01-01,12623000,persons (Maddison),maddison2020
+1934-01-01,12834000,persons (Maddison),maddison2020
+1935-01-01,13044000,persons (Maddison),maddison2020
+1936-01-01,13260000,persons (Maddison),maddison2020
+1937-01-01,13490000,persons (Maddison),maddison2020
+1938-01-01,13724000,persons (Maddison),maddison2020
+1939-01-01,13984000,persons (Maddison),maddison2020
+1940-01-01,14169000,persons (Maddison),maddison2020
+1941-01-01,14402000,persons (Maddison),maddison2020
+1942-01-01,14638000,persons (Maddison),maddison2020
+1943-01-01,14877000,persons (Maddison),maddison2020
+1944-01-01,15130000,persons (Maddison),maddison2020
+1945-01-01,15390000,persons (Maddison),maddison2020
+1946-01-01,15654000,persons (Maddison),maddison2020
+1947-01-01,15942000,persons (Maddison),maddison2020
+1948-01-01,16307000,persons (Maddison),maddison2020
+1949-01-01,16737000,persons (Maddison),maddison2020
+1950-01-01,17150336,persons (Maddison),maddison2020
+1951-01-01,17517342,persons (Maddison),maddison2020
+1952-01-01,17876956,persons (Maddison),maddison2020
+1953-01-01,18230816,persons (Maddison),maddison2020
+1954-01-01,18580559,persons (Maddison),maddison2020
+1955-01-01,18927821,persons (Maddison),maddison2020
+1956-01-01,19271511,persons (Maddison),maddison2020
+1957-01-01,19610538,persons (Maddison),maddison2020
+1958-01-01,19946539,persons (Maddison),maddison2020
+1959-01-01,20281150,persons (Maddison),maddison2020
+1960-01-01,20386045,persons (World Bank),wb_population
+1961-01-01,20726276,persons (World Bank),wb_population
+1962-01-01,21072538,persons (World Bank),wb_population
+1963-01-01,21421705,persons (World Bank),wb_population
+1964-01-01,21769453,persons (World Bank),wb_population
+1965-01-01,22112629,persons (World Bank),wb_population
+1966-01-01,22453893,persons (World Bank),wb_population
+1967-01-01,22799059,persons (World Bank),wb_population
+1968-01-01,23150583,persons (World Bank),wb_population
+1969-01-01,23508711,persons (World Bank),wb_population
+1970-01-01,23878327,persons (World Bank),wb_population
+1971-01-01,24257208,persons (World Bank),wb_population
+1972-01-01,24644328,persons (World Bank),wb_population
+1973-01-01,25046005,persons (World Bank),wb_population
+1974-01-01,25461351,persons (World Bank),wb_population
+1975-01-01,25874107,persons (World Bank),wb_population
+1976-01-01,26282283,persons (World Bank),wb_population
+1977-01-01,26701805,persons (World Bank),wb_population
+1978-01-01,27132158,persons (World Bank),wb_population
+1979-01-01,27568895,persons (World Bank),wb_population
+1980-01-01,28011596,persons (World Bank),wb_population
+1981-01-01,28463959,persons (World Bank),wb_population
+1982-01-01,28924262,persons (World Bank),wb_population
+1983-01-01,29391332,persons (World Bank),wb_population
+1984-01-01,29863093,persons (World Bank),wb_population
+1985-01-01,30336441,persons (World Bank),wb_population
+1986-01-01,30811980,persons (World Bank),wb_population
+1987-01-01,31291762,persons (World Bank),wb_population
+1988-01-01,31780532,persons (World Bank),wb_population
+1989-01-01,32270948,persons (World Bank),wb_population
+1990-01-01,32755901,persons (World Bank),wb_population
+1991-01-01,33230294,persons (World Bank),wb_population
+1992-01-01,33693527,persons (World Bank),wb_population
+1993-01-01,34152717,persons (World Bank),wb_population
+1994-01-01,34613491,persons (World Bank),wb_population
+1995-01-01,35070020,persons (World Bank),wb_population
+1996-01-01,35513793,persons (World Bank),wb_population
+1997-01-01,35947791,persons (World Bank),wb_population
+1998-01-01,36372860,persons (World Bank),wb_population
+1999-01-01,36794682,persons (World Bank),wb_population
+2000-01-01,37213984,persons (World Bank),wb_population
+2001-01-01,37624825,persons (World Bank),wb_population
+2002-01-01,38029349,persons (World Bank),wb_population
+2003-01-01,38424282,persons (World Bank),wb_population
+2004-01-01,38815916,persons (World Bank),wb_population
+2005-01-01,39216789,persons (World Bank),wb_population
+2006-01-01,39622115,persons (World Bank),wb_population
+2007-01-01,40016763,persons (World Bank),wb_population
+2008-01-01,40424148,persons (World Bank),wb_population
+2009-01-01,40854831,persons (World Bank),wb_population
+2010-01-01,41288694,persons (World Bank),wb_population
+2011-01-01,41730660,persons (World Bank),wb_population
+2012-01-01,42161721,persons (World Bank),wb_population
+2013-01-01,42582455,persons (World Bank),wb_population
+2014-01-01,43024071,persons (World Bank),wb_population
+2015-01-01,43477012,persons (World Bank),wb_population
+2016-01-01,43900313,persons (World Bank),wb_population
+2017-01-01,44288894,persons (World Bank),wb_population
+2018-01-01,44654882,persons (World Bank),wb_population
+2019-01-01,44973465,persons (World Bank),wb_population
+2020-01-01,45191965,persons (World Bank),wb_population
+2021-01-01,45312281,persons (World Bank),wb_population
+2022-01-01,45407904,persons (World Bank),wb_population
+2023-01-01,45538401,persons (World Bank),wb_population
+2024-01-01,45696159,persons (World Bank),wb_population
