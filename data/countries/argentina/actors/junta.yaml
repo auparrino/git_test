@@ -1,0 +1,41 @@
+id: military_junta
+name: Junta Militar
+role: president
+party: null
+ideology:
+  economic: 0.5
+  social: -0.8
+  federalism: -0.3
+  institutionalism: -0.9
+personality:
+  ambition: 0.6
+  risk_tolerance: 0.7
+  loyalty: 0.9
+  pragmatism: 0.3
+interests:
+- order
+- fiscal_balance
+- national_security
+influence:
+  public: 0.3
+  congress: 0.0
+  streets: 0.9
+  markets: 0.4
+relationships:
+  central_bank: 60
+  union_cgt: 10
+  biz_finance: 55
+  biz_industry: 50
+bio: >-
+  Ficha de datos del actor que, segun ADR 011 seccion 3, reemplaza formalmente
+  al presidente durante `regime_mode in {coup, dictatorship}`. El motor de A2
+  (`world/regime.py`) NO instancia este actor dentro del `ActorEngine` en
+  tiempo de ejecucion (`engine/scheduler.py`/`engine/game.py` siguen cargando
+  siempre `data/actors/*.yaml` de Aurora, sin override por pais): el reemplazo
+  de permisos/instituciones durante un golpe se modela como suspension de
+  elecciones y Congreso mas la variable `repression`, no como una sustitucion
+  literal del actor jugable. Esta ficha existe como dato auditable (schema
+  valido de `ActorSheet`, ver tests/test_argentina_data.py) para que A5
+  (actores argentinos) la use cuando integre el subsistema de actores por
+  epoca; documentado como deviacion explicita en las Notas de implementacion
+  del ADR 011.

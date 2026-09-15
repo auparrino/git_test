@@ -6,6 +6,7 @@ import json
 import statistics
 import time
 from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 from typing import Annotated
 
@@ -26,8 +27,15 @@ from republica.engine.permissions import AUTHORITY_VIOLATION_MARKER
 from republica.engine.policy import ConstantPolicy, PassivePolicy, PolicyRule, TaylorPolicy
 from republica.engine.simulation import History
 from republica.engine.simulation import run as run_simulation
+from republica.world.annual import load_annual_regime, run_annual
 from republica.world.cohorts import load_cohorts
 from republica.world.config import load_country
+from republica.world.countries import (
+    CountryPackError,
+    country_pack_dir,
+    load_country_pack,
+    load_country_pack_annual,
+)
 
 app = typer.Typer(help="Republica Artificial - laboratorio politico jugable.")
 actors_app = typer.Typer(help="Fichas de actores (ADR 003).")
@@ -38,6 +46,8 @@ eval_app = typer.Typer(help="Evals de agentes (ADR 007 secc. 1-4).")
 app.add_typer(eval_app, name="eval")
 experiment_app = typer.Typer(help="Experimentos en lote, DuckDB y comparacion (ADR 008).")
 app.add_typer(experiment_app, name="experiment")
+country_app = typer.Typer(help="Paquetes de pais (ADR 011).")
+app.add_typer(country_app, name="country")
 ml_app = typer.Typer(
     help="Sustituto, active learning, early-warning y clustering de regimenes (ADR 009)."
 )
@@ -208,16 +218,130 @@ def run(
             "central_bank.autonomy=4).",
         ),
     ] = [],  # noqa: B006 - typer clona la lista, no se muta
+    country_id: Annotated[
+        str | None,
+        typer.Option(
+            "--country",
+            help="Paquete de pais (ADR 011, ej. 'argentina'). Sin esto: Aurora (data/), "
+            "igual que siempre.",
+        ),
+    ] = None,
+    start: Annotated[
+        str | None,
+        typer.Option(
+            "--start", help="Fecha de arranque YYYY-MM (obligatoria con --country)."
+        ),
+    ] = None,
+    annual_mode: Annotated[
+        bool | None,
+        typer.Option(
+            "--annual-mode/--no-annual-mode",
+            help="Modo anual (ADR 011 secc. 6, EXPLORATORIO). Default: automatico segun "
+            "--start (< 1943 -> anual). Requiere --country.",
+        ),
+    ] = None,
+    regime_mode_opt: Annotated[
+        str,
+        typer.Option(
+            "--regime-mode",
+            help="auto|democracy (ADR 011 secc. 3). 'auto': golpes de calendario + "
+            "endogenos. 'democracy': el pais nunca sale de democracia. Requiere --country.",
+        ),
+    ] = "auto",
+    historical_shocks: Annotated[
+        bool,
+        typer.Option(
+            "--historical-shocks",
+            help="Fuerza politics/shocks_calendar.csv del paquete (ADR 011 secc. 4). "
+            "Requiere --country.",
+        ),
+    ] = False,
+    historical_exogenous: Annotated[
+        bool,
+        typer.Option(
+            "--historical-exogenous",
+            help="Alimenta commodity_price/world_demand con history/ del paquete "
+            "(ADR 011 secc. 5). Requiere --country.",
+        ),
+    ] = False,
+    fx_regime_opt: Annotated[
+        str | None,
+        typer.Option(
+            "--fx-regime",
+            help="float|crawl|peg|control (ADR 011 secc. 5, bimonetario). Requiere --country.",
+        ),
+    ] = None,
 ) -> None:
     """Corre una simulacion de `months` meses y la guarda en `out` (JSONL)."""
     from republica.governance import parse_governance_overrides
 
-    country = load_country()
-    policy_rule = _build_policy_rule(policy, country)
     forced_shocks: dict[int, list[str]] = {}
     for spec in force_shock:
         month, shock_id = _parse_force_shock(spec)
         forced_shocks.setdefault(month, []).append(shock_id)
+
+    if country_id is None:
+        country = load_country()
+        regime_calendar = None
+        bimonetary_coefficients = None
+        historical_exogenous_series = None
+    else:
+        if start is None:
+            raise typer.BadParameter("--start es obligatorio junto con --country (YYYY-MM).")
+        try:
+            start_year = int(start.split("-")[0])
+        except ValueError as exc:
+            raise typer.BadParameter(f"--start invalido: {start!r} (formato YYYY-MM).") from exc
+        use_annual = annual_mode if annual_mode is not None else start_year < 1943
+        if use_annual:
+            country_obj = load_country_pack_annual(country_id, start_year, months)
+            regime_lookup = load_annual_regime(
+                country_pack_dir(country_id) / "politics" / "regimes.csv"
+            )
+            policy_rule = _build_policy_rule(policy, country_obj)
+            history_annual = run_annual(
+                seed=seed,
+                years=months,
+                country=country_obj,
+                policy_rule=policy_rule,
+                start_year=start_year,
+                annual_regime=regime_lookup,
+                forced_shocks=forced_shocks or None,
+            )
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(history_annual.to_jsonl(), encoding="utf-8")
+            console.print(
+                f"[yellow]OK (modo anual, EXPLORATORIO -- ADR 011 secc. 6)[/yellow] "
+                f"seed={seed} years={len(history_annual.records)} -> {out}"
+            )
+            return
+        try:
+            pack = load_country_pack(country_id, start, months, regime_mode=regime_mode_opt)
+        except CountryPackError as exc:
+            raise typer.BadParameter(str(exc)) from exc
+        country = pack.country
+        regime_calendar = pack.regime_calendar
+        bimonetary_coefficients = pack.bimonetary_coefficients
+        if fx_regime_opt:
+            bimonetary_coefficients = replace(
+                bimonetary_coefficients, fx_regime_default=fx_regime_opt
+            )
+        if historical_shocks:
+            for month, ids in pack.historical_forced_shocks.items():
+                forced_shocks.setdefault(month, []).extend(ids)
+            console.print(
+                f"[yellow]Shocks forzados por calendario (ADR 011 secc. 4)[/yellow]: "
+                f"{dict(sorted(pack.historical_forced_shocks.items()))}"
+            )
+        historical_exogenous_series = None
+        if historical_exogenous:
+            from republica.world.countries import historical_exogenous_series as _hist_exo
+
+            historical_exogenous_series = _hist_exo(
+                pack.pack_dir, start_year, int(start.split("-")[1]), months
+            )
+
+    policy_rule = _build_policy_rule(policy, country)
 
     actors_enabled = actors if actors is not None else country.features.get("actors", True)
     congress_enabled = congress if congress is not None else country.features.get("congress", True)
@@ -263,15 +387,19 @@ def run(
         memory_enabled=memory_enabled,
         elections_enabled=elections_enabled,
         governance_overrides=parse_governance_overrides(governance_override) or None,
+        regime_calendar=regime_calendar,
+        bimonetary_coefficients=bimonetary_coefficients,
+        historical_exogenous=historical_exogenous_series,
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(history.to_jsonl(), encoding="utf-8")
+    country_note = f" country={country_id} start={start}" if country_id else ""
     console.print(
         f"[green]OK[/green] seed={seed} months={len(history.records)} "
         f"outcome={history.outcome} actors={actors_enabled} "
         f"congress={congress_enabled} negotiation={negotiation_enabled} "
         f"cohorts={cohorts_enabled} media={media_enabled} "
-        f"memory={memory_enabled} elections={elections_enabled} -> {out}"
+        f"memory={memory_enabled} elections={elections_enabled}{country_note} -> {out}"
     )
 
 
@@ -380,9 +508,23 @@ def batch(
     policy: Annotated[
         str, typer.Option(help="Regla de politica: constant|passive|taylor.")
     ] = "passive",
+    country_id: Annotated[
+        str | None, typer.Option("--country", help="Paquete de pais (ADR 011).")
+    ] = None,
+    start: Annotated[
+        str | None, typer.Option("--start", help="Fecha de arranque YYYY-MM (con --country).")
+    ] = None,
 ) -> None:
     """Corre `seeds` semillas y muestra distribucion de outcomes y percentiles."""
-    country = load_country()
+    if country_id is None:
+        country = load_country()
+    else:
+        if start is None:
+            raise typer.BadParameter("--start es obligatorio junto con --country (YYYY-MM).")
+        try:
+            country = load_country_pack(country_id, start, months).country
+        except CountryPackError as exc:
+            raise typer.BadParameter(str(exc)) from exc
     t0 = time.perf_counter()
 
     outcomes: Counter[str] = Counter()
@@ -1663,6 +1805,61 @@ def ui() -> None:
 
     app_path = Path(__file__).resolve().parent / "ui" / "app.py"
     subprocess.run([sys.executable, "-m", "streamlit", "run", str(app_path)], check=False)
+
+
+@country_app.command("info")
+def country_info(
+    country_id: Annotated[str, typer.Argument(help="Id del paquete (ej. 'argentina').")],
+) -> None:
+    """`republica country info <id>` (ADR 011): fechas de arranque
+    disponibles con su cobertura de estado inicial (source/proxy/assumed),
+    features del paquete y golpes del calendario politico."""
+    import json as _json
+
+    from republica.world.countries import country_pack_dir
+    from republica.world.regime import load_coup_dates
+
+    pack_dir = country_pack_dir(country_id)
+    raw = _json.loads((pack_dir / "country.json").read_text(encoding="utf-8"))
+
+    console.print(f"[bold]{raw.get('name', country_id)}[/bold] ({country_id})")
+    console.print(f"  paquete: {pack_dir}")
+
+    features = raw.get("features", {})
+    feat_str = ", ".join(f"{k}={v}" for k, v in features.items())
+    console.print(f"  features: {feat_str}")
+
+    table = Table(title="Estados iniciales (initial_states, ADR 011 secc. 2)")
+    table.add_column("fecha")
+    table.add_column("source", justify="right")
+    table.add_column("proxy", justify="right")
+    table.add_column("assumed", justify="right")
+    initial_states = raw.get("initial_states", {})
+    for date in sorted(initial_states):
+        entry = initial_states[date]
+        counts = {"source": 0, "proxy": 0, "assumed": 0}
+        for prov in entry.values():
+            if prov.get("assumed"):
+                counts["assumed"] += 1
+            elif "source" in prov:
+                counts["source"] += 1
+            elif "proxy" in prov:
+                counts["proxy"] += 1
+        table.add_row(date, str(counts["source"]), str(counts["proxy"]), str(counts["assumed"]))
+    console.print(table)
+
+    events_csv = pack_dir / "politics" / "events.csv"
+    coups = load_coup_dates(events_csv)
+    console.print(
+        f"  golpes en politics/events.csv: {len(coups)} "
+        f"({', '.join(f'{y}-{m:02d}' for y, m in coups[:8])}"
+        f"{', ...' if len(coups) > 8 else ''})"
+    )
+
+    constitutions_csv = pack_dir / "constitutions.csv"
+    if constitutions_csv.exists():
+        cons_text = constitutions_csv.read_text(encoding="utf-8").strip()
+        console.print(f"  constitutions.csv: {cons_text}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,4 @@
+date_from,date_to,term_length_years,reelection_allowed,notes,source
+1810-05-25,1853-04-30,0,false,"Sin Constitucion nacional vigente ni mandatos presidenciales regulares (juntas/triunviratos/Directorio/caudillos provinciales); term_length=0 senala 'sin mandato fijo' -- world/countries.py trata esto como modo anual sin elecciones regulares, no como un error.",general_knowledge
+1853-05-01,1994-08-22,6,false,"Constitucion Nacional de 1853/1860 (art. 77 original): mandato presidencial de 6 anos, sin reeleccion inmediata (recien podia postularse de nuevo pasado un periodo).",general_knowledge
+1994-08-23,,4,true,"Reforma constitucional de 1994 (art. 90): mandato de 4 anos, con reeleccion inmediata permitida por un unico periodo consecutivo.",general_knowledge

@@ -1,0 +1,1050 @@
+{
+  "name": "Argentina",
+  "country_id": "argentina",
+  "_comment": "Paquete de pais (ADR 011). No define start/months/term_length/initial_state: los arma world/countries.py::load_country_pack en tiempo de carga a partir de --start (busca en initial_states) y de politics/constitutions.csv (term_length). structure/exogenous_process/taylor/coefficients/default_policy/policy_ranges/ranges/terminal son COPIA de Aurora sin calibrar (A3, fuera de alcance de A2, ADR 011 secc. 7): A2 estructura el pais, no lo calibra.",
+  "exogenous": {
+    "commodity_price": 100.0,
+    "world_demand": 100.0
+  },
+  "structure": {
+    "g_trend": 0.2,
+    "r_neutral": 4.0,
+    "pi_world": 0.25,
+    "u_nat": 7.5,
+    "reserves_target": 10000.0,
+    "fx_debt_share": 0.5
+  },
+  "exogenous_process": {
+    "commodity_persistence": 0.9,
+    "commodity_noise_std": 3.0,
+    "world_persistence": 0.9,
+    "world_noise_std": 1.5
+  },
+  "taylor": {
+    "pi_coef": 12.0,
+    "response": 1.5,
+    "pi_target": 0.8
+  },
+  "coefficients": {
+    "a_r": 2.0,
+    "r_gap_min": -10.0,
+    "r_gap_max": 30.0,
+    "a_f": 0.05,
+    "a_c": 0.3,
+    "a_x": 1.0,
+    "a_w": 0.5,
+    "a_t": 0.4,
+    "b_res": 1.5,
+    "b_r": 2.0,
+    "b_conf": 1.0,
+    "b_x": 0.5,
+    "b_band": 1.0,
+    "b_int": 150.0,
+    "rho_pi": 0.85,
+    "c_e": 0.06,
+    "c_g": 0.5,
+    "c_f": 0.12,
+    "c_r": 1.0,
+    "d_g": 0.6,
+    "d_n": 0.02,
+    "d_w": 0.05,
+    "w_idx": 1.0,
+    "w_prod": 0.1,
+    "w_g": 0.3,
+    "w_u": 0.3,
+    "f_rev": 0.3,
+    "f_u": 0.1,
+    "debt_interest_rate": 0.05,
+    "k_tb": 20.0,
+    "k_w": 10.0,
+    "k_k": 15.0,
+    "k_conf": 10.0,
+    "p_u": 0.8,
+    "p_w": 0.4,
+    "p_i": 0.5,
+    "p_adj": 0.25,
+    "s_g": 2.0,
+    "s_u": 1.5,
+    "s_pi": 3.0,
+    "s_w": 0.3,
+    "s_adj": 0.3,
+    "q_pi": 0.05,
+    "q_u": 0.02,
+    "q_w": 0.5,
+    "q_t": 0.05,
+    "t_u": 0.8,
+    "t_p": 0.5,
+    "t_pi": 1.5,
+    "t_w": 0.3,
+    "t_c": 0.2,
+    "t_pr": 0.2,
+    "t_adj": 0.2,
+    "pr_t": 0.8,
+    "pr_a": 0.2,
+    "pr_adj": 0.3,
+    "cr_u": 0.5,
+    "cr_p": 0.3,
+    "cr_t": 0.3,
+    "cr_adj": 0.1,
+    "e_w": 1.5,
+    "e_u": 2.0,
+    "e_pi": 0.8,
+    "e_pi_low": 0.3,
+    "e_g": 3.0,
+    "e_t": 1.0,
+    "e_rev": 0.03,
+    "cg_a": 0.3,
+    "cg_adj": 0.2,
+    "ic_rev": 0.02,
+    "ic_pi": 0.5,
+    "ic_s": 0.1,
+    "st_a": 0.3,
+    "st_c": 0.3,
+    "st_t": 0.4,
+    "st_i": 0.2,
+    "st_adj": 0.15,
+    "province_transfer_sensitivity": 0.5,
+    "u_ref": 8.0,
+    "pi_ref": 2.0,
+    "pi_ref_conf": 3.0,
+    "wage_ref": 100.0,
+    "growth_ref": 1.5,
+    "inequality_ref": 42.0,
+    "poverty_ref": 30.0,
+    "tension_base": 35.0,
+    "tension_threshold": 50.0,
+    "protest_ref": 15.0,
+    "conf_ref": 45.0,
+    "conf_neutral": 50.0,
+    "approval_ref": 50.0,
+    "approval_reversion": 45.0,
+    "congress_ref": 45.0,
+    "cc_base": 50.0,
+    "crime_base": 50.0,
+    "stability_base": 60.0,
+    "transfers_ref": 6.0
+  },
+  "default_policy": {
+    "interest_rate_target": 30.0,
+    "tax_rate": 25.0,
+    "primary_spending": 25.0,
+    "provincial_transfers": 6.0,
+    "fx_intervention": 0.5
+  },
+  "policy_ranges": {
+    "interest_rate_target": [
+      0.0,
+      300.0
+    ],
+    "tax_rate": [
+      10.0,
+      45.0
+    ],
+    "primary_spending": [
+      10.0,
+      45.0
+    ],
+    "provincial_transfers": [
+      0.0,
+      15.0
+    ],
+    "fx_intervention": [
+      0.0,
+      1.0
+    ]
+  },
+  "ranges": {
+    "gdp": [
+      30.0,
+      400.0
+    ],
+    "gdp_growth": [
+      -30.0,
+      30.0
+    ],
+    "inflation": [
+      -1.0,
+      60.0
+    ],
+    "inflation_lag1": [
+      -2.0,
+      60.0
+    ],
+    "unemployment": [
+      2.0,
+      40.0
+    ],
+    "real_wage": [
+      30.0,
+      200.0
+    ],
+    "interest_rate": [
+      0.0,
+      300.0
+    ],
+    "exchange_rate": [
+      10.0,
+      1000000.0
+    ],
+    "reserves": [
+      0.0,
+      200000.0
+    ],
+    "public_debt": [
+      0.0,
+      400.0
+    ],
+    "fiscal_balance": [
+      -30.0,
+      15.0
+    ],
+    "poverty": [
+      0.0,
+      95.0
+    ],
+    "government_approval": [
+      0.0,
+      100.0
+    ],
+    "congress_support": [
+      0.0,
+      100.0
+    ],
+    "political_stability": [
+      0.0,
+      100.0
+    ],
+    "social_tension": [
+      0.0,
+      100.0
+    ],
+    "institutional_confidence": [
+      0.0,
+      100.0
+    ],
+    "consumer_confidence": [
+      0.0,
+      100.0
+    ],
+    "protest_level": [
+      0.0,
+      100.0
+    ],
+    "inequality": [
+      20.0,
+      75.0
+    ],
+    "crime_perception": [
+      0.0,
+      100.0
+    ]
+  },
+  "terminal": {
+    "collapse_stability": 15.0,
+    "collapse_months": 3,
+    "hyper_inflation": 20.0,
+    "hyper_months": 3,
+    "devaluation_reserves": 500.0,
+    "devaluation_cooldown_months": 6,
+    "devaluation_fx_multiplier": 1.25,
+    "devaluation_reserve_injection": 1500.0,
+    "devaluation_pi_shock": 5.0,
+    "devaluation_conf_shock": -10.0
+  },
+  "features": {
+    "actors": true,
+    "congress": true,
+    "negotiation": true,
+    "cohorts": true,
+    "media": true,
+    "memory": true,
+    "elections": true,
+    "regime": false,
+    "historical_shocks": false,
+    "bimonetary": false,
+    "annual_mode": false
+  },
+  "bimonetary": {
+    "dollar_demand_init": 0.35,
+    "fx_gap_init": 0.0,
+    "external_debt_usd_init_pct_gdp": 30.0,
+    "default_risk_init": 0.05,
+    "fx_regime_default": "float",
+    "coefficients": {
+      "dd_pi": 0.01,
+      "dd_r": 0.004,
+      "dd_conf": 0.006,
+      "dd_gap": 0.15,
+      "dd_persistence": 0.9,
+      "gap_control": 0.5,
+      "debt_fx_share": 0.65,
+      "default_risk_debt_reserves": 0.35,
+      "default_risk_fiscal": 0.03,
+      "default_risk_threshold": 0.7
+    },
+    "notes": "Coeficientes de diseno (ADR 011 secc. 5), NO calibrados contra series reales (eso es A3, fuera de alcance de A2): ver Notas de implementacion del ADR."
+  },
+  "initial_states": {
+    "1983-12": {
+      "congress_support": {
+        "assumed": true,
+        "note": "no hay serie de composicion legislativa mensual en `history/`; requeriria cruzar `politics/` con bancas por bloque, fuera de alcance de A2.",
+        "value": 45.0
+      },
+      "consumer_confidence": {
+        "assumed": true,
+        "note": "no hay serie libre de confianza del consumidor pre-2001.",
+        "value": 50.0
+      },
+      "crime_perception": {
+        "assumed": true,
+        "note": "no hay serie de percepcion de inseguridad descargada.",
+        "value": 50.0
+      },
+      "exchange_rate": {
+        "assumed": true,
+        "note": "indice de nivel (base=100 en Aurora), no un tipo de cambio literal en ARS/USD: entre 1810 y 2023 Argentina tuvo 5 monedas distintas (peso moneda nacional, ley 18.188, argentino, austral, convertible), asi que un nivel nominal de una fecha no es comparable con el de otra sin una normalizacion arbitraria. Se usa 100 (neutral) en todas las fechas.",
+        "value": 100.0
+      },
+      "fiscal_balance": {
+        "assumed": true,
+        "value": -3.0
+      },
+      "gdp": {
+        "assumed": true,
+        "note": "indice de nivel sin unidad real en Aurora (base=100); no hay forma de mapear un nivel de PBI real a esa escala sin fijar una normalizacion arbitraria por fecha (rompe comparabilidad entre fechas). Se usa 100 (neutral) en todas las fechas; `gdp_growth` sí lleva la serie real.",
+        "value": 100.0
+      },
+      "gdp_growth": {
+        "source": "gdp_per_capita_real.csv (maddison2020), variacion interanual 1982->1983: (valor_año / valor_año_anterior - 1) * 100.",
+        "value": 1.9480519480519431
+      },
+      "government_approval": {
+        "proxy": "50 + 20*(voto_oficialismo - 0.45)/0.15, acotado a [0,100] (ADR 011 secc. 2). voto_oficialismo = 0.5040 ('Alfonsin - Martinez (Union Civica Radical)' / total de votos validos+blanco+nulo, arg_presi_gral1983.csv).",
+        "value": 57.19709295304305
+      },
+      "inequality": {
+        "assumed": true,
+        "note": "no hay serie de Gini/desigualdad descargada en `history/`.",
+        "value": 42.0
+      },
+      "inflation": {
+        "source": "inflation_cpi_annual.csv (wb_inflation_cpi), a +1 meses de la fecha objetivo: (1 + ipc_anual/100)^(1/12) - 1, expresado en puntos porcentuales (ADR 011 secc. 2, escala de WorldState.inflation).",
+        "value": 17.76035988773017
+      },
+      "inflation_lag1": {
+        "source": "inflation_cpi_annual.csv (wb_inflation_cpi), mes anterior 1983-11 (a +2 meses): misma transformacion que `inflation`.",
+        "value": 17.76035988773017
+      },
+      "institutional_confidence": {
+        "source": "vdem_argentina.csv (v2x_libdem, a +1 meses): v2x_libdem (indice de democracia liberal, 0-1) * 100, acotado a [0,100]. Proxy: mas garantias liberales/institucionales ~ mas confianza institucional esperada -- correlato, no una medicion directa.",
+        "value": 67.4
+      },
+      "interest_rate": {
+        "assumed": true,
+        "value": 30.0
+      },
+      "political_stability": {
+        "source": "vdem_argentina.csv (v2x_civlib, a +1 meses): v2x_civlib (indice de libertades civiles, 0-1) * 100, acotado a [0,100]. Proxy: mas libertades civiles protegidas ~ mayor estabilidad institucional de base -- correlato, no una medicion directa.",
+        "value": 92.9
+      },
+      "poverty": {
+        "assumed": true,
+        "value": 30.0
+      },
+      "protest_level": {
+        "assumed": true,
+        "note": "no hay serie de nivel de protesta descargada.",
+        "value": 15.0
+      },
+      "public_debt": {
+        "assumed": true,
+        "value": 60.0
+      },
+      "real_wage": {
+        "assumed": true,
+        "note": "indice de nivel (base=100 en Aurora); `real_wage.csv` (RIPTE real) no esta en esa base. Se usa 100 (neutral) en todas las fechas.",
+        "value": 100.0
+      },
+      "reserves": {
+        "assumed": true,
+        "value": 8200.0
+      },
+      "social_tension": {
+        "assumed": true,
+        "note": "no hay serie de conflictividad social continua descargada (protestas, huelgas) para todo el periodo 1983-2023.",
+        "value": 35.0
+      },
+      "unemployment": {
+        "assumed": true,
+        "value": 8.0
+      }
+    },
+    "1988-06": {
+      "congress_support": {
+        "assumed": true,
+        "note": "no hay serie de composicion legislativa mensual en `history/`; requeriria cruzar `politics/` con bancas por bloque, fuera de alcance de A2.",
+        "value": 45.0
+      },
+      "consumer_confidence": {
+        "assumed": true,
+        "note": "no hay serie libre de confianza del consumidor pre-2001.",
+        "value": 50.0
+      },
+      "crime_perception": {
+        "assumed": true,
+        "note": "no hay serie de percepcion de inseguridad descargada.",
+        "value": 50.0
+      },
+      "exchange_rate": {
+        "assumed": true,
+        "note": "indice de nivel (base=100 en Aurora), no un tipo de cambio literal en ARS/USD: entre 1810 y 2023 Argentina tuvo 5 monedas distintas (peso moneda nacional, ley 18.188, argentino, austral, convertible), asi que un nivel nominal de una fecha no es comparable con el de otra sin una normalizacion arbitraria. Se usa 100 (neutral) en todas las fechas.",
+        "value": 100.0
+      },
+      "fiscal_balance": {
+        "assumed": true,
+        "value": -3.0
+      },
+      "gdp": {
+        "assumed": true,
+        "note": "indice de nivel sin unidad real en Aurora (base=100); no hay forma de mapear un nivel de PBI real a esa escala sin fijar una normalizacion arbitraria por fecha (rompe comparabilidad entre fechas). Se usa 100 (neutral) en todas las fechas; `gdp_growth` sí lleva la serie real.",
+        "value": 100.0
+      },
+      "gdp_growth": {
+        "source": "gdp_per_capita_real.csv (maddison2020), variacion interanual 1987->1988: (valor_año / valor_año_anterior - 1) * 100.",
+        "value": -3.343935356313932
+      },
+      "government_approval": {
+        "proxy": "50 + 20*(voto_oficialismo - 0.45)/0.15, acotado a [0,100] (ADR 011 secc. 2). voto_oficialismo = 0.5040 ('Alfonsin - Martinez (Union Civica Radical)' / total de votos validos+blanco+nulo, arg_presi_gral1983.csv).",
+        "value": 57.19709295304305
+      },
+      "inequality": {
+        "assumed": true,
+        "note": "no hay serie de Gini/desigualdad descargada en `history/`.",
+        "value": 42.0
+      },
+      "inflation": {
+        "source": "inflation_cpi_annual.csv (wb_inflation_cpi), a -5 meses de la fecha objetivo: (1 + ipc_anual/100)^(1/12) - 1, expresado en puntos porcentuales (ADR 011 secc. 2, escala de WorldState.inflation).",
+        "value": 13.989265074886625
+      },
+      "inflation_lag1": {
+        "source": "inflation_cpi_annual.csv (wb_inflation_cpi), mes anterior 1988-05 (a -4 meses): misma transformacion que `inflation`.",
+        "value": 13.989265074886625
+      },
+      "institutional_confidence": {
+        "source": "vdem_argentina.csv (v2x_libdem, a -5 meses): v2x_libdem (indice de democracia liberal, 0-1) * 100, acotado a [0,100]. Proxy: mas garantias liberales/institucionales ~ mas confianza institucional esperada -- correlato, no una medicion directa.",
+        "value": 67.2
+      },
+      "interest_rate": {
+        "assumed": true,
+        "value": 30.0
+      },
+      "political_stability": {
+        "source": "vdem_argentina.csv (v2x_civlib, a -5 meses): v2x_civlib (indice de libertades civiles, 0-1) * 100, acotado a [0,100]. Proxy: mas libertades civiles protegidas ~ mayor estabilidad institucional de base -- correlato, no una medicion directa.",
+        "value": 92.9
+      },
+      "poverty": {
+        "assumed": true,
+        "value": 30.0
+      },
+      "protest_level": {
+        "assumed": true,
+        "note": "no hay serie de nivel de protesta descargada.",
+        "value": 15.0
+      },
+      "public_debt": {
+        "assumed": true,
+        "value": 60.0
+      },
+      "real_wage": {
+        "assumed": true,
+        "note": "indice de nivel (base=100 en Aurora); `real_wage.csv` (RIPTE real) no esta en esa base. Se usa 100 (neutral) en todas las fechas.",
+        "value": 100.0
+      },
+      "reserves": {
+        "assumed": true,
+        "value": 8200.0
+      },
+      "social_tension": {
+        "assumed": true,
+        "note": "no hay serie de conflictividad social continua descargada (protestas, huelgas) para todo el periodo 1983-2023.",
+        "value": 35.0
+      },
+      "unemployment": {
+        "assumed": true,
+        "value": 8.0
+      }
+    },
+    "1991-04": {
+      "congress_support": {
+        "assumed": true,
+        "note": "no hay serie de composicion legislativa mensual en `history/`; requeriria cruzar `politics/` con bancas por bloque, fuera de alcance de A2.",
+        "value": 45.0
+      },
+      "consumer_confidence": {
+        "assumed": true,
+        "note": "no hay serie libre de confianza del consumidor pre-2001.",
+        "value": 50.0
+      },
+      "crime_perception": {
+        "assumed": true,
+        "note": "no hay serie de percepcion de inseguridad descargada.",
+        "value": 50.0
+      },
+      "exchange_rate": {
+        "assumed": true,
+        "note": "indice de nivel (base=100 en Aurora), no un tipo de cambio literal en ARS/USD: entre 1810 y 2023 Argentina tuvo 5 monedas distintas (peso moneda nacional, ley 18.188, argentino, austral, convertible), asi que un nivel nominal de una fecha no es comparable con el de otra sin una normalizacion arbitraria. Se usa 100 (neutral) en todas las fechas.",
+        "value": 100.0
+      },
+      "fiscal_balance": {
+        "assumed": true,
+        "value": -3.0
+      },
+      "gdp": {
+        "assumed": true,
+        "note": "indice de nivel sin unidad real en Aurora (base=100); no hay forma de mapear un nivel de PBI real a esa escala sin fijar una normalizacion arbitraria por fecha (rompe comparabilidad entre fechas). Se usa 100 (neutral) en todas las fechas; `gdp_growth` sí lleva la serie real.",
+        "value": 100.0
+      },
+      "gdp_growth": {
+        "source": "gdp_per_capita_real.csv (maddison2020), variacion interanual 1990->1991: (valor_año / valor_año_anterior - 1) * 100.",
+        "value": 9.459572849619668
+      },
+      "government_approval": {
+        "proxy": "50 + 20*(voto_oficialismo - 0.45)/0.15, acotado a [0,100] (ADR 011 secc. 2). voto_oficialismo = 0.4678 ('Menem - Duhalde (Frente Justicialista De Unidad Popular)' / total de votos validos+blanco+nulo, arg_presi_gral1989.csv).",
+        "value": 52.3672237316145
+      },
+      "inequality": {
+        "assumed": true,
+        "note": "no hay serie de Gini/desigualdad descargada en `history/`.",
+        "value": 42.0
+      },
+      "inflation": {
+        "source": "inflation_cpi_annual.csv (wb_inflation_cpi), a -3 meses de la fecha objetivo: (1 + ipc_anual/100)^(1/12) - 1, expresado en puntos porcentuales (ADR 011 secc. 2, escala de WorldState.inflation).",
+        "value": 7.587037250492146
+      },
+      "inflation_lag1": {
+        "source": "inflation_cpi_annual.csv (wb_inflation_cpi), mes anterior 1991-03 (a -2 meses): misma transformacion que `inflation`.",
+        "value": 7.587037250492146
+      },
+      "institutional_confidence": {
+        "source": "vdem_argentina.csv (v2x_libdem, a -3 meses): v2x_libdem (indice de democracia liberal, 0-1) * 100, acotado a [0,100]. Proxy: mas garantias liberales/institucionales ~ mas confianza institucional esperada -- correlato, no una medicion directa.",
+        "value": 63.0
+      },
+      "interest_rate": {
+        "assumed": true,
+        "value": 30.0
+      },
+      "political_stability": {
+        "source": "vdem_argentina.csv (v2x_civlib, a -3 meses): v2x_civlib (indice de libertades civiles, 0-1) * 100, acotado a [0,100]. Proxy: mas libertades civiles protegidas ~ mayor estabilidad institucional de base -- correlato, no una medicion directa.",
+        "value": 92.10000000000001
+      },
+      "poverty": {
+        "assumed": true,
+        "value": 30.0
+      },
+      "protest_level": {
+        "assumed": true,
+        "note": "no hay serie de nivel de protesta descargada.",
+        "value": 15.0
+      },
+      "public_debt": {
+        "assumed": true,
+        "value": 60.0
+      },
+      "real_wage": {
+        "assumed": true,
+        "note": "indice de nivel (base=100 en Aurora); `real_wage.csv` (RIPTE real) no esta en esa base. Se usa 100 (neutral) en todas las fechas.",
+        "value": 100.0
+      },
+      "reserves": {
+        "assumed": true,
+        "value": 8200.0
+      },
+      "social_tension": {
+        "assumed": true,
+        "note": "no hay serie de conflictividad social continua descargada (protestas, huelgas) para todo el periodo 1983-2023.",
+        "value": 35.0
+      },
+      "unemployment": {
+        "assumed": true,
+        "value": 8.0
+      }
+    },
+    "1998-01": {
+      "congress_support": {
+        "assumed": true,
+        "note": "no hay serie de composicion legislativa mensual en `history/`; requeriria cruzar `politics/` con bancas por bloque, fuera de alcance de A2.",
+        "value": 45.0
+      },
+      "consumer_confidence": {
+        "assumed": true,
+        "note": "no hay serie libre de confianza del consumidor pre-2001.",
+        "value": 50.0
+      },
+      "crime_perception": {
+        "assumed": true,
+        "note": "no hay serie de percepcion de inseguridad descargada.",
+        "value": 50.0
+      },
+      "exchange_rate": {
+        "assumed": true,
+        "note": "indice de nivel (base=100 en Aurora), no un tipo de cambio literal en ARS/USD: entre 1810 y 2023 Argentina tuvo 5 monedas distintas (peso moneda nacional, ley 18.188, argentino, austral, convertible), asi que un nivel nominal de una fecha no es comparable con el de otra sin una normalizacion arbitraria. Se usa 100 (neutral) en todas las fechas.",
+        "value": 100.0
+      },
+      "fiscal_balance": {
+        "assumed": true,
+        "value": -3.0
+      },
+      "gdp": {
+        "assumed": true,
+        "note": "indice de nivel sin unidad real en Aurora (base=100); no hay forma de mapear un nivel de PBI real a esa escala sin fijar una normalizacion arbitraria por fecha (rompe comparabilidad entre fechas). Se usa 100 (neutral) en todas las fechas; `gdp_growth` sí lleva la serie real.",
+        "value": 100.0
+      },
+      "gdp_growth": {
+        "source": "gdp_per_capita_real.csv (maddison2020), variacion interanual 1997->1998: (valor_año / valor_año_anterior - 1) * 100.",
+        "value": 3.146939776633495
+      },
+      "government_approval": {
+        "proxy": "50 + 20*(voto_oficialismo - 0.45)/0.15, acotado a [0,100] (ADR 011 secc. 2). voto_oficialismo = 0.4780 ('Menem - Ruckauf' / total de votos validos+blanco+nulo, arg_presi_gral1995.csv).",
+        "value": 53.736551078252326
+      },
+      "inequality": {
+        "assumed": true,
+        "note": "no hay serie de Gini/desigualdad descargada en `history/`.",
+        "value": 42.0
+      },
+      "inflation": {
+        "source": "inflation_cpi_monthly.csv (jmtelechea_ipc_nacional), mes exacto 1998-01: valor mensual tal cual (misma escala que WorldState.inflation, 2.0 = 2%/mes).",
+        "value": 0.6285846442316556
+      },
+      "inflation_lag1": {
+        "source": "inflation_cpi_monthly.csv (jmtelechea_ipc_nacional), mes exacto 1997-12 (mes anterior a la fecha de arranque).",
+        "value": 0.17038816449961303
+      },
+      "institutional_confidence": {
+        "source": "vdem_argentina.csv (v2x_libdem, a +0 meses): v2x_libdem (indice de democracia liberal, 0-1) * 100, acotado a [0,100]. Proxy: mas garantias liberales/institucionales ~ mas confianza institucional esperada -- correlato, no una medicion directa.",
+        "value": 63.4
+      },
+      "interest_rate": {
+        "assumed": true,
+        "value": 30.0
+      },
+      "political_stability": {
+        "source": "vdem_argentina.csv (v2x_civlib, a +0 meses): v2x_civlib (indice de libertades civiles, 0-1) * 100, acotado a [0,100]. Proxy: mas libertades civiles protegidas ~ mayor estabilidad institucional de base -- correlato, no una medicion directa.",
+        "value": 92.0
+      },
+      "poverty": {
+        "assumed": true,
+        "value": 30.0
+      },
+      "protest_level": {
+        "assumed": true,
+        "note": "no hay serie de nivel de protesta descargada.",
+        "value": 15.0
+      },
+      "public_debt": {
+        "source": "public_debt.csv (diloretot_deuda_total, a -1 meses) / gdp_usd.csv (wb_gdp): deuda_usd_millones * 1e6 / pib_usd_corriente * 100.",
+        "value": 35.41567785179899
+      },
+      "real_wage": {
+        "assumed": true,
+        "note": "indice de nivel (base=100 en Aurora); `real_wage.csv` (RIPTE real) no esta en esa base. Se usa 100 (neutral) en todas las fechas.",
+        "value": 100.0
+      },
+      "reserves": {
+        "source": "reserves_monthly.csv (bcra_data_reservas), a +0 meses de la fecha objetivo, valor tal cual.",
+        "value": 27914.0
+      },
+      "social_tension": {
+        "assumed": true,
+        "note": "no hay serie de conflictividad social continua descargada (protestas, huelgas) para todo el periodo 1983-2023.",
+        "value": 35.0
+      },
+      "unemployment": {
+        "assumed": true,
+        "value": 8.0
+      }
+    },
+    "2003-06": {
+      "congress_support": {
+        "assumed": true,
+        "note": "no hay serie de composicion legislativa mensual en `history/`; requeriria cruzar `politics/` con bancas por bloque, fuera de alcance de A2.",
+        "value": 45.0
+      },
+      "consumer_confidence": {
+        "assumed": true,
+        "note": "no hay serie libre de confianza del consumidor pre-2001.",
+        "value": 50.0
+      },
+      "crime_perception": {
+        "assumed": true,
+        "note": "no hay serie de percepcion de inseguridad descargada.",
+        "value": 50.0
+      },
+      "exchange_rate": {
+        "assumed": true,
+        "note": "indice de nivel (base=100 en Aurora), no un tipo de cambio literal en ARS/USD: entre 1810 y 2023 Argentina tuvo 5 monedas distintas (peso moneda nacional, ley 18.188, argentino, austral, convertible), asi que un nivel nominal de una fecha no es comparable con el de otra sin una normalizacion arbitraria. Se usa 100 (neutral) en todas las fechas.",
+        "value": 100.0
+      },
+      "fiscal_balance": {
+        "assumed": true,
+        "value": -3.0
+      },
+      "gdp": {
+        "assumed": true,
+        "note": "indice de nivel sin unidad real en Aurora (base=100); no hay forma de mapear un nivel de PBI real a esa escala sin fijar una normalizacion arbitraria por fecha (rompe comparabilidad entre fechas). Se usa 100 (neutral) en todas las fechas; `gdp_growth` sí lleva la serie real.",
+        "value": 100.0
+      },
+      "gdp_growth": {
+        "source": "gdp_per_capita_real.csv (maddison2020), variacion interanual 2002->2003: (valor_año / valor_año_anterior - 1) * 100.",
+        "value": 8.216708295669672
+      },
+      "government_approval": {
+        "proxy": "50 + 20*(voto_oficialismo - 0.45)/0.15, acotado a [0,100] (ADR 011 secc. 2). voto_oficialismo = 0.2164 ('Kirchner - Scioli (Alianza Frente Para La Victoria)' / total de votos validos+blanco+nulo, arg_presi_gral2003.csv).",
+        "value": 18.850931470811506
+      },
+      "inequality": {
+        "assumed": true,
+        "note": "no hay serie de Gini/desigualdad descargada en `history/`.",
+        "value": 42.0
+      },
+      "inflation": {
+        "source": "inflation_cpi_monthly.csv (jmtelechea_ipc_nacional), mes exacto 2003-06: valor mensual tal cual (misma escala que WorldState.inflation, 2.0 = 2%/mes).",
+        "value": -0.08567256689913094
+      },
+      "inflation_lag1": {
+        "source": "inflation_cpi_monthly.csv (jmtelechea_ipc_nacional), mes exacto 2003-05 (mes anterior a la fecha de arranque).",
+        "value": -0.383528461849203
+      },
+      "institutional_confidence": {
+        "source": "vdem_argentina.csv (v2x_libdem, a -5 meses): v2x_libdem (indice de democracia liberal, 0-1) * 100, acotado a [0,100]. Proxy: mas garantias liberales/institucionales ~ mas confianza institucional esperada -- correlato, no una medicion directa.",
+        "value": 63.800000000000004
+      },
+      "interest_rate": {
+        "source": "policy_rate_monthly.csv (bcra_data_badlar), a +0 meses de la fecha objetivo, valor tal cual.",
+        "value": 9.121875
+      },
+      "political_stability": {
+        "source": "vdem_argentina.csv (v2x_civlib, a -5 meses): v2x_civlib (indice de libertades civiles, 0-1) * 100, acotado a [0,100]. Proxy: mas libertades civiles protegidas ~ mayor estabilidad institucional de base -- correlato, no una medicion directa.",
+        "value": 91.2
+      },
+      "poverty": {
+        "source": "poverty.csv (diloretot_tasa_pobreza), a +1 meses de la fecha objetivo, valor tal cual.",
+        "value": 54.0
+      },
+      "protest_level": {
+        "assumed": true,
+        "note": "no hay serie de nivel de protesta descargada.",
+        "value": 15.0
+      },
+      "public_debt": {
+        "source": "public_debt.csv (diloretot_deuda_total, a -6 meses) / gdp_usd.csv (wb_gdp): deuda_usd_millones * 1e6 / pib_usd_corriente * 100.",
+        "value": 156.78671046380447
+      },
+      "real_wage": {
+        "assumed": true,
+        "note": "indice de nivel (base=100 en Aurora); `real_wage.csv` (RIPTE real) no esta en esa base. Se usa 100 (neutral) en todas las fechas.",
+        "value": 100.0
+      },
+      "reserves": {
+        "source": "reserves_monthly.csv (bcra_data_reservas), a +0 meses de la fecha objetivo, valor tal cual.",
+        "value": 12183.0
+      },
+      "social_tension": {
+        "assumed": true,
+        "note": "no hay serie de conflictividad social continua descargada (protestas, huelgas) para todo el periodo 1983-2023.",
+        "value": 35.0
+      },
+      "unemployment": {
+        "source": "unemployment.csv (diloretot_tasa_desocupacion), a +1 meses de la fecha objetivo, valor tal cual.",
+        "value": 16.14696649200896
+      }
+    },
+    "2016-01": {
+      "congress_support": {
+        "assumed": true,
+        "note": "no hay serie de composicion legislativa mensual en `history/`; requeriria cruzar `politics/` con bancas por bloque, fuera de alcance de A2.",
+        "value": 45.0
+      },
+      "consumer_confidence": {
+        "assumed": true,
+        "note": "no hay serie libre de confianza del consumidor pre-2001.",
+        "value": 50.0
+      },
+      "crime_perception": {
+        "assumed": true,
+        "note": "no hay serie de percepcion de inseguridad descargada.",
+        "value": 50.0
+      },
+      "exchange_rate": {
+        "assumed": true,
+        "note": "indice de nivel (base=100 en Aurora), no un tipo de cambio literal en ARS/USD: entre 1810 y 2023 Argentina tuvo 5 monedas distintas (peso moneda nacional, ley 18.188, argentino, austral, convertible), asi que un nivel nominal de una fecha no es comparable con el de otra sin una normalizacion arbitraria. Se usa 100 (neutral) en todas las fechas.",
+        "value": 100.0
+      },
+      "fiscal_balance": {
+        "source": "fiscal_balance.csv (jmtelechea_resultado_fiscal), a +0 meses de la fecha objetivo, valor tal cual.",
+        "value": -3.9491205425045592
+      },
+      "gdp": {
+        "assumed": true,
+        "note": "indice de nivel sin unidad real en Aurora (base=100); no hay forma de mapear un nivel de PBI real a esa escala sin fijar una normalizacion arbitraria por fecha (rompe comparabilidad entre fechas). Se usa 100 (neutral) en todas las fechas; `gdp_growth` sí lleva la serie real.",
+        "value": 100.0
+      },
+      "gdp_growth": {
+        "source": "gdp_per_capita_real.csv (maddison2020), variacion interanual 2015->2016: (valor_año / valor_año_anterior - 1) * 100.",
+        "value": -3.215054866167577
+      },
+      "government_approval": {
+        "proxy": "50 + 20*(voto_oficialismo - 0.45)/0.15, acotado a [0,100] (ADR 011 secc. 2). voto_oficialismo = 0.5008 ('Macri - Michetti (Alianza Cambiemos)' / total de votos validos+blanco+nulo, arg_presi_balota2015.csv).",
+        "value": 56.777040947424794
+      },
+      "inequality": {
+        "assumed": true,
+        "note": "no hay serie de Gini/desigualdad descargada en `history/`.",
+        "value": 42.0
+      },
+      "inflation": {
+        "source": "inflation_cpi_monthly.csv (jmtelechea_ipc_nacional), mes exacto 2016-01: valor mensual tal cual (misma escala que WorldState.inflation, 2.0 = 2%/mes).",
+        "value": 3.234726121399456
+      },
+      "inflation_lag1": {
+        "source": "inflation_cpi_monthly.csv (jmtelechea_ipc_nacional), mes exacto 2015-12 (mes anterior a la fecha de arranque).",
+        "value": 3.284400000000365
+      },
+      "institutional_confidence": {
+        "source": "vdem_argentina.csv (v2x_libdem, a +0 meses): v2x_libdem (indice de democracia liberal, 0-1) * 100, acotado a [0,100]. Proxy: mas garantias liberales/institucionales ~ mas confianza institucional esperada -- correlato, no una medicion directa.",
+        "value": 61.199999999999996
+      },
+      "interest_rate": {
+        "source": "policy_rate_monthly.csv (bcra_data_badlar), a +0 meses de la fecha objetivo, valor tal cual.",
+        "value": 26.3125
+      },
+      "political_stability": {
+        "source": "vdem_argentina.csv (v2x_civlib, a +0 meses): v2x_civlib (indice de libertades civiles, 0-1) * 100, acotado a [0,100]. Proxy: mas libertades civiles protegidas ~ mayor estabilidad institucional de base -- correlato, no una medicion directa.",
+        "value": 88.7
+      },
+      "poverty": {
+        "source": "poverty.csv (diloretot_tasa_pobreza), a +6 meses de la fecha objetivo, valor tal cual.",
+        "value": 32.2
+      },
+      "protest_level": {
+        "assumed": true,
+        "note": "no hay serie de nivel de protesta descargada.",
+        "value": 15.0
+      },
+      "public_debt": {
+        "source": "public_debt.csv (diloretot_deuda_total, a -1 meses) / gdp_usd.csv (wb_gdp): deuda_usd_millones * 1e6 / pib_usd_corriente * 100.",
+        "value": 40.464949837273664
+      },
+      "real_wage": {
+        "assumed": true,
+        "note": "indice de nivel (base=100 en Aurora); `real_wage.csv` (RIPTE real) no esta en esa base. Se usa 100 (neutral) en todas las fechas.",
+        "value": 100.0
+      },
+      "reserves": {
+        "source": "reserves_monthly.csv (bcra_data_reservas), a +0 meses de la fecha objetivo, valor tal cual.",
+        "value": 30074.0
+      },
+      "social_tension": {
+        "assumed": true,
+        "note": "no hay serie de conflictividad social continua descargada (protestas, huelgas) para todo el periodo 1983-2023.",
+        "value": 35.0
+      },
+      "unemployment": {
+        "source": "unemployment.csv (diloretot_tasa_desocupacion), a +3 meses de la fecha objetivo, valor tal cual.",
+        "value": 9.3
+      }
+    },
+    "2019-12": {
+      "congress_support": {
+        "assumed": true,
+        "note": "no hay serie de composicion legislativa mensual en `history/`; requeriria cruzar `politics/` con bancas por bloque, fuera de alcance de A2.",
+        "value": 45.0
+      },
+      "consumer_confidence": {
+        "assumed": true,
+        "note": "no hay serie libre de confianza del consumidor pre-2001.",
+        "value": 50.0
+      },
+      "crime_perception": {
+        "assumed": true,
+        "note": "no hay serie de percepcion de inseguridad descargada.",
+        "value": 50.0
+      },
+      "exchange_rate": {
+        "assumed": true,
+        "note": "indice de nivel (base=100 en Aurora), no un tipo de cambio literal en ARS/USD: entre 1810 y 2023 Argentina tuvo 5 monedas distintas (peso moneda nacional, ley 18.188, argentino, austral, convertible), asi que un nivel nominal de una fecha no es comparable con el de otra sin una normalizacion arbitraria. Se usa 100 (neutral) en todas las fechas.",
+        "value": 100.0
+      },
+      "fiscal_balance": {
+        "source": "fiscal_balance.csv (jmtelechea_resultado_fiscal), a +0 meses de la fecha objetivo, valor tal cual.",
+        "value": -1.4772332260897814
+      },
+      "gdp": {
+        "assumed": true,
+        "note": "indice de nivel sin unidad real en Aurora (base=100); no hay forma de mapear un nivel de PBI real a esa escala sin fijar una normalizacion arbitraria por fecha (rompe comparabilidad entre fechas). Se usa 100 (neutral) en todas las fechas; `gdp_growth` sí lleva la serie real.",
+        "value": 100.0
+      },
+      "gdp_growth": {
+        "source": "gdp_per_capita_real.csv (maddison2020), variacion interanual 2017->2018 (año mas reciente cubierto, 1 año(s) antes): (valor_año / valor_año_anterior - 1) * 100.",
+        "value": -3.356732211715785
+      },
+      "government_approval": {
+        "proxy": "50 + 20*(voto_oficialismo - 0.45)/0.15, acotado a [0,100] (ADR 011 secc. 2). voto_oficialismo = 0.4700 ('Fernández - Fernández De Kirchner (Frente De Todos)' / total de votos validos+blanco+nulo, arg_presi_gral2019.csv).",
+        "value": 52.663837885437985
+      },
+      "inequality": {
+        "assumed": true,
+        "note": "no hay serie de Gini/desigualdad descargada en `history/`.",
+        "value": 42.0
+      },
+      "inflation": {
+        "source": "inflation_cpi_monthly.csv (jmtelechea_ipc_nacional), mes exacto 2019-12: valor mensual tal cual (misma escala que WorldState.inflation, 2.0 = 2%/mes).",
+        "value": 3.74370735513833
+      },
+      "inflation_lag1": {
+        "source": "inflation_cpi_monthly.csv (jmtelechea_ipc_nacional), mes exacto 2019-11 (mes anterior a la fecha de arranque).",
+        "value": 4.25453730948031
+      },
+      "institutional_confidence": {
+        "source": "vdem_argentina.csv (v2x_libdem, a +1 meses): v2x_libdem (indice de democracia liberal, 0-1) * 100, acotado a [0,100]. Proxy: mas garantias liberales/institucionales ~ mas confianza institucional esperada -- correlato, no una medicion directa.",
+        "value": 63.4
+      },
+      "interest_rate": {
+        "source": "policy_rate_monthly.csv (bcra_data_badlar), a +0 meses de la fecha objetivo, valor tal cual.",
+        "value": 41.953947368421055
+      },
+      "political_stability": {
+        "source": "vdem_argentina.csv (v2x_civlib, a +1 meses): v2x_civlib (indice de libertades civiles, 0-1) * 100, acotado a [0,100]. Proxy: mas libertades civiles protegidas ~ mayor estabilidad institucional de base -- correlato, no una medicion directa.",
+        "value": 88.6
+      },
+      "poverty": {
+        "source": "poverty.csv (diloretot_tasa_pobreza), a +1 meses de la fecha objetivo, valor tal cual.",
+        "value": 35.5
+      },
+      "protest_level": {
+        "assumed": true,
+        "note": "no hay serie de nivel de protesta descargada.",
+        "value": 15.0
+      },
+      "public_debt": {
+        "source": "public_debt.csv (diloretot_deuda_total, a +0 meses) / gdp_usd.csv (wb_gdp): deuda_usd_millones * 1e6 / pib_usd_corriente * 100.",
+        "value": 72.1521471645135
+      },
+      "real_wage": {
+        "assumed": true,
+        "note": "indice de nivel (base=100 en Aurora); `real_wage.csv` (RIPTE real) no esta en esa base. Se usa 100 (neutral) en todas las fechas.",
+        "value": 100.0
+      },
+      "reserves": {
+        "source": "reserves_monthly.csv (bcra_data_reservas), a +0 meses de la fecha objetivo, valor tal cual.",
+        "value": 44848.0
+      },
+      "social_tension": {
+        "assumed": true,
+        "note": "no hay serie de conflictividad social continua descargada (protestas, huelgas) para todo el periodo 1983-2023.",
+        "value": 35.0
+      },
+      "unemployment": {
+        "source": "unemployment.csv (diloretot_tasa_desocupacion), a +1 meses de la fecha objetivo, valor tal cual.",
+        "value": 10.4
+      }
+    },
+    "2023-12": {
+      "congress_support": {
+        "assumed": true,
+        "note": "no hay serie de composicion legislativa mensual en `history/`; requeriria cruzar `politics/` con bancas por bloque, fuera de alcance de A2.",
+        "value": 45.0
+      },
+      "consumer_confidence": {
+        "assumed": true,
+        "note": "no hay serie libre de confianza del consumidor pre-2001.",
+        "value": 50.0
+      },
+      "crime_perception": {
+        "assumed": true,
+        "note": "no hay serie de percepcion de inseguridad descargada.",
+        "value": 50.0
+      },
+      "exchange_rate": {
+        "assumed": true,
+        "note": "indice de nivel (base=100 en Aurora), no un tipo de cambio literal en ARS/USD: entre 1810 y 2023 Argentina tuvo 5 monedas distintas (peso moneda nacional, ley 18.188, argentino, austral, convertible), asi que un nivel nominal de una fecha no es comparable con el de otra sin una normalizacion arbitraria. Se usa 100 (neutral) en todas las fechas.",
+        "value": 100.0
+      },
+      "fiscal_balance": {
+        "source": "fiscal_balance.csv (jmtelechea_resultado_fiscal), a +0 meses de la fecha objetivo, valor tal cual.",
+        "value": -3.6675883746598634
+      },
+      "gdp": {
+        "assumed": true,
+        "note": "indice de nivel sin unidad real en Aurora (base=100); no hay forma de mapear un nivel de PBI real a esa escala sin fijar una normalizacion arbitraria por fecha (rompe comparabilidad entre fechas). Se usa 100 (neutral) en todas las fechas; `gdp_growth` sí lleva la serie real.",
+        "value": 100.0
+      },
+      "gdp_growth": {
+        "source": "gdp_usd.csv (wb_gdp), variacion interanual 2022->2023: (valor_año / valor_año_anterior - 1) * 100.",
+        "value": 1.4985780275799998
+      },
+      "government_approval": {
+        "assumed": true,
+        "value": 50.0
+      },
+      "inequality": {
+        "assumed": true,
+        "note": "no hay serie de Gini/desigualdad descargada en `history/`.",
+        "value": 42.0
+      },
+      "inflation": {
+        "source": "inflation_cpi_monthly.csv (jmtelechea_ipc_nacional), mes exacto 2023-12: valor mensual tal cual (misma escala que WorldState.inflation, 2.0 = 2%/mes).",
+        "value": 25.46567498423684
+      },
+      "inflation_lag1": {
+        "source": "inflation_cpi_monthly.csv (jmtelechea_ipc_nacional), mes exacto 2023-11 (mes anterior a la fecha de arranque).",
+        "value": 12.81069017691574
+      },
+      "institutional_confidence": {
+        "source": "vdem_argentina.csv (v2x_libdem, a +1 meses): v2x_libdem (indice de democracia liberal, 0-1) * 100, acotado a [0,100]. Proxy: mas garantias liberales/institucionales ~ mas confianza institucional esperada -- correlato, no una medicion directa.",
+        "value": 55.800000000000004
+      },
+      "interest_rate": {
+        "source": "policy_rate_monthly.csv (bcra_data_badlar), a +0 meses de la fecha objetivo, valor tal cual.",
+        "value": 121.17105263157895
+      },
+      "political_stability": {
+        "source": "vdem_argentina.csv (v2x_civlib, a +1 meses): v2x_civlib (indice de libertades civiles, 0-1) * 100, acotado a [0,100]. Proxy: mas libertades civiles protegidas ~ mayor estabilidad institucional de base -- correlato, no una medicion directa.",
+        "value": 85.9
+      },
+      "poverty": {
+        "source": "poverty.csv (diloretot_tasa_pobreza), a +1 meses de la fecha objetivo, valor tal cual.",
+        "value": 41.699999999999996
+      },
+      "protest_level": {
+        "assumed": true,
+        "note": "no hay serie de nivel de protesta descargada.",
+        "value": 15.0
+      },
+      "public_debt": {
+        "source": "public_debt.csv (diloretot_deuda_total, a +0 meses) / gdp_usd.csv (wb_gdp): deuda_usd_millones * 1e6 / pib_usd_corriente * 100.",
+        "value": 57.864244437479925
+      },
+      "real_wage": {
+        "assumed": true,
+        "note": "indice de nivel (base=100 en Aurora); `real_wage.csv` (RIPTE real) no esta en esa base. Se usa 100 (neutral) en todas las fechas.",
+        "value": 100.0
+      },
+      "reserves": {
+        "source": "reserves_monthly.csv (bcra_data_reservas), a +0 meses de la fecha objetivo, valor tal cual.",
+        "value": 23073.0
+      },
+      "social_tension": {
+        "assumed": true,
+        "note": "no hay serie de conflictividad social continua descargada (protestas, huelgas) para todo el periodo 1983-2023.",
+        "value": 35.0
+      },
+      "unemployment": {
+        "source": "unemployment.csv (diloretot_tasa_desocupacion), a +1 meses de la fecha objetivo, valor tal cual.",
+        "value": 7.7
+      }
+    }
+  },
+  "initial_states_notes": "Generado por scripts/build_argentina_initial_states.py (correrlo para reproducir/actualizar este bloque). Cada variable de cada fecha trae `source` (serie de history/ + transformacion), `proxy` (regla documentada sin serie directa) o `assumed: true` (sin serie ni proxy razonable: arranca en el valor de Aurora). Fechas soportadas: 1983-12, 1988-06, 1991-04, 1998-01, 2003-06, 2016-01, 2019-12, 2023-12 (ADR 011 secc. 2). Reglas notables: `gdp`/`real_wage`/`exchange_rate` son indices de nivel sin anclaje real posible entre regimenes monetarios distintos, siempre `assumed=100` (neutral); `gdp_growth` prioriza `gdp_per_capita_real` (Maddison, real) sobre `gdp_usd` (nominal, ultimo recurso); `government_approval` usa el proxy electoral de la seccion 2 del ADR con los resultados de `politics/sources/electorAr_presi/*.csv` (salvo 2023-12, sin archivo de balotaje descargado: assumed); `institutional_confidence`/`political_stability` usan V-Dem (`v2x_libdem`/`v2x_civlib`) escalados a [0,100] como proxy institucional, no una medicion directa de esas variables de Aurora."
+}

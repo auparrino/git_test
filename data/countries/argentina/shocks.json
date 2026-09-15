@@ -1,0 +1,425 @@
+[
+  {
+    "id": "drought",
+    "name": "Sequía",
+    "base_p": 0.02,
+    "conditional_p": [],
+    "duration": 3,
+    "effects": [
+      {
+        "target": "shock_gdp",
+        "value": -0.3,
+        "when": "each"
+      },
+      {
+        "target": "shock_reserves",
+        "value": -400.0,
+        "when": "each"
+      },
+      {
+        "target": "province_sector:agro",
+        "value": -10.0,
+        "when": "each"
+      }
+    ]
+  },
+  {
+    "id": "commodity_boom",
+    "name": "Boom de commodities",
+    "base_p": 0.03,
+    "conditional_p": [],
+    "duration": 6,
+    "effects": [
+      {
+        "target": "commodity_price",
+        "value": 20.0,
+        "when": "first"
+      },
+      {
+        "target": "shock_reserves",
+        "value": 300.0,
+        "when": "each"
+      }
+    ]
+  },
+  {
+    "id": "corruption_scandal",
+    "name": "Escándalo de corrupción",
+    "base_p": 0.03,
+    "conditional_p": [],
+    "duration": 1,
+    "effects": [
+      {
+        "target": "shock_approval",
+        "value": -6.0,
+        "when": "each"
+      },
+      {
+        "target": "shock_conf",
+        "value": -5.0,
+        "when": "each"
+      },
+      {
+        "target": "shock_tension",
+        "value": 5.0,
+        "when": "each"
+      }
+    ]
+  },
+  {
+    "id": "general_strike",
+    "name": "Huelga general",
+    "base_p": 0.02,
+    "conditional_p": [
+      {
+        "add": 0.05,
+        "any": [
+          {
+            "field": "social_tension",
+            "op": ">",
+            "value": 55.0
+          }
+        ]
+      }
+    ],
+    "duration": 1,
+    "effects": [
+      {
+        "target": "shock_gdp",
+        "value": -0.4,
+        "when": "each"
+      },
+      {
+        "target": "shock_protest",
+        "value": 20.0,
+        "when": "each"
+      },
+      {
+        "target": "shock_approval",
+        "value": -2.0,
+        "when": "each"
+      }
+    ]
+  },
+  {
+    "id": "international_crisis",
+    "name": "Crisis internacional",
+    "base_p": 0.015,
+    "conditional_p": [],
+    "duration": 3,
+    "effects": [
+      {
+        "target": "world_demand",
+        "value": -8.0,
+        "when": "first"
+      },
+      {
+        "target": "commodity_price",
+        "value": -10.0,
+        "when": "first"
+      },
+      {
+        "target": "shock_fx",
+        "value": 5.0,
+        "when": "first"
+      },
+      {
+        "target": "shock_reserves",
+        "value": -500.0,
+        "when": "each"
+      }
+    ]
+  },
+  {
+    "id": "flood",
+    "name": "Inundación",
+    "base_p": 0.02,
+    "conditional_p": [],
+    "duration": 2,
+    "effects": [
+      {
+        "target": "shock_gdp",
+        "value": -0.2,
+        "when": "each"
+      },
+      {
+        "target": "shock_fiscal",
+        "value": -0.5,
+        "when": "each",
+        "duration": 3
+      },
+      {
+        "target": "province_id:litoral",
+        "value": -8.0,
+        "when": "each"
+      }
+    ]
+  },
+  {
+    "id": "energy_discovery",
+    "name": "Descubrimiento energético",
+    "base_p": 0.005,
+    "conditional_p": [],
+    "duration": 12,
+    "effects": [
+      {
+        "target": "shock_reserves",
+        "value": 200.0,
+        "when": "each"
+      },
+      {
+        "target": "shock_gdp",
+        "value": 0.1,
+        "when": "each"
+      },
+      {
+        "target": "consumer_confidence",
+        "value": 3.0,
+        "when": "first"
+      }
+    ]
+  },
+  {
+    "id": "epidemic",
+    "name": "Epidemia",
+    "base_p": 0.01,
+    "conditional_p": [],
+    "duration": 2,
+    "effects": [
+      {
+        "target": "shock_gdp",
+        "value": -0.8,
+        "when": "each"
+      },
+      {
+        "target": "shock_u",
+        "value": 0.5,
+        "when": "first"
+      },
+      {
+        "target": "shock_fiscal",
+        "value": -1.0,
+        "when": "each",
+        "duration": 3
+      }
+    ]
+  },
+  {
+    "id": "banking_crisis",
+    "name": "Crisis bancaria",
+    "base_p": 0.005,
+    "conditional_p": [
+      {
+        "add": 0.03,
+        "any": [
+          {
+            "field": "inflation",
+            "op": ">",
+            "value": 6.0
+          },
+          {
+            "field": "reserves",
+            "op": "<",
+            "value": 3000.0
+          }
+        ]
+      }
+    ],
+    "duration": 2,
+    "effects": [
+      {
+        "target": "shock_reserves",
+        "value": -800.0,
+        "when": "first"
+      },
+      {
+        "target": "shock_fx",
+        "value": 10.0,
+        "when": "first"
+      },
+      {
+        "target": "shock_conf",
+        "value": -8.0,
+        "when": "first"
+      },
+      {
+        "target": "shock_gdp",
+        "value": -0.6,
+        "when": "each"
+      }
+    ]
+  },
+  {
+    "id": "protest_wave",
+    "name": "Ola de protestas",
+    "base_p": 0.01,
+    "conditional_p": [
+      {
+        "add": 0.04,
+        "any": [
+          {
+            "field": "social_tension",
+            "op": ">",
+            "value": 60.0
+          }
+        ]
+      }
+    ],
+    "duration": 1,
+    "effects": [
+      {
+        "target": "shock_protest",
+        "value": 25.0,
+        "when": "each"
+      },
+      {
+        "target": "shock_stability",
+        "value": -5.0,
+        "when": "each"
+      },
+      {
+        "target": "shock_approval",
+        "value": -3.0,
+        "when": "each"
+      }
+    ]
+  },
+  {
+    "id": "growth_surprise",
+    "name": "Crecimiento inesperado",
+    "base_p": 0.03,
+    "conditional_p": [],
+    "duration": 2,
+    "effects": [
+      {
+        "target": "shock_gdp",
+        "value": 0.4,
+        "when": "each"
+      },
+      {
+        "target": "consumer_confidence",
+        "value": 4.0,
+        "when": "first"
+      }
+    ]
+  },
+  {
+    "id": "trade_partner_collapse",
+    "name": "Caída de un socio comercial",
+    "base_p": 0.01,
+    "conditional_p": [],
+    "duration": 4,
+    "effects": [
+      {
+        "target": "world_demand",
+        "value": -10.0,
+        "when": "first"
+      },
+      {
+        "target": "shock_reserves",
+        "value": -300.0,
+        "when": "each"
+      }
+    ]
+  },
+  {
+    "id": "sovereign_default",
+    "name": "Default soberano",
+    "base_p": 0.0,
+    "conditional_p": [],
+    "duration": 24,
+    "effects": [
+      {
+        "target": "shock_conf",
+        "value": -10.0,
+        "when": "first"
+      },
+      {
+        "target": "shock_fx",
+        "value": 20.0,
+        "when": "first"
+      },
+      {
+        "target": "shock_reserves",
+        "value": -150.0,
+        "when": "each"
+      },
+      {
+        "target": "shock_fiscal",
+        "value": 1.0,
+        "when": "each"
+      }
+    ],
+    "_note": "ADR 011 secc. 4. base_p=0: nunca se sortea solo, unicamente se activa forzado (politics/shocks_calendar.csv) o endogeno (world/bimonetary.py, default_risk alto sin imf_program). Los efectos mensuales (shock_reserves/shock_fiscal) aproximan 'cierre de credito 24 meses' e 'interes al 50%' del ADR como terminos aditivos constantes -- el motor de shocks es aditivo, no tiene forma de anular un coeficiente (k_k) ni de escalar el costo de interes por shock; ver Notas de implementacion del ADR 011."
+  },
+  {
+    "id": "currency_run",
+    "name": "Corrida cambiaria",
+    "base_p": 0.0,
+    "conditional_p": [],
+    "duration": 6,
+    "effects": [
+      {
+        "target": "shock_fx",
+        "value": 8.0,
+        "when": "each"
+      },
+      {
+        "target": "shock_reserves",
+        "value": -500.0,
+        "when": "each"
+      }
+    ],
+    "_note": "ADR 011 secc. 4. Duracion fija en 6 meses (representativa): las corridas reales del calendario duran entre 4 y 8 meses segun el evento (politics/shocks_calendar.csv); el catalogo de shocks del motor tiene una sola duracion por id, no una por instancia historica -- deviacion documentada."
+  },
+  {
+    "id": "war",
+    "name": "Guerra",
+    "base_p": 0.0,
+    "conditional_p": [],
+    "duration": 3,
+    "effects": [
+      {
+        "target": "shock_fiscal",
+        "value": -2.0,
+        "when": "each"
+      },
+      {
+        "target": "shock_approval",
+        "value": 10.0,
+        "when": "first"
+      }
+    ],
+    "_note": "ADR 011 secc. 4. El '-15 de approval si outcome=lost' del ADR NO esta implementado: el motor de shocks no modela un resultado de guerra (victoria/derrota) como variable; se documenta como deviacion explicita."
+  },
+  {
+    "id": "imf_program",
+    "name": "Programa con el FMI",
+    "base_p": 0.0,
+    "conditional_p": [],
+    "duration": 24,
+    "effects": [
+      {
+        "target": "shock_reserves",
+        "value": 3000.0,
+        "when": "first"
+      },
+      {
+        "target": "shock_fiscal",
+        "value": -1.5,
+        "when": "each"
+      },
+      {
+        "target": "shock_approval",
+        "value": -3.0,
+        "when": "first"
+      },
+      {
+        "target": "shock_conf",
+        "value": 2.0,
+        "when": "first"
+      }
+    ],
+    "_note": "ADR 011 secc. 4. 'primary_spending -1.5 forzado (condicionalidad)' del ADR se aproxima como shock_fiscal (termino aditivo sobre fiscal_balance), no como una modificacion del instrumento de politica primary_spending en si: el motor de shocks no toca instrumentos de Policy, solo variables de WorldState -- deviacion documentada. 'reserves + monto' usa un monto representativo (3000, escala de reserves_monthly.csv en USD millones), no el monto real de cada acuerdo (que varia por evento, ver shocks_calendar.csv)."
+  }
+]

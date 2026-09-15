@@ -33,6 +33,11 @@ from republica.engine.scheduler import (
     refresh_decision_actor_parties,
     run_actor_turn,
 )
+from republica.world.bimonetary import (
+    BimonetaryCoefficients,
+    init_external_state,
+    step_bimonetary,
+)
 from republica.world.cohorts import (
     Cohort,
     CohortState,
@@ -85,6 +90,14 @@ from republica.world.perception import (
 )
 from republica.world.politics import step_politics
 from republica.world.provinces import ProvinceRecord, compute_provinces
+from republica.world.regime import (
+    RegimeCalendar,
+    RegimeState,
+    congress_active,
+    elections_allowed,
+    regime_effects_on_state,
+    step_regime,
+)
 from republica.world.society import step_society
 from republica.world.state import Exogenous, Policy, WorldState, clamp, clamp_state
 
@@ -116,11 +129,25 @@ class MonthRecord:
     #: siendo byte a byte identico al de antes de este commit con la
     #: feature apagada (ver Notas de implementacion).
     cohorts: dict[str, dict[str, float]] = field(default_factory=dict)
+    #: `regime_mode` (ADR 011 secc. 3, `features.regime`): `""` (y AUSENTE de
+    #: `to_dict()`, mismo patron que `cohorts`) sin `regime_calendar` en
+    #: `run()` -- JSONL identico al de antes del ADR 011 con el feature
+    #: apagado. Con el feature prendido: uno de `world/regime.py::
+    #: REGIME_MODES`.
+    regime_mode: str = ""
+    #: Bloque bimonetario (ADR 011 secc. 5, `features.bimonetary`):
+    #: `world/bimonetary.py::ExternalState.to_dict()`. `{}` (AUSENTE de
+    #: `to_dict()`) sin `bimonetary_coefficients` en `run()`.
+    external: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         d = asdict(self)
         if not d["cohorts"]:
             del d["cohorts"]
+        if not d["regime_mode"]:
+            del d["regime_mode"]
+        if not d["external"]:
+            del d["external"]
         return d
 
 
@@ -1337,6 +1364,10 @@ def run(
     loyalty_table: LoyaltyTable | None = None,
     province_weights_table: dict[str, dict[str, float]] | None = None,
     governance_overrides: dict[str, str] | None = None,
+    regime_calendar: RegimeCalendar | None = None,
+    bimonetary_coefficients: BimonetaryCoefficients | None = None,
+    fx_regime: str | None = None,
+    historical_exogenous: dict[int, tuple[float, float]] | None = None,
 ) -> History:
     """Corre `months` meses (o hasta un fin de partida temprano) y devuelve
     la `History`.
@@ -1359,7 +1390,20 @@ def run(
     (`--no-congress`/`--no-negotiation` los apagan).
 
     `cohorts_enabled`/`media_enabled`/`cohorts`/`media_consumption` (ADR
-    005 secc. 3/4): idem `new_simulation`."""
+    005 secc. 3/4): idem `new_simulation`.
+
+    `regime_calendar`/`bimonetary_coefficients` (ADR 011 secc. 3/5, default
+    `None` = comportamiento de siempre, byte a byte identico): activan
+    `features.regime`/`features.bimonetary` para esta corrida. Se resuelven
+    ENVOLVIENDO el loop de meses de siempre (no tocan `advance_month`): antes
+    de cada mes, si hay `regime_calendar`, se avanza el regimen y se le
+    aplican sus efectos a `sim.state` (repression) y a `sim.congress_enabled`/
+    `sim.elections_enabled` (suspension de Congreso/elecciones); despues de
+    cada mes, si hay `bimonetary_coefficients`, se avanza el bloque externo
+    con el `Aux.r_real` de ese mes (ver Notas de implementacion del ADR 011
+    para el porque de este disenio: cero cambios a `advance_month`/
+    `step_economy`, asi que Aurora sin estos parametros es imposible de
+    afectar)."""
     sim = new_simulation(
         seed,
         policy_rule,
@@ -1387,8 +1431,60 @@ def run(
         governance_overrides=governance_overrides,
     )
     sim.country = sim.country.model_copy(update={"months": months})
+
+    base_congress_enabled = sim.congress_enabled
+    base_elections_enabled = sim.elections_enabled
+    regime_state = RegimeState() if regime_calendar is not None else None
+    external_state = (
+        init_external_state(bimonetary_coefficients, fx_regime)
+        if bimonetary_coefficients is not None
+        else None
+    )
+
     for _ in range(months):
+        next_month = sim.month + 1
+
+        if historical_exogenous is not None and next_month in historical_exogenous:
+            # `--historical-exogenous` (ADR 011 secc. 5): ancla `sim.exo`
+            # (el nivel de PARTIDA del AR(1)+ruido de este mes, `world/
+            # economy.py::step_exogenous`) al nivel real de este mes -- no
+            # reemplaza `exo_new` del mes en si (eso exigiria tocar
+            # `advance_month`), asi que la serie resultante sigue de cerca
+            # (no exactamente) a la real, dejando el mismo proceso
+            # estocastico de Aurora encima (ver Notas de implementacion).
+            commodity, world_demand = historical_exogenous[next_month]
+            sim.exo = Exogenous(commodity_price=commodity, world_demand=world_demand)
+
+        regime_result = None
+        if regime_calendar is not None:
+            assert regime_state is not None
+            forced_coup = next_month in regime_calendar.forced_coup_months
+            propensity = regime_calendar.coup_propensity.get(next_month, 0.0)
+            regime_result = step_regime(regime_state, sim.state, sim.rng, forced_coup, propensity)
+            sim.state = regime_effects_on_state(sim.state, regime_result.repression)
+            sim.congress_enabled = base_congress_enabled and congress_active(regime_result.mode)
+            sim.elections_enabled = base_elections_enabled and elections_allowed(
+                regime_result.mode
+            )
+
         advance_month(sim)
+
+        if regime_result is not None:
+            sim.records[-1].regime_mode = regime_result.mode
+
+        if external_state is not None:
+            aux = sim.records[-1].aux
+            external_state = step_bimonetary(
+                external_state, sim.state, aux["r_real"], bimonetary_coefficients
+            )
+            sim.records[-1].external = external_state.to_dict()
+            if (
+                external_state.default_risk >= bimonetary_coefficients.default_risk_threshold
+                and "imf_program" not in sim.active_shocks
+                and "sovereign_default" not in sim.active_shocks
+            ):
+                sim.forced_shocks.setdefault(sim.month + 1, []).append("sovereign_default")
+
         if sim.outcome is not None:
             break
     return History(

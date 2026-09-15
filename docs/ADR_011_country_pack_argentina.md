@@ -129,3 +129,176 @@ Cada reporte cierra con: shocks forzados, proxies usados, baselines, y la frase 
 7. Mandato de 6 años en 1989 y de 4 en 1999 según `constitutions.csv`.
 8. Modo anual: 1880→1930 corre en < 5 s y produce 50 registros anuales con `regime_mode`.
 9. `calibrate` sobre un período sintético (Aurora generando "datos reales" con coeficientes conocidos) recupera los coeficientes dentro del 20 % en al menos la mitad de ellos (test de identificabilidad).
+
+## Notas de implementación (A2)
+
+Implementado: `src/republica/world/countries.py` (loader), `world/regime.py`, `world/bimonetary.py`,
+`world/annual.py`; hooks nuevos y opcionales (default `None`/`False`) en `engine/simulation.py::run()`
+(`regime_calendar`, `bimonetary_coefficients`, `fx_regime`, `historical_exogenous`) y dos campos nuevos
+en `MonthRecord` (`regime_mode`, `external`), ausentes de `to_dict()`/el JSONL cuando están vacíos
+(mismo patrón que `cohorts`, ADR 005). `republica run/batch --country <id> --start YYYY-MM`,
+`republica country info <id>`, `experiment` (`base: {country, start}`). Golden hash de Aurora sin
+`--country` verificado byte a byte contra un `git worktree add /tmp/head HEAD` del commit
+`244f1792e0c99d9af8564f264e407d63dc1c6a61` (antes de A2): `tests/test_country_pack_argentina.py::
+test_aurora_without_country_matches_golden_hash_pre_a2`.
+
+Cada desviación de esta lista existe porque implementarla al pie de la letra exigía tocar el núcleo del
+motor (`step_economy`/`WorldState`/`advance_month`) de un modo que arriesgaba el hash de Aurora, o
+requería un dato que no está descargado a la fecha de A2 — nunca porque "diera mejor" en algún período
+particular (regla de honestidad del proyecto, PLAN_ARGENTINA.md §0.3).
+
+**Paquete de país / loader**
+- `load_country_pack` arma una carpeta "fusionada" (symlinks a `data/` de Aurora + symlinks a
+  `data/countries/<id>/` encima, en `tempfile.gettempdir()`) y reusa `world.config.load_country` tal
+  cual sobre esa carpeta — así el fallback a Aurora es automático y genérico para *cualquier* archivo
+  que el paquete no traiga (`provinces.csv`, `parties.json`, `governance.yaml`, `permissions.yaml`,
+  `consequences.yaml`, `concessions.yaml`, `interests.yaml`, `policy_signatures.yaml`,
+  `actor_weights.yaml`, `data/actors/*.yaml` salvo `junta.yaml`), sin necesidad de una lista de
+  archivos hardcodeada. El paquete de Argentina de A2 sólo define en su raíz lo que pide el enunciado
+  de la tarea (`country.json`, `constitutions.csv`, `cohorts*.csv`/`media_consumption.csv`,
+  `shocks.json`, `actors/junta.yaml`): un `provinces.csv`/`parties/<era>.json`/`governance.yaml`
+  propios de Argentina (sistema de partidos por época, 24 jurisdicciones reales en vez de las 8 de
+  Aurora) quedan fuera de alcance de A2 y son candidatos naturales para A5.
+- `country.json` del paquete usa `initial_states` (por fecha) en vez de `initial_state`: el loader NO
+  delega en `world.config.load_country` para parsear ese archivo — resuelve la fecha pedida, arma un
+  `initial_state` plano, y recién ahí escribe un `country.json` efectivo (con el mismo esquema que
+  Aurora) en la carpeta fusionada antes de invocar `load_country`. Un bug real de esta implementación,
+  encontrado y corregido en el camino: `merged / "country.json"` es un *symlink* al `country.json` real
+  del paquete (puesto ahí por el fusionado) — escribirle directo sin desengancharlo primero seguía el
+  symlink y pisaba el archivo fuente. El código ahora hace `unlink()` antes de `write_text()`
+  (`world/countries.py::load_country_pack`, comentado en el propio archivo) para que esto no pueda
+  volver a pasar.
+- `término_length`/`reelection_allowed` se resuelven **una sola vez, contra la fecha de `--start`**
+  (`constitutions.csv`), y quedan fijos para toda la corrida: una corrida que arranca en 1990 y pasa
+  los 96 meses sigue con mandato de 6 años sin reelección aunque cruce la reforma de 1994 en el medio
+  (tal como pide el enunciado: "no tratar de calzar exactamente las fechas históricas de elección,
+  documentarlo"). Las elecciones caen en múltiplos de `term_length` desde `--start`, no en las fechas
+  reales de octubre/diciembre. `reelection_allowed` se calcula y se expone (`CountryPack
+  .reelection_allowed`) pero **no se aplica**: `world/elections.py::run_election` no tiene noción de
+  "candidato saliente inelegible" — implementarlo tocaría la selección de candidatos de una forma que
+  no entra en el presupuesto de A2. Documentado como pendiente para A3/A5.
+
+**Régimen (`world/regime.py`)**
+- El "reemplazo del presidente por la `military_junta`" y la restricción de `write` a partidos/
+  sindicatos (columna "Actores" de la tabla del ADR) **no** se implementan como cambios al
+  `ActorEngine`: `data/countries/argentina/actors/junta.yaml` existe como ficha de datos válida
+  (`ActorSheet`, con su propio test), pero `engine/scheduler.py`/`engine/game.py` siguen cargando
+  siempre `data/actors/*.yaml` de Aurora sin ningún mecanismo de override por país. En su lugar, el
+  régimen actúa envolviendo el loop de `run()` desde afuera (sin tocar `advance_month`): antes de cada
+  mes, si hay `regime_calendar`, se recalculan `sim.congress_enabled`/`sim.elections_enabled` (`AND`
+  con lo que ya venían siendo) según el modo, y se le aplica a `sim.state` la variable `repression`
+  (baja `protest_level`, sube `social_tension`, baja `institutional_confidence` — coeficientes de
+  diseño, sin calibrar). Es más honesto llamar a esto "suspensión de instituciones + represión social"
+  que "sustitución de actor", que es lo que realmente pasa.
+- Un golpe **fallido** (marcado `"FALLIDO"` en `notes` de `events.csv`, p.ej. los carapintadas de
+  1987-1990) mueve igual `regime_mode` a `coup` por 1 mes: el motor no tiene una noción de "intento"
+  separada de "ocurrencia". Es una simplificación deliberada, no un error de lectura del calendario.
+- `coup_propensity` por década = (golpes con fecha en esa década) / 120 meses, **uniforme dentro de la
+  década** (no varía mes a mes ni pondera por cercanía a los golpes reales).
+- La transición fuerza la vuelta a `democracy` a los 24 meses (tope del ADR), pero **no** fuerza una
+  elección exacta ese mismo mes: sólo reactiva `elections_enabled`, y la elección cae en el próximo
+  múltiplo de `term_length` de la corrida (mismo criterio de "no calzar fechas exactas" que el resto
+  del calendario).
+
+**Shocks históricos (ADR §4)**
+- `sovereign_default`/`currency_run`/`war`/`imf_program` se implementan **enteramente** con el
+  mecanismo aditivo que ya existía en `world/events.py` (`shocks.json` + `shock_*`/`field_bumps`): cero
+  cambios al núcleo económico. Esto significa que "reservas −30 %"/"interest_cost ×0.5"/"k_k = 0" del
+  ADR, que son efectos *proporcionales* o *anulan un coeficiente*, se aproximan con términos aditivos
+  de magnitud fija (`data/countries/argentina/shocks.json`, cada uno con su propio `_note` explicando
+  la aproximación): `sovereign_default` resta un monto fijo de reservas y suma un alivio fiscal fijo
+  cada uno de los 24 meses en vez de anular `k_k`/reducir a la mitad `debt_interest_rate`; `imf_program`
+  aproxima "`primary_spending` −1.5 forzado" como un término `shock_fiscal` (no toca el instrumento de
+  `Policy` en sí) y usa un monto fijo de reservas (no el monto real de cada acuerdo, que varía);
+  `currency_run` usa una duración fija de 6 meses (las instancias reales del calendario duran entre 4 y
+  8); `war` no implementa el "−15 de aprobación si `outcome = lost`" porque el motor no modela un
+  resultado de guerra como variable.
+- `hyperinflation_regime` **nunca** se fuerza (`world/countries.py::NEVER_FORCED_SHOCK_IDS`): ni
+  siquiera está en el catálogo de shocks (forzarlo tiraría `KeyError` en
+  `ShockCatalog.apply_month`) — se espera que emerja solo, tal como pide el ADR.
+- Un shock con `duration = N` deja de aparecer en `shocks_active` a partir del mes `N` (no `N+1`): el
+  último efecto se dispara y el shock se desactiva en el mismo `apply_month`, mismo comportamiento que
+  cualquier shock de Aurora (documentado ya para los de 1 mes en `engine/simulation.py`). No es
+  específico de los shocks nuevos.
+
+**Bimonetario (ADR §5)**
+- El bloque `dollar_demand`/`fx_gap`/`external_debt_usd`/`default_risk`/`fx_regime` vive en
+  `MonthRecord.external` (un `dict`, fuera de `WorldState`), no como campos nuevos del `WorldState` de
+  20 variables: `WorldState` es un modelo `pydantic` `frozen=True` que entra en `ranges`/`clamp_state`/
+  el hash de cada corrida de Aurora, y agregarle campos rompería esa superficie para el 100 % de las
+  corridas que no usan el feature. Vive aparte, igual que `cohorts`/`vote_records`/etc. de ADR 005.
+- Los coeficientes de `country.json → bimonetary` son de **diseño**, no calibrados contra series reales
+  (eso es A3, fuera de alcance): sólo se verificó la *dirección* de cada relación (sube/baja con qué),
+  no la magnitud.
+- `external_debt_usd` se revaloriza con la misma forma funcional que ya usa Aurora para `public_debt`
+  (vía `fx_share` y la devaluación real), no con una contabilidad real en dólares (que no cambia de
+  valor en dólares al devaluar en pesos — lo que cambia es su peso relativo sobre variables en pesos).
+- `fx_regime` es una **constante por corrida** (`--fx-regime`), no un calendario real: no hay
+  detección automática de la ventana de convertibilidad 1991-2001 — hay que pasarla a mano
+  (`--fx-regime peg` con `--start 1991-04`, por ejemplo).
+- `--historical-exogenous` **ancla** `sim.exo` (la base del AR(1)+ruido de Aurora) al nivel real de
+  cada mes, en vez de reemplazar exactamente el `exo_new` que usan las fórmulas de ese mes (eso hubiera
+  exigido tocar `advance_month`). El resultado sigue de cerca la serie real sin ser una sustitución
+  exacta mes a mes — documentado en el propio `engine/simulation.py::run()`.
+- Proxy de `commodity_price`: no hay ninguna serie agropecuaria (soja/trigo) en `history/` a la fecha
+  de A2, así que se usa el promedio simple de `gold_price_annual`/`oil_price_annual` (tal como permite
+  el ADR: "usar gold/oil sólo si no existe una serie agropecuaria"), reescalado a base 100 en el primer
+  año de la corrida. `world_demand` queda constante en 100 (no hay PIB mundial del Banco Mundial en
+  `history/`), también tal como permite el ADR.
+- El disparo endógeno de `sovereign_default` (`default_risk ≥ default_risk_threshold` sin
+  `imf_program`/`sovereign_default` ya activo) se agrega a `forced_shocks` del mes siguiente desde el
+  mismo loop de `run()`, reusando el mecanismo de shocks forzados — no hace falta ningún camino nuevo
+  en `world/events.py`.
+
+**Modo anual (ADR §6)**
+- El estado inicial de una corrida anual usa el `initial_state` **de Aurora**, no `initial_states` del
+  paquete (que sólo cubre 1983+, la única ventana con series mensuales suficientes): no hay un
+  "estado real de 1880" con 20 variables que reconstruir. El ADR ya marca el modo anual como
+  "exploratorio" en cada salida; este es el motivo concreto.
+- El `regime_mode` de cada año se lee **directo de `politics/regimes.csv`** (remapeado a los 4 modos
+  del motor), no se deriva con la máquina de estados de `world/regime.py`: a escala anual, sin datos
+  mensuales que disparen `coup_propensity`/umbrales de estabilidad, reimplementar la lógica endógena
+  hubiera sido menos fiel que usar el dato real de entrada que ya existe para ese período.
+  `1930 -> coup`, `1931 -> dictatorship` verificado contra el golpe de Uriburu (test dedicado).
+  Cohortes/medios/Congreso/elecciones apagados (ADR literal).
+- Shocks aleatorios apagados por default en modo anual (`shocks_enabled=False`): el catálogo de
+  `shocks.json` está calibrado en duraciones de MESES; sortear/aplicar un catálogo pensado para 12
+  activaciones por año, a razón de una por año, no está re-escalado y produciría duraciones
+  equivocadas. Los shocks *forzados* (`--historical-shocks`, vía `forced_shocks`) sí funcionan, tratando
+  cada uno como si durara exactamente 1 turno-año.
+
+**Estado inicial por fecha (ADR §2)** — ver también `scripts/build_argentina_initial_states.py`
+(documenta cada regla en el propio código) y `country.json → initial_states_notes`.
+- `gdp`/`real_wage`/`exchange_rate` son siempre `assumed = 100` (el valor neutro de Aurora) en las 8
+  fechas: son índices de *nivel* sin unidad real (base 100 en Aurora), y no hay forma de mapear un
+  nivel de PBI/salario/tipo de cambio real de una fecha a esa escala sin fijar una normalización
+  arbitraria — sobre todo el tipo de cambio, con 5 monedas distintas entre 1810 y 2023
+  (peso moneda nacional → ley 18.188 → argentino → austral → convertible).
+- `gdp_growth` prioriza `gdp_per_capita_real` (Maddison, real) sobre `gdp_usd` (nominal, USD
+  corrientes): la primera versión del script usaba `gdp_usd` primero y daba un +16 %/año para
+  1988 — un artefacto de mezclar crecimiento real con inflación en dólares y variación cambiaria, no
+  una medición real de actividad. Corregido antes de generar el `country.json` final.
+- `government_approval` implementa la fórmula literal del ADR (`50 + 20·(voto_oficialismo − 0.45) /
+  0.15`, acotada) con el resultado de la última elección presidencial de
+  `politics/sources/electorAr_presi/*.csv` (archivo de otro agente, sólo lectura) para 7 de las 8
+  fechas; `2023-12` queda `assumed` porque no hay `arg_presi_gral2023.csv`/`balota2023.csv`
+  descargado en ese directorio a la fecha de A2.
+- `institutional_confidence`/`political_stability` usan `v2x_libdem`/`v2x_civlib` de V-Dem (×100,
+  acotado a [0,100]) como *proxy* — un correlato razonable, no una medición de esas variables
+  específicas de Aurora (que no tienen análogo directo en V-Dem).
+- `congress_support`, `social_tension`, `consumer_confidence`, `protest_level`, `inequality`,
+  `crime_perception`: siempre `assumed` en las 8 fechas — no hay serie descargada ni un proxy que este
+  agente considere razonable dentro del alcance de A2 (ver el `note` de cada una en el script).
+
+**CLI / experimentos**
+- `--historical-shocks`/`--historical-exogenous`/`--regime-mode`/`--fx-regime` sólo tienen efecto con
+  `--country`; sin él, son ignorados silenciosamente en la lectura del código (no hay CLI que los
+  acepte sin `--country` en primer lugar, `typer` los valida igual).
+- `republica batch --country <id> --start <fecha>` resuelve el paquete para una corrida por semilla,
+  pero no expone `--historical-shocks`/`--regime-mode`/modo anual (no pedidos para `batch` en el
+  enunciado de esta tarea).
+- `experiment` (`base: {country: ..., start: ..., months: ...}`) construye `data_dir` apuntando a la
+  misma carpeta fusionada de `load_country_pack`: los overrides `country.*` de `arms`/`sweep` siguen
+  funcionando sin cambios (es un `country.json` real en disco). No hay soporte de `regime`/
+  `historical_shocks`/`bimonetary`/modo anual desde `experiment` en A2 (no pedidos para `experiment`
+  en el enunciado, sólo la clave `country`).

@@ -229,10 +229,33 @@ class ExperimentConfig:
         seeds_raw = raw.get("seeds") or {"start": 0, "count": 1}
         if "name" not in raw:
             raise ValueError(f"{p}: falta 'name'")
+        base = dict(raw.get("base") or {})
+        # `base.country`/`base.start` (ADR 011, deliverable 7): un paquete de
+        # pais en vez de Aurora. `data_dir` pasa a ser la carpeta fusionada
+        # de `world.countries.load_country_pack` (mismo esquema de
+        # `country.json` que Aurora, asi que `_build_country`/los overrides
+        # `country.*` de `arms`/`sweep` funcionan sin ningun cambio mas).
+        if data_dir is None and base.get("country"):
+            from republica.world.countries import (
+                CountryPackError,
+                merged_data_dir_for_pack,
+            )
+
+            if not base.get("start"):
+                raise ValueError(f"{p}: 'base.country' requiere 'base.start' (YYYY-MM).")
+            try:
+                data_dir = merged_data_dir_for_pack(
+                    str(base["country"]),
+                    str(base["start"]),
+                    int(base.get("months") or 48),
+                    str(base.get("regime_mode", "auto")),
+                )
+            except CountryPackError as exc:
+                raise ValueError(f"{p}: {exc}") from exc
         return cls(
             name=str(raw["name"]),
             description=str(raw.get("description", "")),
-            base=dict(raw.get("base") or {}),
+            base=base,
             seeds=SeedsSpec(
                 start=int(seeds_raw.get("start", 0)), count=int(seeds_raw.get("count", 1))
             ),
