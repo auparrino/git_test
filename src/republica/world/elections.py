@@ -20,7 +20,8 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from republica.actors.sheet import ActorSheet
-from republica.world.config import DEFAULT_DATA_DIR
+from republica.world.config import DEFAULT_DATA_DIR, Province
+from republica.world.provinces import ProvinceRecord
 
 if TYPE_CHECKING:
     from republica.ai.memory import MemoryStore
@@ -29,6 +30,10 @@ if TYPE_CHECKING:
     from republica.world.config import Party
 
 DEFAULT_LOYALTY_PATH = DEFAULT_DATA_DIR / "cohorts_loyalty.csv"
+#: `data/cohort_provinces.csv` (calibracion, secc. 2.2 `regional_bonus_c,p`):
+#: peso de poblacion de cada cohorte por provincia (`Σ_p peso_c,p == 1`).
+#: Opcional -- ver `load_province_weights`.
+DEFAULT_PROVINCE_WEIGHTS_PATH = DEFAULT_DATA_DIR / "cohort_provinces.csv"
 #: `data/actors/ministers/<party_id>.yaml` (ADR 006 secc. 2.4).
 MINISTERS_DIR = DEFAULT_DATA_DIR / "actors" / "ministers"
 
@@ -43,8 +48,17 @@ WEIGHTS: dict[str, float] = {
     "v_evt": 0.02,
 }
 
-#: `tau` del softmax de intencion de voto por cohorte (secc. 2.2, literal).
-TAU_SHARE = 0.35
+#: `tau` del softmax de intencion de voto por cohorte (secc. 2.2: "τ = 0.35"
+#: literal, RECALIBRADO -- ver docs/CALIBRATION_LOG.md). Con los pesos
+#: literales de la formula, el rango tipico de `util_c,p` entre partidos de
+#: una misma cohorte es de apenas 0.1-0.3 (`v_ideo=0.25`/`v_loy=0.15` son los
+#: terminos dominantes en la linea de base sin campana/economia/eventos); un
+#: `τ` de 0.35 aplasta esas diferencias a casi nada (`exp(0.2/0.35)≈1.76`
+#: contra las 5 opciones -> reparto casi uniforme, el bug que reporta el
+#: encargo de calibracion). `τ = 0.15` mantiene el resultado dentro de rango
+#: de softmax razonable (`exp(0.2/0.15)≈3.79`) sin volverlo una eleccion
+#: cuasi-determinista.
+TAU_SHARE = 0.15
 #: `tau` del softmax de transferencia de votos en el balotaje (secc. 2.3,
 #: literal).
 TAU_RUNOFF = 0.5
@@ -120,6 +134,80 @@ def load_loyalty(path: str | Path | None = None) -> LoyaltyTable:
     return table
 
 
+def load_province_weights(path: str | Path | None = None) -> dict[str, dict[str, float]]:
+    """Carga `data/cohort_provinces.csv` (calibracion: `cohort_id,
+    province_id, weight`, `Σ_p weight_c,p == 1` por cohorte) -- mapea cada
+    cohorte a la mezcla de provincias donde vive, para `regional_bonus_c,p`
+    (secc. 2.2). Opcional (encargo de calibracion, secc. 2.1/2.2 nota impl.
+    #10 original): si el archivo no existe devuelve `{}` (mismo
+    comportamiento que antes -- `regional_bonus_c,p = 0` para todos)."""
+    p = Path(path) if path is not None else DEFAULT_PROVINCE_WEIGHTS_PATH
+    if not p.exists():
+        return {}
+    out: dict[str, dict[str, float]] = {}
+    with p.open(encoding="utf-8", newline="") as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            bucket = out.setdefault(row["cohort_id"], {})
+            bucket[row["province_id"]] = float(row["weight"])
+    return out
+
+
+#: Escalas de `province_performance` (calibracion, sin ADR: la seccion 2.1/
+#: 2.2 solo dice "gobernadores del partido con approval alta en la region",
+#: sin formula -- ver docs/ADR_006_memory_elections.md, nota de calibracion
+#: agregada). `income_p` es un indice centrado en 100 (`world/provinces.py`);
+#: una desviacion de 20 puntos (shock/transferencia grande) satura el
+#: termino a +-1. `unemployment_p` se compara contra el desempleo nacional
+#: del mismo mes; una brecha de 5pp (mas que el `u_offset` mas extremo de
+#: `provinces.csv`, +-4) satura el termino a +-1.
+REGIONAL_INCOME_SCALE = 20.0
+REGIONAL_UNEMPLOYMENT_SCALE = 5.0
+
+
+def province_performance(
+    province_records: list[ProvinceRecord], national_unemployment: float
+) -> dict[str, float]:
+    """`perf_p` (calibracion): que tan bien le va a la provincia `p` respecto
+    del pais, usado como proxy de la popularidad de su gobernador (secc. 2.1/
+    2.2: "gobernadores del partido con approval alta en la region", el ADR no
+    da formula -- `income_p`/`unemployment_p` de `world/provinces.py` son las
+    unicas variables provinciales que existen). Acotado a `[-1, 1]`, mismo
+    orden que los demas terminos del util antes de los pesos."""
+    perf: dict[str, float] = {}
+    for pr in province_records:
+        income_term = (pr.income_p - 100.0) / REGIONAL_INCOME_SCALE
+        unemployment_gap = pr.unemployment_p - national_unemployment
+        unemployment_term = -unemployment_gap / REGIONAL_UNEMPLOYMENT_SCALE
+        perf[pr.id] = max(-1.0, min(1.0, income_term + unemployment_term))
+    return perf
+
+
+def compute_regional_bonus(
+    cohorts: list[Cohort],
+    provinces: list[Province],
+    province_records: list[ProvinceRecord],
+    province_weights: dict[str, dict[str, float]],
+    national_unemployment: float,
+) -> dict[tuple[str, str], float]:
+    """`regional_bonus_c,p` (secc. 2.2): `Σ_prov peso_c,prov · perf_prov` para
+    el partido que gobierna esa provincia (`data/provinces.csv ->
+    governor_party`), 0 para los demas partidos ahi. Cero si no hay datos de
+    provincia para una cohorte (mismo default que antes de esta calibracion:
+    ver ADR 006 nota de implementacion #10, ahora resuelta)."""
+    governor_by_province = {p.id: p.governor_party for p in provinces}
+    perf = province_performance(province_records, national_unemployment)
+    bonus: dict[tuple[str, str], float] = {}
+    for c in cohorts:
+        for prov_id, weight in province_weights.get(c.id, {}).items():
+            party_id = governor_by_province.get(prov_id)
+            if party_id is None:
+                continue
+            key = (c.id, party_id)
+            bonus[key] = bonus.get(key, 0.0) + weight * perf.get(prov_id, 0.0)
+    return bonus
+
+
 def pos(x: float) -> float:
     return x if x > 0.0 else 0.0
 
@@ -170,19 +258,20 @@ def compute_vote_intention(
     memory_store: MemoryStore | None = None,
     now_turn: int = 0,
     loyalty_adjustments: dict[tuple[str, str], float] | None = None,
+    regional_bonus: dict[tuple[str, str], float] | None = None,
 ) -> dict[str, dict[str, float]]:
     """Intencion de voto por cohorte y partido (ADR 006 secc. 2.2):
     `{cohort_id: {party_id: share}}`, `share` ya normalizado por softmax
     dentro de cada cohorte (`Σ_p share_c,p == 1`).
 
-    `regional_bonus_c,p` (secc. 2.2) se deja en 0 para todas las cohortes:
-    `cohorts.csv` (ADR 005 secc. 3) no tiene una columna de provincia por
-    cohorte -- no hay forma de mapear una cohorte a "la region de un
-    gobernador" sin inventar esa tabla tambien; con `v_reg = 0.05` (el peso
-    mas chico de los 7) el impacto de dejarlo en 0 es marginal, documentado
-    en Notas de implementacion de ADR 006."""
+    `regional_bonus` (secc. 2.2, `regional_bonus_c,p`) ya viene calculado
+    (`compute_regional_bonus`, calibracion: ver docs/ADR_006_memory_elections.md
+    nota de implementacion #10, ahora resuelta con `data/cohort_provinces.csv`)
+    -- default `{}` (0 para todos) si el llamador no lo pasa, mismo
+    comportamiento que antes de la calibracion."""
     campaign_state = campaign_state or {}
     loyalty_adjustments = loyalty_adjustments or {}
+    regional_bonus = regional_bonus or {}
     out: dict[str, dict[str, float]] = {}
     for c in cohorts:
         cs = cohort_state[c.id]
@@ -197,7 +286,7 @@ def compute_vote_intention(
             u += WEIGHTS["v_ideo"] * (1.0 - abs(c.econ_pref - p.economic))
             loy = loyalty.get_loyalty(c.id, p.id) + loyalty_adjustments.get((c.id, p.id), 0.0)
             u += WEIGHTS["v_loy"] * loy
-            u += WEIGHTS["v_reg"] * 0.0
+            u += WEIGHTS["v_reg"] * regional_bonus.get((c.id, p.id), 0.0)
             camp = campaign_state.get(p.id, {})
             u += WEIGHTS["v_camp"] * (camp.get(c.id, 0.0) + camp.get("all", 0.0))
             u += WEIGHTS["v_evt"] * evt
@@ -332,10 +421,29 @@ def run_election(
     campaign_state: dict[str, dict[str, float]] | None = None,
     memory_store: MemoryStore | None = None,
     loyalty_adjustments: dict[tuple[str, str], float] | None = None,
+    provinces: list[Province] | None = None,
+    province_records: list[ProvinceRecord] | None = None,
+    province_weights: dict[str, dict[str, float]] | None = None,
+    national_unemployment: float | None = None,
 ) -> ElectionResult:
     """Orquesta secc. 2.2 + 2.3: intencion -> primera vuelta -> balotaje (si
-    corresponde) -> bancas."""
+    corresponde) -> bancas.
+
+    `provinces`/`province_records`/`province_weights`/`national_unemployment`
+    (calibracion, `regional_bonus_c,p`): los 4 son opcionales y solo tienen
+    efecto juntos -- si falta alguno, `regional_bonus` queda en `{}` (0 para
+    todos, mismo comportamiento que antes de esta calibracion)."""
     incumbent = next((p.id for p in parties if p.in_government), parties[0].id)
+    regional_bonus = (
+        compute_regional_bonus(
+            cohorts, provinces, province_records, province_weights, national_unemployment
+        )
+        if provinces is not None
+        and province_records is not None
+        and province_weights is not None
+        and national_unemployment is not None
+        else None
+    )
     intention = compute_vote_intention(
         cohorts,
         cohort_state,
@@ -348,6 +456,7 @@ def run_election(
         memory_store=memory_store,
         now_turn=month,
         loyalty_adjustments=loyalty_adjustments,
+        regional_bonus=regional_bonus,
     )
     first_round = aggregate_vote(cohorts, intention, loyalty, rng)
     winner, runoff = resolve_presidential(first_round, parties)

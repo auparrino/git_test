@@ -24,10 +24,16 @@ from republica.world.cohorts import init_cohort_state, load_cohorts
 from republica.world.config import Party, load_country
 from republica.world.elections import (
     LoyaltyTable,
+    compute_regional_bonus,
+    compute_vote_intention,
     dhondt,
+    load_loyalty,
+    load_province_weights,
     resolve_presidential,
     run_election,
 )
+from republica.world.events import ShockAggregate
+from republica.world.provinces import compute_provinces
 
 COUNTRY = load_country()
 ACTORS = load_actors()
@@ -486,6 +492,211 @@ def test_dhondt_seats_always_sum_to_total_and_respects_threshold() -> None:
     seats = dhondt(pct, seats_total=100, threshold_pct=3.0)
     assert sum(seats.values()) == 100
     assert seats["C"] == 0  # bajo el umbral del 3%
+
+
+# ---------------------------------------------------------------------------
+# Calibracion (encargo de calibracion, mes 48 de `run --seed 7 --policy
+# taylor --months 96` casi uniforme y Alianza Provincial ganando la
+# presidencia): 6 metas, cada una como test, mas la recalibracion de
+# `data/cohorts_loyalty.csv`/`TAU_SHARE`/`data/cohort_provinces.csv` que las
+# hace pasar (ver docs/CALIBRATION_LOG.md para el detalle numerico completo).
+# ---------------------------------------------------------------------------
+
+#: Bancas iniciales de `data/parties.json` (38/30/14/10/8 sobre 100), meta
+#: de la calibracion 1 (linea de base).
+INITIAL_SEAT_SHARE_PCT = {
+    "frente_federal": 38.0,
+    "union_republicana": 30.0,
+    "partido_social": 14.0,
+    "movimiento_libertad": 10.0,
+    "alianza_provincial": 8.0,
+}
+
+
+def _baseline_intention_and_avg_first_round(n_seeds: int = 50) -> dict[str, float]:
+    """Linea de base de la meta 1: `approval_c = 50` (default de
+    `init_cohort_state`), sin cambio economico en 12 meses
+    (`Δreal_wage = Δunemployment = 0`), `perceived_inflation = 2`
+    (tambien el default de `init_cohort_state` con `COUNTRY.initial_state`),
+    sin campana ni eventos recientes (`campaign_state`/`memory_store` en
+    blanco, los defaults de `run_election`) -- primera vuelta promediada
+    sobre `n_seeds` semillas (el ruido de `aggregate_vote` es lo unico que
+    varia entre semillas; la intencion de voto en si es determinista)."""
+    cohorts = load_cohorts()
+    cohort_state = init_cohort_state(cohorts, COUNTRY.initial_state)
+    loyalty = load_loyalty()
+    totals = dict.fromkeys(INITIAL_SEAT_SHARE_PCT, 0.0)
+    for seed in range(n_seeds):
+        result = run_election(
+            48,
+            cohorts,
+            cohort_state,
+            COUNTRY.parties,
+            government_approval=50.0,
+            loyalty=loyalty,
+            rng=random.Random(seed),
+            delta_real_wage_pct_12m=0.0,
+            delta_unemployment_12m=0.0,
+        )
+        for pid, v in result.first_round.items():
+            totals[pid] += v
+    return {pid: v / n_seeds for pid, v in totals.items()}
+
+
+def test_baseline_reproduces_initial_party_system() -> None:
+    """Meta 1 del encargo de calibracion: la linea de base (secc. arriba)
+    reproduce las bancas iniciales de `data/parties.json` (38/30/14/10/8)
+    dentro de +-5pp, promediado sobre 50 semillas -- logrado calibrando
+    `data/cohorts_loyalty.csv` y `TAU_SHARE` (ver docs/CALIBRATION_LOG.md),
+    no la forma de `compute_vote_intention`."""
+    avg = _baseline_intention_and_avg_first_round(50)
+    for party_id, target_pct in INITIAL_SEAT_SHARE_PCT.items():
+        assert abs(avg[party_id] - target_pct) <= 5.0, (
+            f"{party_id}: avg={avg[party_id]:.2f} target={target_pct} "
+            f"(fuera de +-5pp, ver docs/CALIBRATION_LOG.md)"
+        )
+
+
+def test_economic_vote_moves_incumbent_share_at_least_6pp() -> None:
+    """Meta 3 del encargo de calibracion: entre dos lineas de base
+    identicas salvo el salario real (`+8%` vs `-8%` en 12 meses, desempleo
+    sin cambios), la primera vuelta del oficialismo debe moverse >= 6pp
+    (`econ_vote_c`/`v_econ`, ADR 006 secc. 2.2 -- formula sin tocar, el
+    salto sale de la calibracion de `TAU_SHARE`/lealtad que ya no aplasta
+    las diferencias de util)."""
+    cohorts = load_cohorts()
+    cohort_state = init_cohort_state(cohorts, COUNTRY.initial_state)
+    loyalty = load_loyalty()
+    incumbent = next(p.id for p in COUNTRY.parties if p.in_government)
+
+    def avg_incumbent_share(delta_wage: float, n_seeds: int = 50) -> float:
+        total = 0.0
+        for seed in range(n_seeds):
+            result = run_election(
+                48,
+                cohorts,
+                cohort_state,
+                COUNTRY.parties,
+                government_approval=50.0,
+                loyalty=loyalty,
+                rng=random.Random(seed),
+                delta_real_wage_pct_12m=delta_wage,
+                delta_unemployment_12m=0.0,
+            )
+            total += result.first_round[incumbent]
+        return total / n_seeds
+
+    good = avg_incumbent_share(8.0)
+    bad = avg_incumbent_share(-8.0)
+    assert good - bad >= 6.0, f"good={good:.2f} bad={bad:.2f} diff={good - bad:.2f}"
+
+
+def test_regional_bonus_favors_governing_party_in_its_province() -> None:
+    """Meta 4 del encargo de calibracion: `regional_bonus_c,p` (ADR 006
+    secc. 2.2, antes fijo en 0 -- nota de implementacion #10) ahora es real.
+    `data/cohort_provinces.csv` (peso de poblacion de cada cohorte por
+    provincia) + `compute_regional_bonus` (calibracion, formula documentada
+    en `world/elections.py::province_performance`: sin ADR que la fije) le
+    dan a Alianza Provincial (gobernadora de `norte`, `data/provinces.csv`)
+    una ventaja medible en `rural`/`informal` (las cohortes con mas peso en
+    `norte`, ver `data/cohort_provinces.csv`) cuando esa provincia le va
+    mejor que al pais -- y ninguna ventaja cuando no hay datos de provincia
+    (`regional_bonus=None`, comportamiento anterior)."""
+    cohorts = load_cohorts()
+    cohort_state = init_cohort_state(cohorts, COUNTRY.initial_state)
+    loyalty = load_loyalty()
+    province_weights = load_province_weights()
+    assert province_weights, "data/cohort_provinces.csv no cargo ningun peso"
+
+    # Shock economico grande y localizado en `norte` (gobernada por AP):
+    # income_p sube bien por encima del resto del pais, unemployment_p sin
+    # cambios -- `province_performance` debe leerlo como un gobierno
+    # provincial que le va mejor que el promedio nacional.
+    agg = ShockAggregate()
+    agg.province_id["norte"] = 50.0
+    provinces = compute_provinces(
+        COUNTRY.initial_state,
+        COUNTRY.default_policy,
+        COUNTRY.provinces,
+        COUNTRY.coefficients.province_transfer_sensitivity,
+        COUNTRY.coefficients.transfers_ref,
+        agg,
+    )
+    bonus = compute_regional_bonus(
+        cohorts, COUNTRY.provinces, provinces, province_weights, COUNTRY.initial_state.unemployment
+    )
+    assert bonus[("rural", "alianza_provincial")] > 0.0
+    assert bonus[("informal", "alianza_provincial")] > 0.0
+
+    intention_with = compute_vote_intention(
+        cohorts,
+        cohort_state,
+        COUNTRY.parties,
+        government_approval=50.0,
+        loyalty=loyalty,
+        delta_real_wage_pct_12m=0.0,
+        delta_unemployment_12m=0.0,
+        regional_bonus=bonus,
+    )
+    intention_without = compute_vote_intention(
+        cohorts,
+        cohort_state,
+        COUNTRY.parties,
+        government_approval=50.0,
+        loyalty=loyalty,
+        delta_real_wage_pct_12m=0.0,
+        delta_unemployment_12m=0.0,
+        regional_bonus=None,
+    )
+    assert (
+        intention_with["rural"]["alianza_provincial"]
+        > intention_without["rural"]["alianza_provincial"]
+    )
+    assert (
+        intention_with["informal"]["alianza_provincial"]
+        > intention_without["informal"]["alianza_provincial"]
+    )
+
+
+def test_seed7_taylor_month48_no_longer_near_uniform_and_incumbent_loses() -> None:
+    """Meta 6 del encargo de calibracion: el mes 48 de `run --seed 7
+    --policy taylor --months 96` (el caso que reporta el encargo: FF 19.4 %,
+    UR 21.9 %, PS 20.0 %, ML 15.6 %, AP 23.1 %, gana Alianza Provincial) ya
+    no es casi uniforme y la aprobacion agregada del mes 47 (baja: el
+    oficialismo viene cayendo) es consistente con el resultado -- pierde,
+    pero contra un partido mayoritario, no Alianza Provincial (ver
+    docs/CALIBRATION_LOG.md para los numeros completos antes/despues)."""
+    taylor = TaylorPolicy(
+        COUNTRY.default_policy,
+        COUNTRY.taylor,
+        COUNTRY.structure.r_neutral,
+        COUNTRY.policy_ranges["interest_rate_target"],
+    )
+    history = run(
+        seed=7,
+        months=96,
+        policy_rule=taylor,
+        country=COUNTRY,
+        actors_enabled=True,
+        congress_enabled=True,
+        negotiation_enabled=True,
+        cohorts_enabled=True,
+        media_enabled=True,
+        memory_enabled=True,
+        elections_enabled=True,
+    )
+    er48 = history.election_records[0]
+    assert er48.month == 48
+    shares = er48.first_round
+    spread = max(shares.values()) - min(shares.values())
+    assert spread > 10.0, f"primera vuelta casi uniforme otra vez: {shares}"
+
+    approval_month47 = history.records[46].state["government_approval"]
+    assert approval_month47 < 40.0  # oficialismo cayendo, consistente con perder
+
+    assert er48.winner != er48.incumbent_party  # aprobacion baja -> pierde
+    assert er48.winner != "alianza_provincial"  # pero no gana el partido regional
+    assert sum(er48.seats.values()) == 100  # D'Hondt sigue sumando 100 bancas
 
 
 # ---------------------------------------------------------------------------

@@ -309,3 +309,74 @@ Ambigüedades, decisiones de diseño y desviaciones al implementar `ai/memory.py
     placeholder antes de hashear, es el único byte que cambia al tocar `data/country.json`/`data/
     parties.json`, inevitable al agregarles `term_length`/`features.memory`/`features.elections`). Ver
     `tests/test_memory_elections.py::test_features_off_matches_pre_adr006_golden_hash`.
+
+---
+
+## 5. Nota de calibración (encargo de calibración post-Fase 6)
+
+Estado: aplicada. Ver `docs/CALIBRATION_LOG.md` para el detalle numérico completo (tabla de
+lealtad, τ, línea de base de 50 semillas, mes 48/96 de `seed=7 --policy taylor` antes/después). Esta
+sección resume el diagnóstico y las decisiones; **ningún cambio tocó la forma de las fórmulas de
+`world/elections.py`** (`compute_vote_intention`, `resolve_presidential`, `dhondt`), solo datos
+(`data/cohorts_loyalty.csv`, `data/cohort_provinces.csv` nuevo) y un parámetro (`TAU_SHARE`) — con la
+única excepción documentada de `regional_bonus_c,p` (nota de implementación #10, que dejaba el bono
+regional fijo en 0 por falta de datos): esa nota se da por **resuelta**, no por invalidada, agregando
+`data/cohort_provinces.csv` y una fórmula de `perf_p` (sin ADR previo que la fije — documentada inline
+en `world/elections.py::province_performance`, es calibración pura, no una desviación de un texto ya
+escrito).
+
+### 5.1 Diagnóstico
+
+`run --seed 7 --policy taylor --months 96` daba, en la primera vuelta del mes 48: FF 19.4 %, UR
+21.9 %, PS 20.0 %, ML 15.6 %, AP 23.1 % — casi uniforme, y **Alianza Provincial** (un partido regional
+de 8 bancas, sin base social propia según la nota de implementación #13 original) terminaba ganando la
+presidencia. Dos causas, ambas de calibración, no de fórmula:
+
+1. **`τ = 0.35` (secc. 2.2, literal) aplana el softmax.** Con los pesos por defecto (`v_ideo = 0.25`,
+   `v_loy = 0.15` son los términos dominantes en una línea de base sin campaña/economía/eventos), la
+   diferencia de utilidad típica entre dos partidos para una misma cohorte es de apenas 0.1–0.3. Dividir
+   eso por `τ = 0.35` produce razones de softmax cercanas a 1 entre las 5 opciones — casi uniforme por
+   construcción, sin que ningún partido tenga que ser "malo" para que el reparto sea parejo.
+2. **La matriz de lealtad original (`data/cohorts_loyalty.csv` de Fase 6) era casi uniforme (todas las
+   cohortes con lealtad 0.05–0.45 hacia cada partido, sin estructura por cohorte) y `alianza_provincial`,
+   con `economic = 0.0` (el único partido centrista de `data/parties.json`), nunca queda última en el
+   término ideológico de ninguna cohorte (`v_ideo · (1 − |econ_pref_c − economic_p|)`, `economic_p = 0.0`
+   minimiza esa distancia para cualquier `econ_pref_c` de magnitud media) — un partido "sin base propia"
+   pero que nunca es la peor opción de nadie termina, bajo softmax con τ chico, acumulando una porción
+   pareja de cada cohorte en vez de una porción chica: exactamente lo opuesto al "partido regional
+   marginal" que describe la ficha de `alianza_provincial`.
+
+### 5.2 Cambios
+
+- **`TAU_SHARE`: `0.35 → 0.15`** (rango sugerido 0.12–0.2, ver `world/elections.py` para la
+  justificación completa inline). Mantiene el softmax dentro de un rango razonable
+  (`exp(0.2/0.15) ≈ 3.8`) sin volverlo casi determinista.
+- **`data/cohorts_loyalty.csv` recalibrado de cero**, con estructura explícita por cohorte (urban_workers/
+  public_employees → FF/PS; middle_class/young_professionals → UR/ML; rural → UR/AP; informal → FF;
+  retirees → FF/UR; students → PS/FF, según el encargo) — tabla completa en
+  `docs/CALIBRATION_LOG.md`. La lealtad **no está acotada a `[0, 1]`**: es un término aditivo más de
+  `util_c,p` (`v_loy · loyalty_c,p`), no una probabilidad — se usan valores hasta ~1.08 (UR en sus
+  cohortes más leales) y negativos (hasta −0.6, `alianza_provincial` en toda cohorte salvo `rural`) para
+  compensar la ventaja ideológica estructural de un partido centrista (punto 2 de 5.1) sin tocar la
+  fórmula de `v_ideo`. Un partido "sin base social" necesita lealtad genuinamente negativa para no ganar
+  por default en un softmax de τ chico — 0 (neutral) no alcanza.
+- **`data/cohort_provinces.csv` (nuevo)**: peso de población de cada cohorte por provincia (Σ = 1 por
+  cohorte), resuelve la nota de implementación #10 (`regional_bonus_c,p` fijo en 0). `world/elections.py`
+  gana `load_province_weights`, `province_performance` (`perf_p`, calibración: escala `income_p`/
+  `unemployment_p` de `world/provinces.py` contra el promedio nacional, sin fórmula previa que fijar) y
+  `compute_regional_bonus`. Opcional (`{}` si el CSV no existe → mismo comportamiento que antes).
+  `v_reg = 0.05` sin tocar (el encargo lo pide explícito).
+
+### 5.3 Resultado
+
+Línea de base (50 semillas, `approval_c = 50`, sin cambio económico, sin campaña/eventos): FF 35.7 %,
+UR 29.6 %, PS 16.4 %, ML 8.2 %, AP 10.2 % — las 5 dentro de ±5pp de las bancas iniciales de
+`data/parties.json` (38/30/14/10/8). `seed=7 --policy taylor`, mes 48: FF 23.8 %, UR 34.9 %, PS 19.9 %,
+ML 9.0 %, AP 12.4 % (spread 25.9pp, ya no uniforme); balotaje UR 50.7 % vs FF 49.3 % — el oficialismo
+(aprobación ≈ 29 en el mes 48, cayendo desde 50) pierde, pero contra Unión Republicana, no contra
+Alianza Provincial. Detalle completo (incluida la segunda elección, mes 96) en
+`docs/CALIBRATION_LOG.md`. Tests nuevos: `tests/test_memory_elections.py::
+test_baseline_reproduces_initial_party_system`, `::test_economic_vote_moves_incumbent_share_at_least_6pp`,
+`::test_regional_bonus_favors_governing_party_in_its_province`,
+`::test_seed7_taylor_month48_no_longer_near_uniform_and_incumbent_loses` (los tests de la secc. 3 ya
+existentes, incluidos los 2 de aprobación 65/25, siguen pasando sin cambios).
