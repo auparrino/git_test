@@ -107,11 +107,12 @@ def run_monthly_arm(
     macro_active = country.features.get("macro_regime", False)
     macro = pack.macro_coefficients if macro_active else None
     if arm == "calibrated":
-        coeff, bimonetary_cal, macro_cal = load_calibrated_country("argentina", calibration_run_id)
+        # `load_calibrated_country` devuelve `(Coefficients, BimonetaryCoefficients)`:
+        # `coefficients.json` (A3) no trae coeficientes macro calibrados, asi que
+        # el brazo calibrado usa los `macro` del paquete tal cual.
+        coeff, bimonetary_cal = load_calibrated_country("argentina", calibration_run_id)
         country = country.model_copy(update={"coefficients": coeff})
         bimonetary = bimonetary_cal
-        if macro_active and macro_cal is not None:
-            macro = macro_cal
     bimonetary = dataclasses.replace(bimonetary, fx_regime_default=pack.fx_regime_auto)
 
     era_actors = None
@@ -185,7 +186,7 @@ def run_annual_arm(
     years = window.h // 12
     country = load_country_pack_annual("argentina", year0, years)
     if arm == "calibrated":
-        coeff, _bimon, _macro = load_calibrated_country("argentina", calibration_run_id)
+        coeff, _bimon = load_calibrated_country("argentina", calibration_run_id)
         country = country.model_copy(update={"coefficients": coeff})
     regime_lookup = load_annual_regime(country_pack_dir("argentina") / "politics" / "regimes.csv")
     policy_rule = PassivePolicy(
