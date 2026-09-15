@@ -51,8 +51,10 @@ entonces muta el estado. Toda denegación queda registrada y es una métrica.
 | **Evals y gobernanza** | 10 métricas (ideología, intereses, consistencia temporal, memoria, alucinación, violación de autoridad, adaptación, diversidad, realismo) con baseline por reglas e IC bootstrap; juez ≠ actor; fichas de gobernanza por actor con niveles de autonomía aplicados por el motor; trazas exportables a Langfuse | `ADR_007`, `evals/`, `governance/` |
 | **Experimentos** | Definición YAML con brazos y sweeps, runner paralelo con resume, DuckDB con 9 tablas, reportes con Cliff's delta y mapas de calor | `ADR_008`, `experiments/` |
 | **Visor** | HTML autocontenido por corrida | `republica viewer` |
+| **Sustituto y análisis** | Dataset de decisiones, sustituto sklearn por rol con active learning (`surrogate:<path>+fallback:rules`), early-warning de crisis a 12 meses, clustering de regímenes, UI Streamlit de 12 pestañas con modo jugable | `ADR_009`, `ml/`, `ui/app.py` |
+| **Núcleo sin instituciones (v2)** | 10.000 agentes, 6 bienes, solo `OFFER`/`TRANSFER`, estrategia evolutiva y clasificación a posteriori; test de contaminación contra la lista de instituciones que no pueden aparecer en el código | `ADR_010`, `core/` |
 
-169 tests, todos offline. Cada fase tiene tests de aceptación y hashes dorados que garantizan que
+194 tests, todos offline. Cada fase tiene tests de aceptación y hashes dorados que garantizan que
 apagar una feature reproduce exactamente la versión anterior.
 
 ---
@@ -133,8 +135,9 @@ uv run republica eval --suite all --brain llm:ollama:qwen3:8b --judge llm:ollama
 
 Orden obligatorio, sin saltos: **mundo → reglas → decisiones humanas → actores simples → IA → memoria →
 interacción → evals → autonomía**. Cada fase con spec o ADR escrito antes de codear, tests de aceptación
-como definición de "listo", revisión de código independiente entre fases (dos rondas, 20 hallazgos
-verificados y cerrados: [`REVIEW_001`](docs/REVIEW_001_fases_1-3.md), [`REVIEW_002`](docs/REVIEW_002_fases_4-7.md))
+como definición de "listo", revisión de código independiente entre fases (tres rondas, 32 hallazgos
+verificados y cerrados: [`REVIEW_001`](docs/REVIEW_001_fases_1-3.md), [`REVIEW_002`](docs/REVIEW_002_fases_4-7.md),
+[`REVIEW_003`](docs/REVIEW_003_fases_8-9.md))
 y un [registro de calibración](docs/CALIBRATION_LOG.md) que explica cada coeficiente que cambió y por qué.
 
 Los modelos usados: diseño y decisiones irreversibles con el modelo más fuerte disponible,
@@ -142,18 +145,33 @@ implementación contra spec con un modelo intermedio, tareas mecánicas con el m
 uno distinto del que implementó. El plan completo, con el modelo por etapa y la checklist operativa,
 está en [`docs/PLAN.md`](docs/PLAN.md) y [`docs/PASO_A_PASO.md`](docs/PASO_A_PASO.md).
 
+**Moneda emergente (v2, hito 1; 100 semillas × 2.000 agentes × 500 turnos).** En un mundo sin moneda,
+Estado ni precios, donde los agentes solo pueden ofrecer y transferir bienes, en 100 de 100 semillas
+emerge un medio de intercambio antes del turno 100: siempre las conchas, el único bien que nadie
+consume. La abundancia de conchas (×0.3 a ×3) no cambia nada (hipótesis H3 refutada) y el costo de
+transporte solo retrasa la emergencia (H4 confirmada). El control negativo dejó el hallazgo más
+interesante: bajar la durabilidad de todos los bienes no impide que aparezca dinero; lo que lo impide
+es que no exista ningún bien sin utilidad directa.
+[`experiments/results/core_hito1/main/report.md`](experiments/results/core_hito1/main/report.md).
+
 ## Lo que viene
 
-- **Fase 9** ([`ADR_009`](docs/ADR_009_surrogate_ui.md), resultados en
+- **Fase 9, lo que falta** ([`ADR_009`](docs/ADR_009_surrogate_ui.md), resultados en
   [`FASE9_RESULTS.md`](docs/FASE9_RESULTS.md)): modelo sustituto entrenado sobre las decisiones de los
   actores (el acuerdo se mide contra un baseline de clase mayoritaria, no solo, porque con actores por
   reglas casi todo es `neutral` y el problema es casi trivial: 0.9986 de acuerdo agregado vs. 0.9959 de
   ese baseline, contra 0.67 en los casos donde el actor de verdad toma partido — el sustituto recién es
   informativo imitando a un LLM), active learning cuando el sustituto duda, early-warning de crisis a 12
   meses (AUC 0.996/0.998 en validación/test), clustering de regímenes políticos e interfaz Streamlit.
-- **Fase 10**: dejar de hardcodear instituciones. Definir 10–20 primitivas (`GRANT`, `DELEGATE`,
-  `AGGREGATE`, `SANCTION`, `MODIFY_RULE`…) con las que los agentes puedan inventar sus propias reglas, y
-  ver qué formas de organización emergen.
+  Pendiente: inferencia por lote en el scheduler (el sustituto corre 34× más lento que las reglas) y
+  entrenarlo sobre actores LLM, que es cuando deja de ser trivial.
+- **Fase 10, hitos 2 a 5** ([`ADR_010`](docs/ADR_010_social_cpu.md)): activar de a una las once
+  primitivas (`PROMISE`, `GRANT`, `CREATE_GROUP`, `AGGREGATE`, `CONDITION`, `SANCTION`, `MODIFY_RULE`…)
+  y preguntar si emergen crédito, organizaciones coercitivas, procedimientos de decisión y constituciones
+  que nadie programó; después, un investigador IA que proponga y corra sus propios experimentos.
+- **Lo que solo podés hacer vos**: jugar tres partidas, escribir los 20 casos de eval a mano, y correr
+  `bench-parse` y `compare` con Ollama local. Es lo primero que le da sentido de verdad al sustituto, a
+  los evals y a la comparación entre modelos.
 
 ## Limitaciones
 
@@ -166,4 +184,4 @@ LLM real: toda la capa de IA está verificada con backends falsos que reproducen
 
 ## Stack
 
-Python 3.12+ · uv · pydantic · typer · rich · pytest · hypothesis · DuckDB · Ollama · Langfuse (opcional) · Promptfoo (export) · Streamlit (Fase 9)
+Python 3.12+ · uv · pydantic · typer · rich · pytest · hypothesis · DuckDB · scikit-learn · numpy (solo `core/`) · Streamlit · Ollama · Langfuse (opcional) · Promptfoo (export)
