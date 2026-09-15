@@ -48,7 +48,12 @@ from republica.world.cohorts import (
     weighted_perceived_inflation,
 )
 from republica.world.config import Country, load_country
-from republica.world.economy import finalize_exogenous, step_economy, step_exogenous
+from republica.world.economy import (
+    apply_historical_shock_effects,
+    finalize_exogenous,
+    step_economy,
+    step_exogenous,
+)
 from republica.world.elections import (
     PROMISE_WINDOW_MONTHS,
     ElectionResult,
@@ -972,8 +977,17 @@ def advance_month(sim: Simulation) -> MonthRecord:
     sim.last_effective_policy = policy.model_copy()
 
     # 4. economia (4.1 -> 4.8)
+    # P2 (A3, ADR 011 secc. 4): `sovereign_default`/`imf_program` activos
+    # este mes (`sim.active_shocks`, ya actualizado arriba por
+    # `ShockCatalog.apply_month`) ajustan `coeff`/`policy` de forma
+    # proporcional (k_k=0, debt_interest_rate*0.5, primary_spending-1.5)
+    # ANTES de pasarselos a `step_economy` -- su firma no cambia, solo los
+    # valores que recibe. Sin ninguno de los dos shocks activos, `coeff`/
+    # `policy` vuelven identicos (mismo objeto): golden hash de Aurora y de
+    # cualquier corrida sin esos shocks, intacto.
+    econ_coeff, econ_policy = apply_historical_shock_effects(coeff, policy, set(sim.active_shocks))
     econ_state, aux = step_economy(
-        sim.state, sim.exo, exo_new, policy, agg, country.structure, coeff
+        sim.state, sim.exo, exo_new, econ_policy, agg, country.structure, econ_coeff
     )
     if sim.actors_enabled:
         assert sim.actor_engine is not None

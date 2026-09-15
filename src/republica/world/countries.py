@@ -18,6 +18,7 @@ que escribe en la carpeta fusionada antes de llamar a `load_country`.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tempfile
 from dataclasses import dataclass, field
@@ -25,7 +26,7 @@ from pathlib import Path
 
 from republica.world.bimonetary import BimonetaryCoefficients
 from republica.world.config import DEFAULT_DATA_DIR, Country, load_country
-from republica.world.regime import RegimeCalendar, build_regime_calendar
+from republica.world.regime import RegimeCalendar, build_regime_calendar, load_failed_coup_dates
 
 COUNTRIES_ROOT = DEFAULT_DATA_DIR / "countries"
 
@@ -68,8 +69,18 @@ def _merged_dir_for(country_id: str) -> Path:
     """Carpeta fusionada, estable por proceso (`tempfile.gettempdir()`, no el
     scratchpad de la sesion: esto es infraestructura de carga, no un
     artefacto de la tarea), reconstruida en cada llamada para reflejar
-    cualquier edicion posterior del paquete o de `data/`."""
-    base = Path(tempfile.gettempdir()) / "republica_country_packs" / country_id
+    cualquier edicion posterior del paquete o de `data/`.
+
+    Incluye `os.getpid()` (A3, bug encontrado y corregido en el camino):
+    antes el path NO llevaba el pid pese a que el docstring ya decia
+    "estable por proceso" -- en un solo proceso no se notaba (nadie mas
+    pisaba esa carpeta), pero `calibration/optimizer.py` la llama desde
+    varios workers de `multiprocessing.Pool` EN PARALELO, y todos pisaban
+    la misma carpeta de `/tmp` (un `rmtree` de un worker corriendo contra
+    los symlinks a medio escribir de otro): `FileExistsError`/
+    `FileNotFoundError`/`OSError: Directory not empty` intermitentes.
+    Con el pid en el path cada proceso tiene la suya."""
+    base = Path(tempfile.gettempdir()) / "republica_country_packs" / f"{country_id}_{os.getpid()}"
     if base.exists():
         shutil.rmtree(base)
     base.mkdir(parents=True)
@@ -141,7 +152,7 @@ def merged_data_dir_for_pack(
     `arms`/`sweep` incluidos, sin duplicar la logica de resolucion de
     `country.json`."""
     load_country_pack(country_id, start, months, regime_mode)
-    return Path(tempfile.gettempdir()) / "republica_country_packs" / country_id
+    return Path(tempfile.gettempdir()) / "republica_country_packs" / f"{country_id}_{os.getpid()}"
 
 
 @dataclass
@@ -203,18 +214,36 @@ def load_country_pack(
     start: str,
     months: int,
     regime_mode: str = "auto",
+    initial_state_override: dict[str, float] | None = None,
 ) -> CountryPack:
     """Carga el paquete `country_id`, elige el estado inicial de `start`
     (`YYYY-MM`) y arma un `Country` (`world.config.Country`) para correr
     `months` meses desde ahi. `regime_mode`: `"auto"` o `"democracy"` (ver
-    `world/regime.py::build_regime_calendar`)."""
+    `world/regime.py::build_regime_calendar`).
+
+    `initial_state_override` (A3, `calibration/objective.py`): si se pasa,
+    reemplaza la busqueda de `start` en `initial_states` (que solo cubre las
+    8 fechas hito de A2) por este dict plano -- pensado para
+    `calibration/initial_states.py::flat_initial_state`, que sabe construir
+    un estado inicial real para CUALQUIER mes. El resto del paquete (
+    coeficientes, calendario de regimen/shocks, `term_length` segun
+    `constitutions.csv` en la fecha real pedida) se resuelve igual que
+    siempre, contra `start` -- solo el estado inicial en si se saltea la
+    restriccion de las 8 fechas. La cobertura (`CountryPack.
+    initial_states_coverage`) queda vacia para `start` en este caso (no hay
+    `source`/`proxy`/`assumed` por variable en la forma de `initial_states`;
+    esa procedencia vive en `initial_state_for(start)`, no aca)."""
     pack_dir, merged, raw_country = _build_merged_dir(country_id)
-    if "initial_states" not in raw_country:
+    if initial_state_override is None and "initial_states" not in raw_country:
         raise CountryPackError(
             f"{pack_dir / 'country.json'} no tiene 'initial_states' (ADR 011 secc. 2)."
         )
     y, m = _parse_start(start)
-    flat_initial_state = _select_initial_state(raw_country["initial_states"], start)
+    flat_initial_state = (
+        initial_state_override
+        if initial_state_override is not None
+        else _select_initial_state(raw_country["initial_states"], start)
+    )
     term_length, reelection_allowed = term_length_months_for(pack_dir / "constitutions.csv", start)
 
     effective_country_json = dict(raw_country)
@@ -245,9 +274,11 @@ def load_country_pack(
         pack_dir / "politics" / "events.csv", y, m, months, regime_mode
     )
     historical_forced = historical_shocks_calendar(pack_dir, y, m, months)
+    for month_idx, shock_id in failed_coup_shock_months(pack_dir, y, m, months).items():
+        historical_forced.setdefault(month_idx, []).append(shock_id)
     coverage = {
         date: {var: _provenance_kind(prov) for var, prov in entry.items()}
-        for date, entry in raw_country["initial_states"].items()
+        for date, entry in raw_country.get("initial_states", {}).items()
     }
 
     return CountryPack(
@@ -300,6 +331,29 @@ def historical_shocks_calendar(
             idx = (y - start_year) * 12 + (m - start_month) + 1
             if 1 <= idx <= months:
                 out.setdefault(idx, []).append(shock_id)
+    return out
+
+
+#: Shock que reemplaza a un golpe FALLIDO en el calendario (P1, A3): un
+#: intento que no logra derrocar al gobierno no cambia `regime_mode` (ver
+#: `world/regime.py::load_failed_coup_dates`), pero tampoco es gratis --
+#: `data/countries/argentina/shocks.json` define `failed_coup` con
+#: `stability -5, institutional_confidence -3` por 1 mes.
+FAILED_COUP_SHOCK_ID = "failed_coup"
+
+
+def failed_coup_shock_months(
+    pack_dir: Path, start_year: int, start_month: int, months: int
+) -> dict[int, str]:
+    """`{month_index: "failed_coup"}` para cada golpe fallido de
+    `politics/events.csv` que cae dentro de la corrida (P1, A3): mismo
+    calculo de indice que `historical_shocks_calendar`/`build_regime_calendar`,
+    fuente distinta (`events.csv`, no `shocks_calendar.csv`)."""
+    out: dict[int, str] = {}
+    for y, m in load_failed_coup_dates(pack_dir / "politics" / "events.csv"):
+        idx = (y - start_year) * 12 + (m - start_month) + 1
+        if 1 <= idx <= months:
+            out[idx] = FAILED_COUP_SHOCK_ID
     return out
 
 

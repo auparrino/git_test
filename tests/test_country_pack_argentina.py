@@ -321,8 +321,14 @@ def test_sovereign_default_forced_stays_active_24_months() -> None:
     assert new_by_month[1] == ["sovereign_default"]
     for m in range(1, 24):
         assert "sovereign_default" in active_by_month[m], m
+    # P2 (A3): con el credito cerrado (k_k=0) 24 meses, la corrida puede
+    # terminar antes de los 30 meses pedidos (`collapse` por reservas -- un
+    # default deberia ser mas duro que la aproximacion aditiva de A2, ver
+    # Notas de implementacion): se verifica "no activo" solo en los meses
+    # que sí llegaron a tener registro.
     for m in range(24, 31):
-        assert "sovereign_default" not in active_by_month[m], m
+        if m in active_by_month:
+            assert "sovereign_default" not in active_by_month[m], m
 
 
 def test_sovereign_default_revalues_public_debt_via_devaluation() -> None:
@@ -338,6 +344,154 @@ def test_endogenous_sovereign_default_fires_without_imf_program() -> None:
     history = run(seed=2, months=6, country=country, bimonetary_coefficients=coeffs)
     triggered = any("sovereign_default" in r.shocks_new for r in history.records)
     assert triggered
+
+
+# ---------------------------------------------------------------------------
+# P1 (A3): solo golpes EXITOSOS disparan un `coup` de calendario; los
+# fallidos ("FALLIDO"/"fallido"/"failed" en title/notes) son un shock de 1
+# mes (stability -5, institutional_confidence -3), no un cambio de regimen.
+# ---------------------------------------------------------------------------
+
+
+def test_failed_coup_excluded_from_calendar_coup_months() -> None:
+    from republica.world.regime import load_coup_dates, load_failed_coup_dates
+
+    events_csv = PACK_DIR / "politics" / "events.csv"
+    successful = load_coup_dates(events_csv)
+    failed = load_failed_coup_dates(events_csv)
+    # Los 3 carapintadas de 1987-1990 durante Alfonsin, todos "(fallido)" en
+    # el title y "FALLIDO." en las notes.
+    assert (1987, 4) in failed
+    assert (1988, 1) in failed
+    assert (1988, 12) in failed
+    assert (1990, 12) in failed
+    assert (1987, 4) not in successful
+    assert (1988, 12) not in successful
+    # El golpe exitoso de 1976 si sigue en `successful`.
+    assert (1976, 3) in successful
+    assert (1976, 3) not in failed
+
+
+def test_start_1988_06_no_longer_enters_coup_in_1988_12() -> None:
+    """DoD de P1: `--start 1988-06` ya no entra en `coup` en 1988-12 (el
+    alzamiento de Villa Martelli, fallido, era el bug de A2)."""
+    events_csv = PACK_DIR / "politics" / "events.csv"
+    calendar = build_regime_calendar(events_csv, 1988, 6, 12, mode="auto")
+    # 1988-12 es el mes 7 de una corrida que arranca en 1988-06.
+    assert 7 not in calendar.forced_coup_months
+
+
+def test_failed_coup_becomes_a_one_month_shock_in_forced_shocks() -> None:
+    from republica.world.countries import failed_coup_shock_months
+
+    pack_dir = PACK_DIR
+    months = failed_coup_shock_months(pack_dir, 1988, 6, 12)
+    assert months[7] == "failed_coup"
+
+
+def test_failed_coup_shock_moves_stability_and_confidence_down() -> None:
+    country = _aurora_with_argentina_shocks()
+    baseline = run(seed=9, months=2, country=country)
+    shocked = run(seed=9, months=2, country=country, forced_shocks={1: ["failed_coup"]})
+    assert (
+        shocked.records[0].state["political_stability"]
+        < baseline.records[0].state["political_stability"]
+    )
+    assert (
+        shocked.records[0].state["institutional_confidence"]
+        < baseline.records[0].state["institutional_confidence"]
+    )
+    # Es un shock de 1 mes: no queda activo el mes 2.
+    assert "failed_coup" not in shocked.records[1].shocks_active
+
+
+def test_load_country_pack_merges_failed_coup_shocks_into_historical_forced() -> None:
+    pack = load_country_pack("argentina", "1988-06", 12)
+    assert pack.historical_forced_shocks.get(7) == ["failed_coup"]
+
+
+# ---------------------------------------------------------------------------
+# P2 (A3): efectos proporcionales de `sovereign_default` (k_k=0,
+# debt_interest_rate*0.5 mientras esta activo) e `imf_program`
+# (primary_spending -1.5 mientras esta activo), sin tocar la firma de
+# `step_economy`.
+# ---------------------------------------------------------------------------
+
+
+def test_apply_historical_shock_effects_is_identity_without_those_shocks() -> None:
+    from republica.world.economy import apply_historical_shock_effects
+
+    country = load_country()
+    coeff, policy = apply_historical_shock_effects(
+        country.coefficients, country.default_policy, frozenset({"drought", "general_strike"})
+    )
+    assert coeff is country.coefficients
+    assert policy is country.default_policy
+
+
+def test_apply_historical_shock_effects_sovereign_default_zeroes_k_k_and_halves_interest() -> None:
+    from republica.world.economy import apply_historical_shock_effects
+
+    country = load_country()
+    coeff, policy = apply_historical_shock_effects(
+        country.coefficients, country.default_policy, frozenset({"sovereign_default"})
+    )
+    assert coeff.k_k == 0.0
+    assert coeff.debt_interest_rate == pytest.approx(country.coefficients.debt_interest_rate * 0.5)
+    assert policy is country.default_policy
+
+
+def test_apply_historical_shock_effects_imf_program_cuts_primary_spending() -> None:
+    from republica.world.economy import apply_historical_shock_effects
+
+    country = load_country()
+    coeff, policy = apply_historical_shock_effects(
+        country.coefficients, country.default_policy, frozenset({"imf_program"})
+    )
+    assert coeff is country.coefficients
+    assert policy.primary_spending == pytest.approx(country.default_policy.primary_spending - 1.5)
+
+
+def test_sovereign_default_halves_interest_cost_relative_to_baseline() -> None:
+    # A nivel de `step_economy` (aislado de la revaluacion cambiaria de la
+    # deuda y de los efectos aditivos del mes 1 del shock, que dominan una
+    # corrida completa via `run()`): mismo estado/exogenas/politica, el
+    # unico cambio es el `coeff` ajustado por `apply_historical_shock_effects`.
+    from republica.world.economy import apply_historical_shock_effects, step_economy
+
+    country = load_country()
+    state = country.initial_state
+    policy = country.default_policy
+    coeff, _ = apply_historical_shock_effects(
+        country.coefficients, policy, frozenset({"sovereign_default"})
+    )
+    from republica.world.events import ShockAggregate
+
+    agg = ShockAggregate()
+    _, aux_baseline = step_economy(
+        state,
+        country.exogenous,
+        country.exogenous,
+        policy,
+        agg,
+        country.structure,
+        country.coefficients,
+    )
+    _, aux_shocked = step_economy(
+        state, country.exogenous, country.exogenous, policy, agg, country.structure, coeff
+    )
+    assert aux_shocked.interest_cost == pytest.approx(aux_baseline.interest_cost * 0.5)
+
+
+def test_imf_program_reduces_primary_spending_effect_only_while_active() -> None:
+    country = _aurora_with_argentina_shocks()
+    baseline = run(seed=5, months=26, country=country)
+    shocked = run(seed=5, months=26, country=country, forced_shocks={1: ["imf_program"]})
+    # Mientras el programa esta activo (meses 1-24), el deficit fiscal del
+    # shocked deberia estar mas aliviado por el recorte de gasto primario
+    # que en la corrida base (con todo lo demas igual salvo los efectos
+    # aditivos del propio shock): public_debt crece menos.
+    assert shocked.records[5].state["public_debt"] < baseline.records[5].state["public_debt"]
 
 
 # ---------------------------------------------------------------------------

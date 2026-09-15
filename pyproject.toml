@@ -41,6 +41,13 @@ ui = ["streamlit>=1.35"]
 # (`republica.engine`, `republica.world`, ...) siga importando sin numpy.
 core = ["numpy>=1.26"]
 
+# ADR 011 secc. 7 (A3): extra opcional de `republica calibrate` (CMA-ES
+# sobre `src/republica/calibration/`). Se importa de forma perezosa (dentro
+# de `calibration/optimizer.py::run_cma`), igual que `duckdb`/`streamlit`
+# arriba -- el motor/CLI base siguen corriendo sin `cma` instalado; solo
+# `republica calibrate` lo necesita.
+calibration = ["cma>=3.3"]
+
 [project.scripts]
 republica = "republica.cli:app"
 

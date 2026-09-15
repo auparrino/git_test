@@ -186,19 +186,48 @@ def _ym(date: str) -> tuple[int, int]:
     return y, m
 
 
+#: Marcas de golpe FALLIDO en `title`/`notes` de `politics/events.csv` (P1,
+#: A3: antes de esta correccion, un golpe fallido -- p.ej. los tres
+#: alzamientos "carapintada" de 1987-1990 -- tambien movia `regime_mode` a
+#: `coup` por 1 mes, exactamente igual que uno exitoso; ese era un bug, no
+#: una simplificacion deliberada: el propio `notes` de esas filas dice
+#: "FALLIDO" en mayusculas). Case-insensitive.
+FAILED_COUP_MARKERS = ("fallido", "failed")
+
+
+def _is_failed_coup_row(row: dict[str, str]) -> bool:
+    haystack = f"{row.get('title', '')} {row.get('notes', '')}".lower()
+    return any(marker in haystack for marker in FAILED_COUP_MARKERS)
+
+
 def load_coup_dates(events_csv: Path) -> list[tuple[int, int]]:
-    """`(year, month)` de cada fila `kind == "coup"` de `politics/events.csv`
-    (fallidos incluidos: `notes` los marca "FALLIDO" pero `world/regime.py`
-    no distingue -- ver Notas de implementacion del ADR 011: un golpe
-    fallido tambien mueve `regime_mode` a `coup` por 1 mes en este modelo
-    simplificado, ya que el motor no tiene una nocion de "intento" separada
-    de "ocurrencia")."""
+    """`(year, month)` de cada fila `kind == "coup"` EXITOSA (P1, A3: un
+    golpe fallido -- `title`/`notes` marcados "FALLIDO"/"fallido"/"failed",
+    p.ej. los tres alzamientos "carapintada" de 1987-1990 -- no entra en el
+    calendario de golpes: ver `load_failed_coup_dates` para esas filas, que
+    se tratan como un shock de un mes en vez de un cambio de `regime_mode`)."""
     if not events_csv.exists():
         return []
     out = []
     with events_csv.open(encoding="utf-8", newline="") as fh:
         for row in csv.DictReader(fh):
-            if row.get("kind") == "coup":
+            if row.get("kind") == "coup" and not _is_failed_coup_row(row):
+                out.append(_ym(row["date"]))
+    return out
+
+
+def load_failed_coup_dates(events_csv: Path) -> list[tuple[int, int]]:
+    """`(year, month)` de cada golpe FALLIDO de `politics/events.csv` (P1,
+    A3): estos NO mueven `regime_mode` -- se traducen a un shock de 1 mes
+    (`failed_coup` en `shocks.json`: `stability -5, institutional_confidence
+    -3`) via `world/countries.py::historical_shocks_calendar`, que los suma
+    al mismo `forced_shocks` que ya usa `--historical-shocks`."""
+    if not events_csv.exists():
+        return []
+    out = []
+    with events_csv.open(encoding="utf-8", newline="") as fh:
+        for row in csv.DictReader(fh):
+            if row.get("kind") == "coup" and _is_failed_coup_row(row):
                 out.append(_ym(row["date"]))
     return out
 

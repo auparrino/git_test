@@ -302,3 +302,198 @@ particular (regla de honestidad del proyecto, PLAN_ARGENTINA.md §0.3).
   funcionando sin cambios (es un `country.json` real en disco). No hay soporte de `regime`/
   `historical_shocks`/`bimonetary`/modo anual desde `experiment` en A2 (no pedidos para `experiment`
   en el enunciado, sólo la clave `country`).
+
+## Notas de implementación (A3)
+
+Implementado: dos correcciones previas (P1, P2) en `world/regime.py`/`world/countries.py`/
+`world/economy.py`/`engine/simulation.py`; el paquete `src/republica/calibration/` (`initial_states.py`,
+`objective.py`, `parameters.py`, `optimizer.py`, `synthetic.py`, `run.py`, `report.py`) y la CLI
+`republica calibrate` + `republica run --calibration <run_id>`. Extra opcional `calibration = ["cma>=3.3"]`
+en `pyproject.toml` (PyPI, instalado con `uv sync --extra calibration`). Tests en
+`tests/test_country_pack_argentina.py` (P1/P2) y `tests/test_calibration_argentina.py` (A3). 363 tests no
+lentos pasan (349 de A2 + 14 nuevos de A3); golden hash de Aurora intacto (P1/P2 y calibración no tocan
+ningún camino que corra sin `regime_calendar`/shocks nuevos/`--calibration`).
+
+**P1 — golpes fallidos ya no mueven `regime_mode`**
+
+Bug real de A2, no una simplificación: `world/regime.py::load_coup_dates` metía TODAS las filas
+`kind == "coup"` de `politics/events.csv` al calendario de golpes, fallidas incluidas (los tres
+alzamientos "carapintada" 1987-1990 contra Alfonsín, marcados `"FALLIDO."` en `notes`, y el de Menéndez
+1951). `load_coup_dates` ahora filtra por `_is_failed_coup_row` (busca `"fallido"`/`"failed"`,
+case-insensitive, en `title`+`notes`); `load_failed_coup_dates` (nueva) devuelve exactamente las
+excluidas. `world/countries.py::failed_coup_shock_months` las traduce a un shock nuevo, `failed_coup`
+(`data/countries/argentina/shocks.json`: `stability -5, institutional_confidence -3`, 1 mes,
+`base_p=0`, solo forzado), y `load_country_pack` las suma a `historical_forced_shocks` (mismo mecanismo
+que `--historical-shocks` ya usaba, sin tocar `run()`). DoD verificado:
+`tests/test_country_pack_argentina.py::test_start_1988_06_no_longer_enters_coup_in_1988_12` —
+`build_regime_calendar(..., 1988, 6, 12, "auto")` ya NO tiene el mes 7 (1988-12, Villa Martelli) en
+`forced_coup_months`. `coup_propensity_by_decade` (golpe endógeno) ya filtraba por `load_coup_dates`, así
+que de pasada también dejó de contar los fallidos en la frecuencia por década — más fiel al ADR ("la
+propensión es la frecuencia observada de golpes"): un intento sofocado en horas no es un golpe.
+
+**P2 — `sovereign_default`/`imf_program`: efectos proporcionales, no aditivos**
+
+`world/economy.py::apply_historical_shock_effects(coeff, policy, active_shock_ids)` arma un
+`Coefficients`/`Policy` ajustados (o los mismos objetos, sin `model_copy`, si ninguno de los dos shocks
+está activo) y `engine/simulation.py::advance_month` los usa SOLO para la llamada a `step_economy` (la
+firma de `step_economy` no cambió: sigue recibiendo un `Coefficients`/`Policy` cualquiera). Con
+`sovereign_default` en `sim.active_shocks`: `k_k=0.0` (créditocerrado — el término de reservas ligado al
+diferencial de tasas se anula) y `debt_interest_rate *= 0.5` (`interest_cost = public_debt *
+debt_interest_rate` quedaefectivamente a la mitad, "la deuda no se paga"). Con `imf_program` activo:
+`policy.primary_spending -= 1.5`. Los dos shocks conservan sus efectos de mes 1 aditivos existentes
+(`shock_conf`/`shock_fx` para default; `shock_reserves`/`shock_approval`/`shock_conf` para imf_program,
+siguen siendo aproximaciones declaradas del monto real de cada acuerdo) pero se les sacó de
+`shocks.json` el término recurrente que aproximaba justamente lo que ahora es real
+(`shock_reserves`/`shock_fiscal` de `sovereign_default`, `shock_fiscal` de `imf_program` — ver el
+`_note` de cada uno en `data/countries/argentina/shocks.json`, quedarían duplicados si no). Deviación
+deliberada, no cubierta por P2: el "reservas −30 % el mes 1" de `sovereign_default` (ADR 011 secc. 4)
+sigue sin implementarse (P2 pedía explícitamente solo `k_k=0`/`interest_cost×0.5`, no la fila completa
+del ADR). Un hallazgo de esta implementación: forzar `sovereign_default` con `k_k=0` 24 meses es
+sustancialmente más duro que la aproximación aditiva de A2 y puede llevar la corrida a `collapse` antes
+de los 30 meses del test existente
+(`test_sovereign_default_forced_stays_active_24_months`, ajustado para tolerar el fin de partida
+temprano) — un default real cerrando el crédito es, razonablemente, más grave que `-150 reservas/mes`.
+
+**Estado inicial por fecha, generalizado (`calibration/initial_states.py`)**
+
+`initial_state_for(date)` NO reemplaza `scripts/build_argentina_initial_states.py` ni regenera
+`country.json -> initial_states` (las 8 fechas hito de A2 quedan exactamente como estaban, incluida su
+inspección/revisión ya hecha): es una librería paralela, para CUALQUIER mes entre 1961 y 2023
+(`MIN_YEAR`/`MAX_YEAR`), que necesita el objetivo de calibración para arrancar una simulación desde cada
+mes de la ventana de entrenamiento/holdout. Reglas de interpolación (documentadas también en el
+docstring del módulo): series MENSUALES (`inflation_cpi_monthly`, `policy_rate_monthly`, etc.) usan el
+mes exacto o el más cercano dentro de una tolerancia, SIN interpolar (son observaciones discretas);
+series ANUALES (`inflation_cpi_annual_linked`, `vdem_argentina`, `gdp_per_capita_real`) SÍ se interpolan
+linealmente entre el 1-ene de dos años consecutivos (`interpolate_annual`), con los bordes de la serie
+sin extrapolar. `gdp_growth` prioriza `emae_monthly` (variación interanual exacta, 2004+) sobre el
+crecimiento interanual de `gdp_per_capita_real`. `government_approval` generaliza el `dict` de 8 fechas
+fijas de A2 (`LAST_ELECTION_BEFORE`) a una lista `ELECTION_WINNERS` de (fecha de asunción, archivo,
+patrón del ganador) para cualquier mes entre 1946 y 2023 — el ganador sigue curado a mano, no
+"más votos en primera vuelta" (2003 es el caso que lo exige: Menem sacó más votos que Kirchner en la
+primera vuelta pero se bajó del balotaje; "más votos" habría marcado a Menem como oficialismo entrante).
+Fuera de 1989-2023 (sin `ELECTION_WINNERS` que cubra la fecha), `government_approval` queda `assumed`.
+
+**Función objetivo (`calibration/objective.py`)**
+
+`start_months(range_start, range_end, horizon, stride)` sólo devuelve meses de arranque cuyo horizonte
+completo (`start + 12`) cae DENTRO del mismo rango — ningún mes de TRAIN necesita un dato de HOLDOUT
+para puntuarse, así que ampliar el holdout no puede cambiar (ni por casualidad) el resultado de una
+calibración ya corrida. Las 5 variables (`inflation`, `gdp_growth`, `unemployment`, `exchange_rate`,
+`reserves`) y los horizontes 1/3/6/12 se puntúan con RMSE normalizado por el desvío de la serie real
+completa (`RealData.std`); `exchange_rate` compara CAMBIO LOGARÍTMICO relativo al mes de arranque (no
+nivel: `world/state.py::exchange_rate` es un índice sin unidad real, ver Notas de A2), calculado con dos
+referencias DISTINTAS (`fx0_real` = log del oficial real en `t`, `fx0_model` = log del índice del modelo
+en `t`) — un bug real de esta implementación, encontrado con un smoke test manual antes de confiar en
+ningún número: la primera versión usaba una sola variable `fx0` para las dos, restando por accidente
+`log(100) − log(1.0 ARS/USD) ≈ 4.6` a TODOS los meses (invisible en el error crudo, ~68x más grande una
+vez normalizado por el desvío real de ~0.07) — corregido antes de que ningún resultado de calibración se
+apoyara en él. El término de régimen compara `regime_mode == "democracy"` contra `politics/regimes.csv`
+(en 1993-2023 la serie real es "democracy" en los 213 años, así que este término casi no aporta señal en
+el período de A3 — mencionado para que no sorprenda un `regime_accuracy` cercano a 1.0 en todos los
+reportes). El término de elecciones compara `ElectionResult.outcome_type` ("reelected"/"defeated") contra
+`REAL_ELECTION_OUTCOMES` (hecho público curado a mano, 1989-2019; 2003 y 2007 se cuentan como
+continuidad de coalición PJ/FpV aunque el presidente saliente no se haya presentado él mismo —
+simplificación declarada, no hay noción de "coalición" en el motor) — NO compara vote-share L1 (ADR
+"error de vote share en las elecciones del período"): el motor no tiene una noción de qué partido
+sintético corresponde a qué lista real de una elección histórica, así que un L1 de vote-share exigiría
+un mapeo partido-sintético→partido-real que está fuera de alcance de A3 — deviación documentada.
+Persistencia y "Aurora sin calibrar" corren por el mismo `evaluate()`/`score_start_month` que el
+candidato (`persistence=True` o `x = valores de Aurora`), así el train/holdout de `report.py` compara
+lo mismo con lo mismo.
+
+**Espacio de parámetros (`calibration/parameters.py`)**
+
+107 parámetros: 97 de `Coefficients` + 10 bimonetarios ajustables (`BIMONETARY_TUNABLE` — excluye los
+`*_init`, que son estado inicial, y `fx_regime_default`, categórico). Bounds por default `[v/3, 3v]`
+(signo preservado); tres con bound físico más angosto y su razón documentada en `parameters.yaml`
+(`dd_persistence` ≤ 0.99, un AR(1) con persistencia ≥ 1 no es estacionario; `default_risk_threshold` y
+`gap_control` acotados a `[0, 1]`, se comparan/usan como fracción). Ninguno de los 97 coeficientes de
+Aurora es 0.0 (verificado), así que el caso `v == 0` de `_default_bounds` (rango simétrico ±0.1) nunca se
+ejercita hoy — cubierto igual por si un país futuro trae un 0.
+
+**Optimizador (`calibration/optimizer.py`)**
+
+CMA-ES corre en el CUBO `[0, 1]^107` (`Parameter.to_unit`/`from_unit`) partiendo de la posición de
+Aurora (`x0 = to_unit(aurora_value)` para cada parámetro, NO 0.5: con bounds asimétricos `[v/3, 3v]` la
+posición de Aurora en `[0,1]` es 0.25, no el centro). Paralelo por `(candidato, mes de arranque)`: cada
+tarea de un `multiprocessing.Pool` es un mes de UN candidato, no una población ni un candidato enteros —
+con `popsize≈18` (default de `cma` para 107 dims) y 88 meses de train (stride 3, 1993-2015) son ~1584
+tareas por generación. `budget` es un PISO, no un techo: CMA-ES necesita al menos `~popsize/2`
+soluciones por `tell()` (tira `ValueError` si no), así que la ÚLTIMA generación se corre completa aunque
+eso pase el presupuesto pedido en hasta `popsize−1` evaluaciones — la alternativa (recortar la población
+final) rompía con cualquier `budget` que no fuera múltiplo exacto de `popsize`, incluido el `--quick` de
+40 (popsize 18: generaciones de 18, 36, y una tercera recortada a 4 < `mu=9` tiraba la excepción; bug
+real encontrado corriendo el primer smoke test end-to-end). Checkpoints cada ~20 evaluaciones
+(`checkpoint.pkl`, `pickle` del objeto `cma.CMAEvolutionStrategy` completo; `checkpoint.json` con
+`history.csv` legible), `resume=True` por default.
+
+Bug real encontrado y corregido en el camino, de infraestructura, no del algoritmo: `world/
+countries.py::_merged_dir_for` (carpeta fusionada de `load_country_pack`) usaba un path fijo
+(`/tmp/republica_country_packs/<country_id>`) que el propio docstring llamaba "estable por proceso" sin
+serlo — con un solo proceso nunca se notaba, pero `calibration/optimizer.py` la llama desde varios
+workers de un `Pool` EN PARALELO, y todos pisaban la misma carpeta (`shutil.rmtree` de un worker
+corriendo contra los symlinks a medio escribir de otro): `FileExistsError`/`FileNotFoundError`/`OSError:
+Directory not empty` intermitentes, reproducidos en el primer intento de correr `run_calibration` con
+`workers>1`. Corregido agregando `os.getpid()` al path (`world/countries.py`, afecta a cualquier
+llamador de `load_country_pack`/`merged_data_dir_for_pack`, no solo a calibración).
+
+Hallazgo de identificabilidad numérica (documentado, no arreglado — es inherente a `multiprocessing.
+Pool`, no un bug de este código): el resultado final de `run_cma` con la MISMA semilla puede variar
+según la cantidad de `workers` del pool (verificado: 6/10 vs 5/10 coeficientes recuperados en el test de
+identificabilidad, mismo `seed`, `workers=4` vs `workers=2`) — probablemente orden de suma de punto
+flotante entre tareas repartidas distinto según `chunksize`, que en un problema con superficie de
+objetivo casi plana en algunas direcciones (ver más abajo) alcanza para que `tell()` rankee distinto una
+generación. Por eso el test de identificabilidad automatizado (`tests/test_calibration_argentina.py::
+test_identifiability_recovers_half_of_perturbed_coefficients`) corre con `pool=None` (secuencial): es el
+único camino reproducible bit a bit. La corrida "real" de A3 (`--workers 4`) es determinista PARA SÍ
+MISMA (misma semilla, mismo `workers`, mismo resultado si se re-corre) pero no está pensada para
+reproducirse byte a byte con otro `--workers`.
+
+**Test de identificabilidad (ADR 011 secc. 9.9)**
+
+`calibration/synthetic.py::perturb_parameters` NO elige los `n` coeficientes a perturbar de los 97
+completos: los restringe a `IDENTIFIABLE_COEFFICIENTS`, los ~31 que aparecen DIRECTAMENTE en las
+fórmulas de `step_economy` (secciones 4.1-4.7: actividad, tipo de cambio, inflación, desempleo, salario
+real, fiscal/deuda, reservas). Motivo, encontrado empíricamente antes de fijar el diseño: con los 97
+completos, perturbar por ejemplo `st_i` (que solo entra en `political_stability`, una variable que
+`calibration/objective.py` NO puntúa — el objetivo puntúa 5 de las ~20 variables de `WorldState`) da una
+prueba de si el optimizador puede recuperar un coeficiente invisible para su propia función objetivo, no
+una prueba de identificabilidad; con una muestra aleatoria de 10 de los 97, en la práctica salían ~4-6 de
+esos 10 fuera del alcance causal de las 5 variables puntuadas, y la tasa de recuperación caía muy por
+debajo del 50 % sin que eso dijera nada sobre si el PIPELINE funciona. Restringido a
+`IDENTIFIABLE_COEFFICIENTS`, el test fijo del repo (semilla de perturbación 3, semilla de CMA-ES 9,
+`budget=120`, ventana 1993-01:1997-12, 4 meses de arranque, secuencial) recupera 6/10 (≥20 % del
+desplazamiento verdadero, umbral del ADR). Con el `--quick` de la CLI (`budget=40`) sobre la misma
+ventana la tasa baja a ~3-4/10 — el test automatizado por eso NO usa `--quick` tal cual (usa
+`budget=120`, documentado arriba del test), y el hallazgo en sí (identificabilidad parcial y sensible al
+presupuesto/semilla con pocos meses de arranque) es honesto y se reporta como limitación, no se esconde:
+con 4 meses de arranque (~16 puntos por variable) y 107 parámetros libres, hay combinaciones distintas
+de coeficientes que ajustan el mismo error agregado casi igual de bien (equifinalidad, un problema
+conocido de calibración de modelos macro con pocas series agregadas) — la corrida real de A3 (88 meses
+de arranque de train) tiene mucha más señal y se espera (no verificado empíricamente, sería otra corrida
+de horas) mejor identificabilidad que este test deliberadamente chico.
+
+**CLI**
+
+`republica calibrate --country <id> --train A:B --holdout C:D --run-id <id> [--budget N | --quick]
+[--stride N] [--lambda-reg F] [--workers N] [--seed N]` escribe
+`data/countries/<id>/calibration/<run_id>/`. `republica run --country <id> --calibration <run_id>`
+reemplaza `country.coefficients`/el `BimonetaryCoefficients` por defecto con los de
+`coefficients.json` (vía `calibration/run.py::load_calibrated_country`), antes de aplicar
+`--fx-regime`/demás overrides — un `--calibration` con un `run_id` inexistente da un
+`typer.BadParameter` con el path que se buscó, no una traza.
+
+**Deviaciones no cubiertas arriba (honestidad, PLAN_ARGENTINA.md #0.3)**
+
+- El reporte (`calibration/report.py`) no incluye el "signo de respuesta a shocks" que menciona
+  PLAN_ARGENTINA.md §2 para A3 (verificar que el modelo responde en la dirección correcta a un shock):
+  eso es más cercano a A4 (validación histórica, pruebas V1-V3 del ADR §8) que a la calibración en sí;
+  A3 se queda con el RMSE train/holdout vs. las dos baselines, que es lo que pide el ADR §7 literal.
+- `lambda_reg` (regularización L2) se aplica en el espacio `[0,1]` de cada parámetro (unidades del
+  rango, no unidades nativas): un coeficiente con rango angosto (ej. `debt_interest_rate`) y uno con
+  rango ancho (ej. `b_int`) contribuyen por igual a la penalización por unidad de "distancia relativa
+  al rango explorable" — de otro modo el término de regularización quedaría dominado por los
+  coeficientes de mayor magnitud nativa, sin relación con cuánto se alejaron de lo razonable.
+- El presupuesto real (`--budget 300`, tarea A3 punto 7) midió ~2.8s de pared por evaluación con 4
+  workers sobre las 88 fechas de train (por debajo del umbral de 3s del enunciado): no hizo falta bajar
+  el stride a 6. Ver el reporte final para el tiempo de pared total medido.

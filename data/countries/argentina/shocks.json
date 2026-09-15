@@ -338,19 +338,9 @@
         "target": "shock_fx",
         "value": 20.0,
         "when": "first"
-      },
-      {
-        "target": "shock_reserves",
-        "value": -150.0,
-        "when": "each"
-      },
-      {
-        "target": "shock_fiscal",
-        "value": 1.0,
-        "when": "each"
       }
     ],
-    "_note": "ADR 011 secc. 4. base_p=0: nunca se sortea solo, unicamente se activa forzado (politics/shocks_calendar.csv) o endogeno (world/bimonetary.py, default_risk alto sin imf_program). Los efectos mensuales (shock_reserves/shock_fiscal) aproximan 'cierre de credito 24 meses' e 'interes al 50%' del ADR como terminos aditivos constantes -- el motor de shocks es aditivo, no tiene forma de anular un coeficiente (k_k) ni de escalar el costo de interes por shock; ver Notas de implementacion del ADR 011."
+    "_note": "ADR 011 secc. 4 + Notas de implementacion (A3, P2). El mes 1 sigue aproximado con terminos aditivos (shock_conf/shock_fx: el motor de shocks es aditivo, no modela 'reservas -30% en el mes 1' como caida proporcional -- deviacion documentada, fuera del alcance de P2). Los DOS efectos de 'durante 24 meses' del ADR ('acceso a credito cerrado' e 'interest_cost x0.5') ya NO se aproximan con shock_reserves/shock_fiscal aditivos (asi estaba en A2): a partir de A3 (P2) se implementan de forma proporcional, modificando los INSUMOS de step_economy (no su firma) mientras 'sovereign_default' esta en sim.active_shocks -- k_k=0.0 (credito cerrado: el termino de reservas ligado al diferencial de tasas se anula) y debt_interest_rate*0.5 (interest_cost, que es state.public_debt*debt_interest_rate, se reduce a la mitad: la deuda 'no se paga'). Ver engine/simulation.py::apply_historical_shock_effects_to_inputs."
   },
   {
     "id": "currency_run",
@@ -405,11 +395,6 @@
         "when": "first"
       },
       {
-        "target": "shock_fiscal",
-        "value": -1.5,
-        "when": "each"
-      },
-      {
         "target": "shock_approval",
         "value": -3.0,
         "when": "first"
@@ -420,6 +405,26 @@
         "when": "first"
       }
     ],
-    "_note": "ADR 011 secc. 4. 'primary_spending -1.5 forzado (condicionalidad)' del ADR se aproxima como shock_fiscal (termino aditivo sobre fiscal_balance), no como una modificacion del instrumento de politica primary_spending en si: el motor de shocks no toca instrumentos de Policy, solo variables de WorldState -- deviacion documentada. 'reserves + monto' usa un monto representativo (3000, escala de reserves_monthly.csv en USD millones), no el monto real de cada acuerdo (que varia por evento, ver shocks_calendar.csv)."
+    "_note": "ADR 011 secc. 4 + Notas de implementacion (A3, P2). 'reserves + monto'/'approval -3'/'institutional_confidence +2' del mes 1 siguen aproximados con un monto representativo (3000, no el monto real de cada acuerdo). 'primary_spending -1.5 forzado (condicionalidad)' YA NO se aproxima con shock_fiscal (asi estaba en A2, que sumaba un termino aditivo sobre fiscal_balance en vez de tocar el instrumento de politica): a partir de A3 (P2) es un policy delta real -- mientras 'imf_program' esta en sim.active_shocks, engine/simulation.py resta 1.5 de policy.primary_spending ANTES de llamar a step_economy (misma tecnica que sovereign_default: se modifican los INSUMOS de step_economy, no su firma). No es persistente via concessions_delta (ese mecanismo es aditivo-acumulativo mes a mes, pensado para concesiones de ADR 003/005 que se suman una vez y quedan; un delta que tiene que desaparecer solo cuando el programa termina necesita recalcularse cada mes a partir de si el shock sigue activo, no acumularse)."
+  },
+  {
+    "id": "failed_coup",
+    "name": "Golpe fallido",
+    "base_p": 0.0,
+    "conditional_p": [],
+    "duration": 1,
+    "effects": [
+      {
+        "target": "shock_stability",
+        "value": -5.0,
+        "when": "each"
+      },
+      {
+        "target": "shock_conf",
+        "value": -3.0,
+        "when": "each"
+      }
+    ],
+    "_note": "P1 (A3). Reemplazo del bug de A2: un golpe marcado FALLIDO en politics/events.csv (title/notes con 'FALLIDO'/'fallido'/'failed') ya NO mueve regime_mode a 'coup' por 1 mes (world/regime.py::load_failed_coup_dates lo excluye del calendario de golpes) -- en vez de eso, world/countries.py::failed_coup_shock_months lo suma a forced_shocks (misma via que --historical-shocks) como este shock de 1 mes: stability -5, institutional_confidence -3. base_p=0: nunca se sortea solo, solo forzado."
   }
 ]

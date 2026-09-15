@@ -269,6 +269,15 @@ def run(
             help="float|crawl|peg|control (ADR 011 secc. 5, bimonetario). Requiere --country.",
         ),
     ] = None,
+    calibration_run_id: Annotated[
+        str | None,
+        typer.Option(
+            "--calibration",
+            help="run_id de `republica calibrate` (A3, ADR 011 secc. 7): reemplaza los "
+            "coeficientes economicos y bimonetarios de `country.json` por "
+            "`calibration/<run_id>/coefficients.json`. Requiere --country.",
+        ),
+    ] = None,
 ) -> None:
     """Corre una simulacion de `months` meses y la guarda en `out` (JSONL)."""
     from republica.governance import parse_governance_overrides
@@ -320,6 +329,19 @@ def run(
         country = pack.country
         regime_calendar = pack.regime_calendar
         bimonetary_coefficients = pack.bimonetary_coefficients
+        if calibration_run_id:
+            from republica.calibration.run import load_calibrated_country
+
+            try:
+                calibrated_coeff, bimonetary_coefficients = load_calibrated_country(
+                    country_id, calibration_run_id
+                )
+            except FileNotFoundError as exc:
+                raise typer.BadParameter(str(exc)) from exc
+            country = country.model_copy(update={"coefficients": calibrated_coeff})
+            console.print(
+                f"[yellow]Coeficientes calibrados (A3)[/yellow]: run_id={calibration_run_id}"
+            )
         if fx_regime_opt:
             bimonetary_coefficients = replace(
                 bimonetary_coefficients, fx_regime_default=fx_regime_opt
@@ -1803,6 +1825,75 @@ def ui() -> None:
 
     app_path = Path(__file__).resolve().parent / "ui" / "app.py"
     subprocess.run([sys.executable, "-m", "streamlit", "run", str(app_path)], check=False)
+
+
+@app.command()
+def calibrate(
+    country_id: Annotated[
+        str, typer.Option("--country", help="Paquete de pais (ADR 011, ej. 'argentina').")
+    ],
+    train: Annotated[
+        str, typer.Option(help="Ventana de entrenamiento 'YYYY-MM:YYYY-MM' (ADR 011 secc. 7).")
+    ],
+    holdout: Annotated[
+        str,
+        typer.Option(help="Ventana de holdout 'YYYY-MM:YYYY-MM', corrida UNA SOLA VEZ al final."),
+    ],
+    run_id: Annotated[str, typer.Option("--run-id", help="Nombre de la corrida de calibracion.")],
+    budget: Annotated[
+        int, typer.Option(help="Cantidad de evaluaciones de CMA-ES (A3, default 400).")
+    ] = 400,
+    quick: Annotated[
+        bool,
+        typer.Option(
+            "--quick",
+            help="Budget=40, stride=12 (tests/CI, ADR 011 secc. 7 punto 4): ignora --budget/"
+            "--stride si se pasa.",
+        ),
+    ] = False,
+    stride: Annotated[
+        int, typer.Option(help="Meses entre arranques sucesivos (ADR 011 secc. 7).")
+    ] = 3,
+    lambda_reg: Annotated[
+        float, typer.Option(help="Peso de la regularizacion L2 hacia Aurora.")
+    ] = 0.01,
+    workers: Annotated[
+        int, typer.Option(help="Procesos del pool (paralelo por mes de arranque).")
+    ] = 4,
+    seed: Annotated[int, typer.Option(help="Semilla de CMA-ES.")] = 42,
+) -> None:
+    """`republica calibrate` (A3, ADR 011 secc. 7): CMA-ES sobre los
+    coeficientes de `country.json` contra `history/`, con holdout evaluado
+    una sola vez al final. Escribe `data/countries/<id>/calibration/<run_id>/`
+    (`coefficients.json`, `report.md`, `history.csv`, `plots/`)."""
+    from republica.calibration.run import CalibrationRunConfig, parse_range, run_calibration
+
+    if quick:
+        budget = 40
+        stride = 12
+
+    train_start, train_end = parse_range(train)
+    holdout_start, holdout_end = parse_range(holdout)
+
+    cfg = CalibrationRunConfig(
+        country_id=country_id,
+        run_id=run_id,
+        train_start=train_start,
+        train_end=train_end,
+        holdout_start=holdout_start,
+        holdout_end=holdout_end,
+        budget=budget,
+        stride=stride,
+        lambda_reg=lambda_reg,
+        workers=workers,
+        seed=seed,
+    )
+    console.print(
+        f"[cyan]Calibrando[/cyan] {country_id} train={train} holdout={holdout} "
+        f"budget={budget} stride={stride} workers={workers}"
+    )
+    run_dir = run_calibration(cfg)
+    console.print(f"[green]OK[/green] -> {run_dir}")
 
 
 @country_app.command("info")

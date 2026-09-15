@@ -61,6 +61,49 @@ def finalize_exogenous(
     )
 
 
+#: Efectos proporcionales de los shocks historicos de ADR 011 secc. 4 (P2,
+#: A3) que un termino aditivo de `shocks.json` no puede expresar: anular un
+#: coeficiente (`k_k=0`, credito cerrado) o escalar uno (`debt_interest_rate
+#: *0.5`, "la deuda no se paga") en vez de sumarle una constante, y aplicar
+#: un delta de POLITICA (`primary_spending -1.5`, condicionalidad del FMI)
+#: que dura exactamente lo que dura el shock -- no uno persistente-
+#: acumulativo como el mecanismo de `policy_*` en `pending_terms`/
+#: `concessions_delta` (pensado para concesiones de ADR 003/005 que se
+#: suman una vez y quedan, ver `engine/simulation.py::advance_month`).
+#: `apply_historical_shock_effects` arma un `Coefficients`/`Policy`
+#: modificados a partir de que shocks estan activos ESTE mes (`sim.
+#: active_shocks`, ya calculado por `ShockCatalog.apply_month` antes de
+#: llamar a esta funcion) y se los pasa a `step_economy` como argumentos
+#: normales -- CERO cambios a la firma de `step_economy` (sigue recibiendo
+#: un `Coefficients`/`Policy` cualquiera, no sabe que vinieron ajustados).
+SOVEREIGN_DEFAULT_INTEREST_MULTIPLIER = 0.5
+IMF_PROGRAM_PRIMARY_SPENDING_DELTA = -1.5
+
+
+def apply_historical_shock_effects(
+    coeff: Coefficients, policy: Policy, active_shock_ids: set[str] | frozenset[str]
+) -> tuple[Coefficients, Policy]:
+    """`(coeff, policy)` ajustados por `sovereign_default`/`imf_program`
+    activos (ADR 011 secc. 4, P2 de A3). Sin ninguno de los dos activos,
+    devuelve `coeff`/`policy` tal cual (mismo objeto, sin `model_copy`) --
+    corridas sin esos shocks quedan bit a bit iguales."""
+    if "sovereign_default" in active_shock_ids:
+        coeff = coeff.model_copy(
+            update={
+                "k_k": 0.0,
+                "debt_interest_rate": coeff.debt_interest_rate
+                * SOVEREIGN_DEFAULT_INTEREST_MULTIPLIER,
+            }
+        )
+    if "imf_program" in active_shock_ids:
+        policy = policy.model_copy(
+            update={
+                "primary_spending": policy.primary_spending + IMF_PROGRAM_PRIMARY_SPENDING_DELTA
+            }
+        )
+    return coeff, policy
+
+
 def step_economy(
     state: WorldState,
     exo: Exogenous,

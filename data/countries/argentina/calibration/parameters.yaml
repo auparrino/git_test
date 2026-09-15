@@ -1,0 +1,542 @@
+# Espacio de parametros de la calibracion (A3, ADR 011 secc. 7).
+# Generado por republica.calibration.parameters.build_parameter_space -- no editar a
+# mano: se re-escribe solo, al principio de cada `republica calibrate`.
+parameters:
+  - name: a_r
+    group: coefficients
+    aurora_value: 2.0
+    lo: 0.6666666666666666
+    hi: 6.0
+  - name: r_gap_min
+    group: coefficients
+    aurora_value: -10.0
+    lo: -30.0
+    hi: -3.3333333333333335
+  - name: r_gap_max
+    group: coefficients
+    aurora_value: 30.0
+    lo: 10.0
+    hi: 90.0
+  - name: a_f
+    group: coefficients
+    aurora_value: 0.05
+    lo: 0.016666666666666666
+    hi: 0.15000000000000002
+  - name: a_c
+    group: coefficients
+    aurora_value: 0.3
+    lo: 0.09999999999999999
+    hi: 0.8999999999999999
+  - name: a_x
+    group: coefficients
+    aurora_value: 1.0
+    lo: 0.3333333333333333
+    hi: 3.0
+  - name: a_w
+    group: coefficients
+    aurora_value: 0.5
+    lo: 0.16666666666666666
+    hi: 1.5
+  - name: a_t
+    group: coefficients
+    aurora_value: 0.4
+    lo: 0.13333333333333333
+    hi: 1.2000000000000002
+  - name: b_res
+    group: coefficients
+    aurora_value: 1.5
+    lo: 0.5
+    hi: 4.5
+  - name: b_r
+    group: coefficients
+    aurora_value: 2.0
+    lo: 0.6666666666666666
+    hi: 6.0
+  - name: b_conf
+    group: coefficients
+    aurora_value: 1.0
+    lo: 0.3333333333333333
+    hi: 3.0
+  - name: b_x
+    group: coefficients
+    aurora_value: 0.5
+    lo: 0.16666666666666666
+    hi: 1.5
+  - name: b_band
+    group: coefficients
+    aurora_value: 1.0
+    lo: 0.3333333333333333
+    hi: 3.0
+  - name: b_int
+    group: coefficients
+    aurora_value: 150.0
+    lo: 50.0
+    hi: 450.0
+  - name: rho_pi
+    group: coefficients
+    aurora_value: 0.85
+    lo: 0.2833333333333333
+    hi: 2.55
+  - name: c_e
+    group: coefficients
+    aurora_value: 0.06
+    lo: 0.02
+    hi: 0.18
+  - name: c_g
+    group: coefficients
+    aurora_value: 0.5
+    lo: 0.16666666666666666
+    hi: 1.5
+  - name: c_f
+    group: coefficients
+    aurora_value: 0.12
+    lo: 0.04
+    hi: 0.36
+  - name: c_r
+    group: coefficients
+    aurora_value: 1.0
+    lo: 0.3333333333333333
+    hi: 3.0
+  - name: d_g
+    group: coefficients
+    aurora_value: 0.6
+    lo: 0.19999999999999998
+    hi: 1.7999999999999998
+  - name: d_n
+    group: coefficients
+    aurora_value: 0.02
+    lo: 0.006666666666666667
+    hi: 0.06
+  - name: d_w
+    group: coefficients
+    aurora_value: 0.05
+    lo: 0.016666666666666666
+    hi: 0.15000000000000002
+  - name: w_idx
+    group: coefficients
+    aurora_value: 1.0
+    lo: 0.3333333333333333
+    hi: 3.0
+  - name: w_prod
+    group: coefficients
+    aurora_value: 0.1
+    lo: 0.03333333333333333
+    hi: 0.30000000000000004
+  - name: w_g
+    group: coefficients
+    aurora_value: 0.3
+    lo: 0.09999999999999999
+    hi: 0.8999999999999999
+  - name: w_u
+    group: coefficients
+    aurora_value: 0.3
+    lo: 0.09999999999999999
+    hi: 0.8999999999999999
+  - name: f_rev
+    group: coefficients
+    aurora_value: 0.3
+    lo: 0.09999999999999999
+    hi: 0.8999999999999999
+  - name: f_u
+    group: coefficients
+    aurora_value: 0.1
+    lo: 0.03333333333333333
+    hi: 0.30000000000000004
+  - name: debt_interest_rate
+    group: coefficients
+    aurora_value: 0.05
+    lo: 0.016666666666666666
+    hi: 0.15000000000000002
+  - name: k_tb
+    group: coefficients
+    aurora_value: 20.0
+    lo: 6.666666666666667
+    hi: 60.0
+  - name: k_w
+    group: coefficients
+    aurora_value: 10.0
+    lo: 3.3333333333333335
+    hi: 30.0
+  - name: k_k
+    group: coefficients
+    aurora_value: 15.0
+    lo: 5.0
+    hi: 45.0
+  - name: k_conf
+    group: coefficients
+    aurora_value: 10.0
+    lo: 3.3333333333333335
+    hi: 30.0
+  - name: p_u
+    group: coefficients
+    aurora_value: 0.8
+    lo: 0.26666666666666666
+    hi: 2.4000000000000004
+  - name: p_w
+    group: coefficients
+    aurora_value: 0.4
+    lo: 0.13333333333333333
+    hi: 1.2000000000000002
+  - name: p_i
+    group: coefficients
+    aurora_value: 0.5
+    lo: 0.16666666666666666
+    hi: 1.5
+  - name: p_adj
+    group: coefficients
+    aurora_value: 0.25
+    lo: 0.08333333333333333
+    hi: 0.75
+  - name: s_g
+    group: coefficients
+    aurora_value: 2.0
+    lo: 0.6666666666666666
+    hi: 6.0
+  - name: s_u
+    group: coefficients
+    aurora_value: 1.5
+    lo: 0.5
+    hi: 4.5
+  - name: s_pi
+    group: coefficients
+    aurora_value: 3.0
+    lo: 1.0
+    hi: 9.0
+  - name: s_w
+    group: coefficients
+    aurora_value: 0.3
+    lo: 0.09999999999999999
+    hi: 0.8999999999999999
+  - name: s_adj
+    group: coefficients
+    aurora_value: 0.3
+    lo: 0.09999999999999999
+    hi: 0.8999999999999999
+  - name: q_pi
+    group: coefficients
+    aurora_value: 0.05
+    lo: 0.016666666666666666
+    hi: 0.15000000000000002
+  - name: q_u
+    group: coefficients
+    aurora_value: 0.02
+    lo: 0.006666666666666667
+    hi: 0.06
+  - name: q_w
+    group: coefficients
+    aurora_value: 0.5
+    lo: 0.16666666666666666
+    hi: 1.5
+  - name: q_t
+    group: coefficients
+    aurora_value: 0.05
+    lo: 0.016666666666666666
+    hi: 0.15000000000000002
+  - name: t_u
+    group: coefficients
+    aurora_value: 0.8
+    lo: 0.26666666666666666
+    hi: 2.4000000000000004
+  - name: t_p
+    group: coefficients
+    aurora_value: 0.5
+    lo: 0.16666666666666666
+    hi: 1.5
+  - name: t_pi
+    group: coefficients
+    aurora_value: 1.5
+    lo: 0.5
+    hi: 4.5
+  - name: t_w
+    group: coefficients
+    aurora_value: 0.3
+    lo: 0.09999999999999999
+    hi: 0.8999999999999999
+  - name: t_c
+    group: coefficients
+    aurora_value: 0.2
+    lo: 0.06666666666666667
+    hi: 0.6000000000000001
+  - name: t_pr
+    group: coefficients
+    aurora_value: 0.2
+    lo: 0.06666666666666667
+    hi: 0.6000000000000001
+  - name: t_adj
+    group: coefficients
+    aurora_value: 0.2
+    lo: 0.06666666666666667
+    hi: 0.6000000000000001
+  - name: pr_t
+    group: coefficients
+    aurora_value: 0.8
+    lo: 0.26666666666666666
+    hi: 2.4000000000000004
+  - name: pr_a
+    group: coefficients
+    aurora_value: 0.2
+    lo: 0.06666666666666667
+    hi: 0.6000000000000001
+  - name: pr_adj
+    group: coefficients
+    aurora_value: 0.3
+    lo: 0.09999999999999999
+    hi: 0.8999999999999999
+  - name: cr_u
+    group: coefficients
+    aurora_value: 0.5
+    lo: 0.16666666666666666
+    hi: 1.5
+  - name: cr_p
+    group: coefficients
+    aurora_value: 0.3
+    lo: 0.09999999999999999
+    hi: 0.8999999999999999
+  - name: cr_t
+    group: coefficients
+    aurora_value: 0.3
+    lo: 0.09999999999999999
+    hi: 0.8999999999999999
+  - name: cr_adj
+    group: coefficients
+    aurora_value: 0.1
+    lo: 0.03333333333333333
+    hi: 0.30000000000000004
+  - name: e_w
+    group: coefficients
+    aurora_value: 1.5
+    lo: 0.5
+    hi: 4.5
+  - name: e_u
+    group: coefficients
+    aurora_value: 2.0
+    lo: 0.6666666666666666
+    hi: 6.0
+  - name: e_pi
+    group: coefficients
+    aurora_value: 0.8
+    lo: 0.26666666666666666
+    hi: 2.4000000000000004
+  - name: e_pi_low
+    group: coefficients
+    aurora_value: 0.3
+    lo: 0.09999999999999999
+    hi: 0.8999999999999999
+  - name: e_g
+    group: coefficients
+    aurora_value: 3.0
+    lo: 1.0
+    hi: 9.0
+  - name: e_t
+    group: coefficients
+    aurora_value: 1.0
+    lo: 0.3333333333333333
+    hi: 3.0
+  - name: e_rev
+    group: coefficients
+    aurora_value: 0.03
+    lo: 0.01
+    hi: 0.09
+  - name: cg_a
+    group: coefficients
+    aurora_value: 0.3
+    lo: 0.09999999999999999
+    hi: 0.8999999999999999
+  - name: cg_adj
+    group: coefficients
+    aurora_value: 0.2
+    lo: 0.06666666666666667
+    hi: 0.6000000000000001
+  - name: ic_rev
+    group: coefficients
+    aurora_value: 0.02
+    lo: 0.006666666666666667
+    hi: 0.06
+  - name: ic_pi
+    group: coefficients
+    aurora_value: 0.5
+    lo: 0.16666666666666666
+    hi: 1.5
+  - name: ic_s
+    group: coefficients
+    aurora_value: 0.1
+    lo: 0.03333333333333333
+    hi: 0.30000000000000004
+  - name: st_a
+    group: coefficients
+    aurora_value: 0.3
+    lo: 0.09999999999999999
+    hi: 0.8999999999999999
+  - name: st_c
+    group: coefficients
+    aurora_value: 0.3
+    lo: 0.09999999999999999
+    hi: 0.8999999999999999
+  - name: st_t
+    group: coefficients
+    aurora_value: 0.4
+    lo: 0.13333333333333333
+    hi: 1.2000000000000002
+  - name: st_i
+    group: coefficients
+    aurora_value: 0.2
+    lo: 0.06666666666666667
+    hi: 0.6000000000000001
+  - name: st_adj
+    group: coefficients
+    aurora_value: 0.15
+    lo: 0.049999999999999996
+    hi: 0.44999999999999996
+  - name: province_transfer_sensitivity
+    group: coefficients
+    aurora_value: 0.5
+    lo: 0.16666666666666666
+    hi: 1.5
+  - name: u_ref
+    group: coefficients
+    aurora_value: 8.0
+    lo: 2.6666666666666665
+    hi: 24.0
+  - name: pi_ref
+    group: coefficients
+    aurora_value: 2.0
+    lo: 0.6666666666666666
+    hi: 6.0
+  - name: pi_ref_conf
+    group: coefficients
+    aurora_value: 3.0
+    lo: 1.0
+    hi: 9.0
+  - name: wage_ref
+    group: coefficients
+    aurora_value: 100.0
+    lo: 33.333333333333336
+    hi: 300.0
+  - name: growth_ref
+    group: coefficients
+    aurora_value: 1.5
+    lo: 0.5
+    hi: 4.5
+  - name: inequality_ref
+    group: coefficients
+    aurora_value: 42.0
+    lo: 14.0
+    hi: 126.0
+  - name: poverty_ref
+    group: coefficients
+    aurora_value: 30.0
+    lo: 10.0
+    hi: 90.0
+  - name: tension_base
+    group: coefficients
+    aurora_value: 35.0
+    lo: 11.666666666666666
+    hi: 105.0
+  - name: tension_threshold
+    group: coefficients
+    aurora_value: 50.0
+    lo: 16.666666666666668
+    hi: 150.0
+  - name: protest_ref
+    group: coefficients
+    aurora_value: 15.0
+    lo: 5.0
+    hi: 45.0
+  - name: conf_ref
+    group: coefficients
+    aurora_value: 45.0
+    lo: 15.0
+    hi: 135.0
+  - name: conf_neutral
+    group: coefficients
+    aurora_value: 50.0
+    lo: 16.666666666666668
+    hi: 150.0
+  - name: approval_ref
+    group: coefficients
+    aurora_value: 50.0
+    lo: 16.666666666666668
+    hi: 150.0
+  - name: approval_reversion
+    group: coefficients
+    aurora_value: 45.0
+    lo: 15.0
+    hi: 135.0
+  - name: congress_ref
+    group: coefficients
+    aurora_value: 45.0
+    lo: 15.0
+    hi: 135.0
+  - name: cc_base
+    group: coefficients
+    aurora_value: 50.0
+    lo: 16.666666666666668
+    hi: 150.0
+  - name: crime_base
+    group: coefficients
+    aurora_value: 50.0
+    lo: 16.666666666666668
+    hi: 150.0
+  - name: stability_base
+    group: coefficients
+    aurora_value: 60.0
+    lo: 20.0
+    hi: 180.0
+  - name: transfers_ref
+    group: coefficients
+    aurora_value: 6.0
+    lo: 2.0
+    hi: 18.0
+  - name: dd_pi
+    group: bimonetary
+    aurora_value: 0.01
+    lo: 0.0033333333333333335
+    hi: 0.03
+  - name: dd_r
+    group: bimonetary
+    aurora_value: 0.004
+    lo: 0.0013333333333333333
+    hi: 0.012
+  - name: dd_conf
+    group: bimonetary
+    aurora_value: 0.006
+    lo: 0.002
+    hi: 0.018000000000000002
+  - name: dd_gap
+    group: bimonetary
+    aurora_value: 0.15
+    lo: 0.049999999999999996
+    hi: 0.44999999999999996
+  - name: dd_persistence
+    group: bimonetary
+    aurora_value: 0.9
+    lo: 0.3
+    hi: 0.99
+    reason: "AR(1) de dollar_demand: persistencia >= 1 es no estacionaria (explota)."
+  - name: gap_control
+    group: bimonetary
+    aurora_value: 0.5
+    lo: 0.0
+    hi: 1.0
+    reason: "fraccion de la brecha cambiaria trasladada a inflacion percibida: no puede superar 1 por construccion."
+  - name: debt_fx_share
+    group: bimonetary
+    aurora_value: 0.65
+    lo: 0.21666666666666667
+    hi: 1.9500000000000002
+  - name: default_risk_debt_reserves
+    group: bimonetary
+    aurora_value: 0.35
+    lo: 0.11666666666666665
+    hi: 1.0499999999999998
+  - name: default_risk_fiscal
+    group: bimonetary
+    aurora_value: 0.03
+    lo: 0.01
+    hi: 0.09
+  - name: default_risk_threshold
+    group: bimonetary
+    aurora_value: 0.7
+    lo: 0.0
+    hi: 1.0
+    reason: "se compara contra default_risk, acotado a [0,1] (es una probabilidad); un umbral fuera de [0,1] nunca o siempre dispara el default endogeno."
