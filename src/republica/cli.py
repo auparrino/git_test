@@ -37,6 +37,12 @@ eval_app = typer.Typer(help="Evals de agentes (ADR 007 secc. 1-4).")
 app.add_typer(eval_app, name="eval")
 experiment_app = typer.Typer(help="Experimentos en lote, DuckDB y comparacion (ADR 008).")
 app.add_typer(experiment_app, name="experiment")
+ml_app = typer.Typer(
+    help="Sustituto, active learning, early-warning y clustering de regimenes (ADR 009)."
+)
+app.add_typer(ml_app, name="ml")
+early_warning_app = typer.Typer(help="Early-warning de crisis (ADR 009 secc. 5).")
+ml_app.add_typer(early_warning_app, name="early-warning")
 console = Console()
 
 
@@ -178,8 +184,9 @@ def run(
     brain: Annotated[
         str | None,
         typer.Option(
-            help="Cerebro para todo actor sin entrada en --brains (ADR 004): "
-            "rules|fake:rules|fake:malformed|fake:unauthorized|llm:ollama:<modelo>.",
+            help="Cerebro para todo actor sin entrada en --brains (ADR 004/009): "
+            "rules|fake:rules|fake:malformed|fake:unauthorized|llm:ollama:<modelo>|"
+            "surrogate:<path>[+fallback:<brain>[+threshold:<valor>]].",
         ),
     ] = None,
     brains: Annotated[
@@ -1263,6 +1270,229 @@ def experiment_report(
 
     path = build_report(out)
     console.print(f"[green]OK[/green] reporte -> {path}")
+
+
+def _ml_import_error(exc: ImportError) -> None:
+    console.print(f"[red]{exc}[/red]")
+    raise typer.Exit(code=1) from exc
+
+
+@ml_app.command("dataset")
+def ml_dataset_cmd(
+    sources: Annotated[
+        list[Path],
+        typer.Argument(help="Directorios (recorridos con **/*.jsonl) o archivos .jsonl."),
+    ],
+    out: Annotated[Path, typer.Option("--out", help="CSV de salida (ADR 009 secc. 2).")] = Path(
+        "data/ml/decisions.csv"
+    ),
+) -> None:
+    """`republica ml dataset <dir|jsonl...> --out data/ml/decisions.csv`
+    (ADR 009 secc. 2): una fila por (actor, mes). Escribe tambien un
+    `.parquet` si `pandas`+`pyarrow` estan instalados."""
+    from republica.ml.dataset import build_dataset
+
+    result = build_dataset(sources, out)
+    console.print(
+        f"[green]OK[/green] {result['n_rows']} filas de {result['n_runs']} corridas "
+        f"({result['n_failed_runs']} ilegibles) -> {result['out_csv']}"
+        + (f" (+ {result['out_parquet']})" if result["out_parquet"] else "")
+    )
+
+
+@ml_app.command("train")
+def ml_train_cmd(
+    runs: Annotated[
+        list[Path], typer.Argument(help="Directorios o archivos .jsonl con corridas ya guardadas.")
+    ],
+    out: Annotated[Path, typer.Option("--out", help="Archivo .joblib de salida.")] = Path(
+        "data/ml/surrogate_rules.joblib"
+    ),
+    brain: Annotated[
+        str, typer.Option("--brain", help="Cerebro que imitan las corridas (metadata).")
+    ] = "rules",
+) -> None:
+    """`republica ml train --runs <dir|jsonl...> --brain rules --out
+    data/ml/surrogate_rules.joblib` (ADR 009 secc. 3): un pipeline sklearn
+    por rol. Requiere el extra opcional `ml`."""
+    try:
+        from republica.ml.surrogate import train_surrogate
+    except ImportError as exc:
+        _ml_import_error(exc)
+        return
+
+    result = train_surrogate(runs, out, brain=brain)
+    n_skipped = len(result["roles"]) - len(result["metrics"])
+    skipped_note = f", {n_skipped} sin suficiente variedad de 'position'" if n_skipped else ""
+    console.print(
+        f"[green]OK[/green] sustituto de '{brain}': {len(result['metrics'])} pipelines entrenados "
+        f"de {len(result['roles'])} roles{skipped_note} -> {out}"
+    )
+    for role, m in result["metrics"].items():
+        console.print(
+            f"  {role}: position_acc(val)={m['position_accuracy_val']:.3f} "
+            f"intensity_mae(val)={m['intensity_mae_val']:.3f} n_train={m['n_train']}"
+        )
+
+
+@ml_app.command("evaluate")
+def ml_evaluate_cmd(
+    model: Annotated[Path, typer.Option("--model", help="Archivo .joblib de 'ml train'.")],
+    seeds: Annotated[
+        str, typer.Option("--seeds", help="Rango 'inicio:fin' (exclusivo), ej. 100:130.")
+    ],
+    months: Annotated[int, typer.Option(help="Meses por corrida.")] = 48,
+    fallback: Annotated[
+        str | None, typer.Option(help="Brain de respaldo (active learning), si aplica.")
+    ] = None,
+) -> None:
+    """`republica ml evaluate --model ... --seeds 100:130` (ADR 009 secc.
+    3): agreement rate en semillas held-out, re-simulando `rules` vs
+    `surrogate:<model>`."""
+    try:
+        from republica.ml.surrogate import evaluate_surrogate
+    except ImportError as exc:
+        _ml_import_error(exc)
+        return
+
+    start_s, _, end_s = seeds.partition(":")
+    seed_range = list(range(int(start_s), int(end_s)))
+    result = evaluate_surrogate(model, seed_range, months=months, fallback=fallback)
+    console.print(
+        f"[green]OK[/green] agreement_rate={result['agreement_rate']:.3f} "
+        f"sobre {result['n_actor_months']} (actor, mes) de {len(seed_range)} semillas"
+    )
+    for role, rate in sorted(result["per_role_agreement"].items()):
+        console.print(f"  {role}: {rate:.3f}")
+
+
+@ml_app.command("retrain")
+def ml_retrain_cmd(
+    model: Annotated[Path, typer.Option("--model", help="Modelo .joblib a reentrenar.")],
+    runs: Annotated[
+        list[Path],
+        typer.Option("--runs", help="Mismas corridas usadas en 'ml train' (repetible)."),
+    ],
+    out: Annotated[Path, typer.Option("--out", help="Archivo .joblib de salida.")],
+    queue: Annotated[
+        Path | None,
+        typer.Option(
+            "--queue", help="Cola de active learning (default: data/ml/active_queue.jsonl)."
+        ),
+    ] = None,
+) -> None:
+    """`republica ml retrain --queue` (ADR 009 secc. 4): reentrena sumando
+    `active_queue.jsonl` al split de entrenamiento."""
+    try:
+        from republica.ml.active import retrain_with_queue
+    except ImportError as exc:
+        _ml_import_error(exc)
+        return
+
+    result = retrain_with_queue(model, out, queue_path=queue, sources=runs)
+    console.print(
+        f"[green]OK[/green] reentrenado con {result['n_queue_rows_added']} filas de la cola "
+        f"-> {out}"
+    )
+
+
+@ml_app.command("regimes")
+def ml_regimes_cmd(
+    db: Annotated[
+        Path, typer.Option("--db", help="DuckDB ya cargado con 'experiment load'.")
+    ] = Path("simulations/republica.duckdb"),
+    describe: Annotated[
+        bool,
+        typer.Option("--describe", help="Imprime la tabla de centroides y una frase por cluster."),
+    ] = False,
+) -> None:
+    """`republica ml regimes --db ... [--describe]` (ADR 009 secc. 6):
+    clustering de regimenes sobre lo ya cargado en DuckDB."""
+    try:
+        from republica.ml.regimes import run_regimes
+    except ImportError as exc:
+        _ml_import_error(exc)
+        return
+
+    result = run_regimes(db, describe=describe)
+    console.print(
+        f"[green]OK[/green] {result['n_runs']} corridas, k={result['k']} "
+        f"(silhouette={result['silhouette']:.3f})"
+        if result["n_runs"]
+        else "[yellow]sin corridas[/yellow]"
+    )
+    if describe:
+        table = Table(title="Regimenes")
+        table.add_column("cluster")
+        table.add_column("n")
+        table.add_column("descripcion")
+        for d in result.get("descriptions", []):
+            centroid = next(c for c in result["centroids"] if c["cluster"] == d["cluster"])
+            table.add_row(str(d["cluster"]), str(int(centroid["n_runs"])), d["sentence"])
+        console.print(table)
+
+
+@early_warning_app.command("train")
+def ml_early_warning_train_cmd(
+    runs: Annotated[list[Path], typer.Option("--runs", help="Directorios o .jsonl (repetible).")],
+    out: Annotated[Path, typer.Option("--out", help="Archivo .joblib de salida.")] = Path(
+        "data/ml/early_warning.joblib"
+    ),
+) -> None:
+    """`republica ml early-warning train --runs <dir> --out ...` (ADR 009
+    secc. 5)."""
+    try:
+        from republica.ml.early_warning import train_early_warning
+    except ImportError as exc:
+        _ml_import_error(exc)
+        return
+
+    result = train_early_warning(runs, out)
+    console.print(
+        f"[green]OK[/green] AUC(val)={result['auc_val']:.3f} AUC(test)={result['auc_test']:.3f} "
+        f"sobre {result['n_rows']} filas ({result['n_positive']} positivas) -> {out}"
+    )
+
+
+@early_warning_app.command("predict")
+def ml_early_warning_predict_cmd(
+    model: Annotated[
+        Path, typer.Option("--model", help="Archivo .joblib de 'early-warning train'.")
+    ],
+    run: Annotated[Path, typer.Option("--run", help="Archivo .jsonl de una corrida.")],
+    month: Annotated[int, typer.Option(help="Mes a evaluar.")],
+) -> None:
+    """`republica ml early-warning predict --run run.jsonl --month N`."""
+    try:
+        from republica.ml.early_warning import predict_from_run, risk_sentence
+    except ImportError as exc:
+        _ml_import_error(exc)
+        return
+
+    result = predict_from_run(model, run, month)
+    console.print(risk_sentence(result["probability"], result["top_features"]))
+
+
+@app.command()
+def ui() -> None:
+    """`republica ui` (ADR 009 secc. 7): lanza la UI Streamlit
+    (`ui/app.py`). Requiere el extra opcional `ui`
+    (`uv sync --group dev --extra ui`)."""
+    try:
+        import streamlit  # noqa: F401, PLC0415
+    except ImportError as exc:
+        console.print(
+            "[red]streamlit no esta instalado en este entorno. Instalar el extra opcional "
+            "`ui` con `uv sync --group dev --extra ui` (o `pip install "
+            "'republica-artificial[ui]'`) para usar `republica ui`.[/red]"
+        )
+        raise typer.Exit(code=1) from exc
+
+    import subprocess
+    import sys
+
+    app_path = Path(__file__).resolve().parent / "ui" / "app.py"
+    subprocess.run([sys.executable, "-m", "streamlit", "run", str(app_path)], check=False)
 
 
 if __name__ == "__main__":

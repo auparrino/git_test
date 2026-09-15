@@ -87,9 +87,18 @@ class ActionRecord:
     denied_reason: str | None
     score: dict[str, float] | None
     consequences: dict
+    #: Cerebro que emitio esta accion (ADR 009 secc. 9, deliverable 3: "un
+    #: `surrogate` como brain ... produce `ActionRecord` con `brain =
+    #: surrogate`"). Default `"rules"` (el default de todo el proyecto,
+    #: ADR 004 secc. 7): `to_dict()` solo agrega la clave cuando NO es
+    #: `"rules"`, mismo patron que `MonthRecord.cohorts`/`trace_records`
+    #: (ADR 003/004/005) -- asi una corrida enteramente por reglas produce
+    #: el mismo JSONL byte a byte que antes de ADR 009 (ningun golden hash
+    #: se mueve por agregar este campo).
+    brain: str = "rules"
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "kind": "action",
             "month": self.month,
             "actor": self.actor,
@@ -102,6 +111,9 @@ class ActionRecord:
             "score": self.score,
             "consequences": self.consequences,
         }
+        if self.brain != "rules":
+            d["brain"] = self.brain
+        return d
 
 
 #: Un actor "de decision" implementa `decide(perception, rng) ->
@@ -335,6 +347,10 @@ def run_actor_turn(
     pending_approvals: list[Action] = []
     scores: dict[str, dict[str, float]] = {}
     traces: list[DecisionTrace] = []
+    #: `brain` por actor (ADR 009 secc. 9, deliverable 3): se lee DESPUES de
+    #: `decide()` (no antes) porque un `ActiveLearningActor` (ADR 009 secc.
+    #: 4) solo sabe si este turno cayo al respaldo una vez que decidio.
+    actor_brains: dict[str, str] = {}
 
     for actor_id, sheet in engine.actors.items():
         if sheet.role == "president":
@@ -369,6 +385,7 @@ def run_actor_turn(
         perception = filter_perception(sheet, perception, gov)
         decision_actor = engine.decision_actors[actor_id]
         actions = decision_actor.decide(perception, engine.actor_rngs[actor_id])
+        actor_brains[actor_id] = getattr(decision_actor, "brain_name", "rules")
         last_score = getattr(decision_actor, "last_score", None)
         if last_score is not None:
             scores[actor_id] = last_score.as_dict()
@@ -459,6 +476,7 @@ def run_actor_turn(
             reason=action.reason,
             score=scores.get(action.actor_id),
             consequences=per_action,
+            brain=actor_brains.get(action.actor_id, "rules"),
             **to_record_dict(result),
         )
 

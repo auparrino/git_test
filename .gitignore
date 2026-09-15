@@ -45,3 +45,11 @@ simulations/*
 # resultado legible y chico), las corridas se reproducen con `republica
 # experiment run`/`resume` a partir del yaml + runs.meta.json.
 experiments/results/**/*.jsonl
+
+# ADR 009: modelos y datasets de ML (decenas/cientos de MB: .joblib,
+# .csv/.parquet del dataset de decisiones, la cola de active learning) --
+# se reproducen con `republica ml dataset`/`train`/`early-warning train`.
+# `manifest_example.json` SI se versiona (deliverable explicito, chico:
+# metricas de una corrida real de referencia).
+data/ml/*
+!data/ml/manifest_example.json

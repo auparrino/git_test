@@ -77,9 +77,19 @@ def load_jsonl(path: str | Path) -> Loaded:
     no son `MonthRecord`: se separan cada una en su propio `dict` por mes y
     no entran en `records` (ver Notas de implementacion de ADR 003: asi
     `render()` no cambia para corridas sin actores)."""
-    lines = Path(path).read_text(encoding="utf-8").splitlines()
-    if not lines:
+    text = Path(path).read_text(encoding="utf-8")
+    if not text.strip():
         raise ValueError(f"{path} esta vacio")
+    return loads_jsonl(text)
+
+
+def loads_jsonl(text: str) -> Loaded:
+    """Igual que `load_jsonl`, sobre el TEXTO ya en memoria (ADR 009 secc.
+    7: `ui/app.py` corre una corrida de ejemplo y la carga sin pasar por
+    disco -- `History.to_jsonl()` ya devuelve exactamente este texto)."""
+    lines = text.splitlines()
+    if not lines:
+        raise ValueError("el texto JSONL esta vacio")
     parsed = [json.loads(line) for line in lines[:-1]]
     summary = json.loads(lines[-1])
     sidecar_kinds = ("action", "vote", "negotiation", "perception", "memory", "election", "trace")

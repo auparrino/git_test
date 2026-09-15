@@ -119,7 +119,7 @@ def build_decision_actor(
     cache_dir: str | Path | None = None,
     memory_enabled: bool = False,
     governance: Any | None = None,
-) -> RuleBasedActor | LLMActor:
+) -> RuleBasedActor | LLMActor | Any:
     """`spec` -> el objeto `decide(perception, rng) -> list[Action]` para
     `sheet` (ADR 004 secc. 7, deliverable 6: "cada actor obtiene el cerebro
     de la tabla"). `memory_enabled` (ADR 006 secc. 1.3) solo importa para
@@ -133,6 +133,24 @@ def build_decision_actor(
     SIQUIERA intenta `SET_RATE` -- sin pasarlo aca, `--governance-override
     central_bank.autonomy=4` autorizaria `SET_RATE` en `authorize()` pero
     el actor nunca llegaria a proponerlo (ver Notas de implementacion)."""
+    if spec.startswith("surrogate:"):
+        # ADR 009 secc. 3/4: "surrogate:<path>" o
+        # "surrogate:<path>+fallback:<brain>" (active learning). Perezoso
+        # (`ml/surrogate.py`/`ml/active.py` importan sklearn perezosamente
+        # tambien): un `import ai.brains` sin el extra `[ml]` sigue
+        # andando, recien falla ESTA rama si se pide un brain `surrogate:*`.
+        from republica.ml.active import build_active_or_surrogate_actor  # noqa: PLC0415
+
+        return build_active_or_surrogate_actor(
+            spec,
+            sheet,
+            country,
+            seed=seed,
+            temperature=temperature,
+            cache_dir=cache_dir,
+            memory_enabled=memory_enabled,
+            governance=governance,
+        )
     if spec == "rules":
         return RuleBasedActor(
             sheet,

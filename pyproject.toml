@@ -22,9 +22,17 @@ dependencies = [
 # dependencias base nada mas; `experiments/store.py`/`report.py` importan
 # `duckdb`/`matplotlib` de forma perezosa (dentro de la funcion que los usa)
 # y fallan con un mensaje en castellano si no estan instalados.
+#
+# ADR 009 secc. 1: extras opcionales de Fase 9. `ml` (sustituto, active
+# learning, early-warning, clustering: `src/republica/ml/`) y `ui`
+# (`republica ui`, Streamlit) se importan de forma perezosa, igual que
+# `duckdb`/`matplotlib` arriba -- el motor y la CLI base siguen corriendo
+# sin numpy/sklearn/streamlit instalados.
 [project.optional-dependencies]
 langfuse = ["langfuse>=2"]
 analysis = ["duckdb>=1", "pandas>=2", "matplotlib>=3"]
+ml = ["scikit-learn>=1.4", "joblib>=1.3"]
+ui = ["streamlit>=1.35"]
 
 [project.scripts]
 republica = "republica.cli:app"
