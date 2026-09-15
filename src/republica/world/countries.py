@@ -21,11 +21,14 @@ import json
 import os
 import shutil
 import tempfile
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from republica.world.bimonetary import BimonetaryCoefficients
 from republica.world.config import DEFAULT_DATA_DIR, Country, load_country
+from republica.world.economy import DEFAULT_X0_M0_USD_M, MacroCoefficients
+from republica.world.eras import EraOverlay, build_era_overlay
 from republica.world.regime import RegimeCalendar, build_regime_calendar, load_failed_coup_dates
 
 COUNTRIES_ROOT = DEFAULT_DATA_DIR / "countries"
@@ -170,6 +173,25 @@ class CountryPack:
     historical_forced_shocks: dict[int, list[str]] = field(default_factory=dict)
     historical_exogenous: dict[int, tuple[float, float]] = field(default_factory=dict)
     initial_states_coverage: dict[str, dict[str, str]] = field(default_factory=dict)
+    #: ADR 012 (`features.macro_regime`): coeficientes de `country.json ->
+    #: macro` (default `MacroCoefficients()` si el paquete no trae el
+    #: bloque, igual que `bimonetary_coefficients`), `X0`/`M0` (USD M/mes,
+    #: secc. 4) resueltos desde `history/gdp_usd.csv` en `start` (o el
+    #: fallback generico si no hay serie) y el `fx_regime` efectivo para
+    #: `start` segun `fx_regimes.csv` (deliverable 5 del ADR) cuando se pide
+    #: `--fx-regime auto`.
+    macro_coefficients: MacroCoefficients = field(default_factory=MacroCoefficients)
+    macro_x0: float = DEFAULT_X0_M0_USD_M
+    macro_m0: float = DEFAULT_X0_M0_USD_M
+    fx_regime_auto: str = "float"
+    #: ADR 013 secc. 1/3: partidos/actores/lealtades/gobernanza de la epoca
+    #: que cubre `start` (mas cualquier epoca que la corrida cruce, ADR 013
+    #: secc. 6 punto 4), o `None` si ninguna epoca de `country_id` cubre
+    #: `start` (fallback a Aurora, `country.parties`/etc. quedan como
+    #: siempre). `era.warning` trae el aviso de ese fallback -- ya emitido
+    #: via `warnings.warn` por `load_country_pack`, repetido aca para quien
+    #: prefiera revisarlo por codigo en vez de capturar el warning.
+    era: EraOverlay | None = None
 
 
 AURORA_COUNTRY_JSON_TEXT = (DEFAULT_DATA_DIR / "country.json").read_text(encoding="utf-8")
@@ -267,9 +289,29 @@ def load_country_pack(
         json.dumps(effective_country_json, ensure_ascii=False), encoding="utf-8"
     )
 
+    # ADR 013 secc. 1/3: si hay una epoca que cubre `start`, sus partidos
+    # (mas los de cualquier epoca que la corrida cruce, ver `world/eras.py::
+    # build_era_overlay`) reemplazan a los de `merged/parties.json` (Aurora,
+    # o los del paquete si trajera uno propio -- Argentina no trae uno hoy)
+    # ANTES de `load_country`, para que `country.parties` salga ya con el
+    # universo de partidos de la corrida. Sin epoca que cubra `start`:
+    # aviso (impreso/logueado via `warnings.warn`, ADR 013 secc. 6 punto 1)
+    # y fallback a lo de siempre -- cero cambios de comportamiento.
+    era_overlay = build_era_overlay(country_id, start, months, term_length)
+    if era_overlay.warning is not None:
+        warnings.warn(era_overlay.warning, stacklevel=2)
+    if era_overlay.parties is not None:
+        parties_json_path = merged / "parties.json"
+        if parties_json_path.exists() or parties_json_path.is_symlink():
+            parties_json_path.unlink()
+        parties_json_path.write_text(
+            json.dumps(era_overlay.parties, ensure_ascii=False), encoding="utf-8"
+        )
+
     country = load_country(merged)
 
     bimonetary_coeffs = BimonetaryCoefficients.from_dict(raw_country.get("bimonetary"))
+    macro_coeffs = MacroCoefficients.from_dict(raw_country.get("macro"))
     regime_calendar = build_regime_calendar(
         pack_dir / "politics" / "events.csv", y, m, months, regime_mode
     )
@@ -280,6 +322,7 @@ def load_country_pack(
         date: {var: _provenance_kind(prov) for var, prov in entry.items()}
         for date, entry in raw_country.get("initial_states", {}).items()
     }
+    macro_x0, macro_m0 = x0_m0_from_gdp_usd(pack_dir, start, macro_coeffs.x0_m0_pct_gdp)
 
     return CountryPack(
         country=country,
@@ -289,6 +332,11 @@ def load_country_pack(
         regime_calendar=regime_calendar,
         historical_forced_shocks=historical_forced,
         initial_states_coverage=coverage,
+        macro_coefficients=macro_coeffs,
+        macro_x0=macro_x0,
+        macro_m0=macro_m0,
+        fx_regime_auto=fx_regime_for(pack_dir, start),
+        era=era_overlay,
     )
 
 
@@ -410,3 +458,55 @@ def historical_exogenous_series(
             last_value = 100.0 * v / base
         out[month_idx] = (last_value, 100.0)
     return out
+
+
+def x0_m0_from_gdp_usd(pack_dir: Path, start: str, x0_m0_pct_gdp: float) -> tuple[float, float]:
+    """`X0`/`M0` (ADR 012 secc. 4, USD M/mes) para `start`: `x0_m0_pct_gdp
+    · gdp_usd(start_year) / 12`, con `gdp_usd` de `history/gdp_usd.csv` (en
+    USD corrientes, seccion A0) convertido a USD millones. Ese archivo es
+    ANUAL: se usa el valor del año de `start` si existe, si no el año mas
+    cercano (mismo criterio que `historical_exogenous_series`). Sin
+    `history/gdp_usd.csv` (pais sin esa serie): `(DEFAULT_X0_M0_USD_M,
+    DEFAULT_X0_M0_USD_M)`, documentado (ADR 012 secc. 4: "hasta entonces
+    X0=M0=0.18*gdp_usd/12" -- ese "hasta entonces" es sobre la SERIE
+    mensual/trimestral, no sobre la anual, que ya cubre 1983-2023 completo
+    para Argentina; este fallback solo importa para un pais hipotetico sin
+    ninguna serie de PIB en USD)."""
+    import csv as _csv
+
+    p = pack_dir / "history" / "gdp_usd.csv"
+    if not p.exists():
+        return DEFAULT_X0_M0_USD_M, DEFAULT_X0_M0_USD_M
+    start_year = int(start.split("-")[0])
+    by_year: dict[int, float] = {}
+    with p.open(encoding="utf-8", newline="") as fh:
+        for row in _csv.DictReader(fh):
+            by_year[int(row["date"][:4])] = float(row["value"])
+    if not by_year:
+        return DEFAULT_X0_M0_USD_M, DEFAULT_X0_M0_USD_M
+    year = (
+        start_year if start_year in by_year else min(by_year, key=lambda yy: abs(yy - start_year))
+    )
+    gdp_usd_musd = by_year[year] / 1.0e6
+    x0 = x0_m0_pct_gdp * gdp_usd_musd / 12.0
+    return x0, x0
+
+
+#: `data/countries/<id>/fx_regimes.csv` (ADR 012 deliverable 5): tabla
+#: `date_from,date_to,fx_regime` usada por `--fx-regime auto` para elegir el
+#: regimen cambiario INICIAL segun `start` (no un calendario de cambios de
+#: regimen dentro de una misma corrida -- una corrida que empieza en
+#: `1988-06` corre bajo `crawl` los 24 meses que dure, salvo que el propio
+#: motor la fuerce a salir por reservas, ADR 012 secc. 3; documentado como
+#: simplificacion en Notas de implementacion).
+def fx_regime_for(pack_dir: Path, start: str) -> str:
+    import csv as _csv
+
+    path = pack_dir / "fx_regimes.csv"
+    if not path.exists():
+        return "float"
+    with path.open(encoding="utf-8", newline="") as fh:
+        for row in _csv.DictReader(fh):
+            if row["date_from"] <= start <= row["date_to"]:
+                return row["fx_regime"]
+    return "float"

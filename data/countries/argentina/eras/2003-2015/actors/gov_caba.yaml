@@ -1,0 +1,28 @@
+id: gov_caba
+name: Anibal Ibarra
+role: governor
+ideology:
+  economic: -0.3
+  social: -0.3
+  federalism: -0.1
+  institutionalism: 0.4
+personality:
+  ambition: 0.5
+  risk_tolerance: 0.5
+  loyalty: 0.5
+  pragmatism: 0.5
+interests:
+- provincial_transfers
+influence:
+  public: 0.4
+  congress: 0.2
+  streets: 0.25
+  markets: 0.1
+relationships: {}
+bio: Jefe de Gobierno de la Ciudad de Buenos Aires, electo en 2000, en funciones en 2003-05.
+assessment: analyst
+assessment_note: Ideologia/intereses asignados por el analista (confianza alta sobre el nombre/fecha de
+  asuncion, ver bio); provincia = la mas poblada de su region (politics/regions.csv, Censo 2022) segun
+  ADR 013 secc. 3.
+party: ari_cc
+province: caba

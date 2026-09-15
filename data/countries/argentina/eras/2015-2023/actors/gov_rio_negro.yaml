@@ -1,0 +1,30 @@
+id: gov_rio_negro
+name: Alberto Weretilneck
+role: governor
+ideology:
+  economic: 0.0
+  social: 0.0
+  federalism: 0.6
+  institutionalism: 0.5
+personality:
+  ambition: 0.5
+  risk_tolerance: 0.5
+  loyalty: 0.5
+  pragmatism: 0.5
+interests:
+- provincial_transfers
+- reelection
+influence:
+  public: 0.4
+  congress: 0.2
+  streets: 0.25
+  markets: 0.1
+relationships: {}
+bio: Gobernador de Rio Negro (Juntos Somos Rio Negro, provincial), reelecto para el periodo que arranca
+  el 10-dic-2015.
+assessment: analyst
+assessment_note: Ideologia/intereses asignados por el analista (confianza media sobre el nombre/fecha
+  de asuncion, ver bio); provincia = la mas poblada de su region (politics/regions.csv, Censo 2022) segun
+  ADR 013 secc. 3.
+party: uca_otros_2015
+province: rio_negro

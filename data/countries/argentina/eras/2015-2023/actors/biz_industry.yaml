@@ -1,0 +1,27 @@
+id: biz_industry
+name: Union Industrial Argentina
+role: business
+ideology:
+  economic: 0.2
+  social: 0.0
+  federalism: -0.1
+  institutionalism: 0.5
+personality:
+  ambition: 0.6
+  risk_tolerance: 0.5
+  loyalty: 0.5
+  pragmatism: 0.6
+interests:
+- industrial_protection
+- cheap_credit
+influence:
+  public: 0.3
+  congress: 0.2
+  streets: 0.1
+  markets: 0.25
+relationships: {}
+bio: Union Industrial Argentina. Camara empresaria de la industria manufacturera, busca proteccion arancelaria
+  y credito accesible.
+assessment: analyst
+assessment_note: Camara fabril nacional; interes en proteccion arancelaria/credito barato, mas heterogenea
+  ideologicamente que el agro exportador.

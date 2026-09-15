@@ -1,0 +1,28 @@
+id: gov_caba
+name: Horacio Rodriguez Larreta
+role: governor
+ideology:
+  economic: 0.4
+  social: 0.1
+  federalism: -0.1
+  institutionalism: 0.6
+personality:
+  ambition: 0.5
+  risk_tolerance: 0.5
+  loyalty: 0.5
+  pragmatism: 0.5
+interests:
+- provincial_transfers
+influence:
+  public: 0.4
+  congress: 0.2
+  streets: 0.25
+  markets: 0.1
+relationships: {}
+bio: Jefe de Gobierno de la Ciudad de Buenos Aires (PRO/Cambiemos), asume el 10-dic-2015.
+assessment: analyst
+assessment_note: Ideologia/intereses asignados por el analista (confianza alta sobre el nombre/fecha de
+  asuncion, ver bio); provincia = la mas poblada de su region (politics/regions.csv, Censo 2022) segun
+  ADR 013 secc. 3.
+party: cambiemos_jxc
+province: caba

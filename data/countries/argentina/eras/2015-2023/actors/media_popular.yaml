@@ -1,0 +1,26 @@
+id: media_popular
+name: C5N
+role: media
+ideology:
+  economic: -0.5
+  social: 0.4
+  federalism: 0.0
+  institutionalism: 0.3
+personality:
+  ambition: 0.6
+  risk_tolerance: 0.5
+  loyalty: 0.3
+  pragmatism: 0.6
+interests:
+- audience
+influence:
+  public: 0.65
+  congress: 0.1
+  streets: 0.05
+  markets: 0.15
+relationships: {}
+bio: Senal de noticias de linea editorial cercana al kirchnerismo/Frente de Todos, contrapeso de la agenda
+  de Clarin/La Nacion en este periodo.
+assessment: analyst
+assessment_note: Senal de noticias de linea editorial cercana al kirchnerismo/Frente de Todos, contrapeso
+  de la agenda de Clarin/La Nacion en este periodo.

@@ -1,0 +1,28 @@
+id: bloc_urban_workers
+name: Bloque de Trabajadores Urbanos
+role: social_bloc
+ideology:
+  economic: -0.7
+  social: 0.5
+  federalism: 0.1
+  institutionalism: 0.3
+personality:
+  ambition: 0.6
+  risk_tolerance: 0.65
+  loyalty: 0.7
+  pragmatism: 0.5
+interests:
+- real_wages
+- employment
+- social_programs
+influence:
+  public: 0.4
+  congress: 0.0
+  streets: 0.7
+  markets: 0.0
+relationships: {}
+bio: Trabajadores de fabricas y servicios urbanos, base sindical. Demanda salarios, empleo y programas
+  sociales; poder de movilizacion callejero.
+assessment: analyst
+assessment_note: 'Obreros de industria/servicios urbanos, cohorte urban_workers de cohorts.csv (econ_pref
+  -0.5): ideologia distributiva, interes salarial/de empleo directo.'

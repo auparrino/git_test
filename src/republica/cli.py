@@ -266,7 +266,10 @@ def run(
         str | None,
         typer.Option(
             "--fx-regime",
-            help="float|crawl|peg|control (ADR 011 secc. 5, bimonetario). Requiere --country.",
+            help="float|crawl|peg|control|auto (ADR 011 secc. 5 / ADR 012 secc. 3, "
+            "bimonetario/macro). 'auto' (default con --country): resuelve el regimen segun "
+            "`fx_regimes.csv` del paquete para `--start` (ADR 012 deliverable 5). Requiere "
+            "--country.",
         ),
     ] = None,
     calibration_run_id: Annotated[
@@ -287,6 +290,9 @@ def run(
         month, shock_id = _parse_force_shock(spec)
         forced_shocks.setdefault(month, []).append(shock_id)
 
+    macro_coefficients = None
+    macro_x0 = None
+    macro_m0 = None
     if country_id is None:
         country = load_country()
         regime_calendar = None
@@ -342,10 +348,27 @@ def run(
             console.print(
                 f"[yellow]Coeficientes calibrados (A3)[/yellow]: run_id={calibration_run_id}"
             )
-        if fx_regime_opt:
-            bimonetary_coefficients = replace(
-                bimonetary_coefficients, fx_regime_default=fx_regime_opt
-            )
+        # ADR 012 deliverable 5: `--fx-regime auto` (default con --country,
+        # ver `fx_regime_opt` mas abajo) resuelve el regimen segun
+        # `fx_regimes.csv` del paquete para `start`; cualquier otro valor
+        # (`float`/`crawl`/`peg`/`control`) se pasa literal, igual que
+        # siempre (ADR 011).
+        resolved_fx_regime = fx_regime_opt if fx_regime_opt is not None else "auto"
+        if resolved_fx_regime == "auto":
+            resolved_fx_regime = pack.fx_regime_auto
+        bimonetary_coefficients = replace(
+            bimonetary_coefficients, fx_regime_default=resolved_fx_regime
+        )
+        # ADR 012: solo se arma `macro_coefficients` (y por lo tanto solo se
+        # activa la rama nueva de `advance_month`) si el paquete lo pide via
+        # `features.macro_regime` -- el flag SI es el gate aca (a diferencia
+        # de `features.bimonetary`/`features.regime`, que esta CLI nunca
+        # leyo: ver Notas de implementacion del ADR 012 sobre por que no se
+        # replico ese patron).
+        if country.features.get("macro_regime", False):
+            macro_coefficients = pack.macro_coefficients
+            macro_x0 = pack.macro_x0
+            macro_m0 = pack.macro_m0
         if historical_shocks:
             for month, ids in pack.historical_forced_shocks.items():
                 forced_shocks.setdefault(month, []).extend(ids)
@@ -410,6 +433,9 @@ def run(
         regime_calendar=regime_calendar,
         bimonetary_coefficients=bimonetary_coefficients,
         historical_exogenous=historical_exogenous_series,
+        macro_coefficients=macro_coefficients,
+        macro_x0=macro_x0,
+        macro_m0=macro_m0,
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(history.to_jsonl(), encoding="utf-8")

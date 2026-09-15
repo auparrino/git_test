@@ -1,0 +1,27 @@
+id: party_uca_otros_2015
+name: Bloques provinciales y terceras fuerzas (UNA/Massa, Compromiso Federal, etc.)
+role: party
+ideology:
+  economic: 0.0
+  social: 0.0
+  federalism: 0.6
+  institutionalism: 0.5
+personality:
+  ambition: 0.6
+  risk_tolerance: 0.5
+  loyalty: 0.55
+  pragmatism: 0.55
+interests:
+- reelection
+- party_unity
+influence:
+  public: 0.5
+  congress: 0.5
+  streets: 0.25
+  markets: 0.15
+relationships: {}
+bio: Fuerzas no alineadas con las dos grandes coaliciones al inicio de la era.
+assessment: analyst
+assessment_note: 'economic/social/federalism de politics/parties/2015-2023.json (assessment: analyst en
+  el origen); institutionalism/personality/interests/influence de este script, mismo criterio.'
+party: uca_otros_2015

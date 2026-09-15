@@ -1,0 +1,27 @@
+id: biz_finance
+name: Asociacion de Bancos de la Argentina (ADEBA)
+role: business
+ideology:
+  economic: 0.8
+  social: 0.1
+  federalism: -0.1
+  institutionalism: 0.6
+personality:
+  ambition: 0.65
+  risk_tolerance: 0.6
+  loyalty: 0.4
+  pragmatism: 0.55
+interests:
+- financial_stability
+- cheap_credit
+influence:
+  public: 0.15
+  congress: 0.15
+  streets: 0.0
+  markets: 0.55
+relationships: {}
+bio: Asociacion de bancos privados de capital nacional. Sector financiero, alta sensibilidad a estabilidad
+  monetaria y riesgo de default.
+assessment: analyst
+assessment_note: Sector financiero/banca privada de capital nacional; maxima sensibilidad a estabilidad
+  monetaria y riesgo cambiario.

@@ -1,0 +1,27 @@
+id: bloc_public_employees
+name: Bloque de Empleados Publicos
+role: social_bloc
+ideology:
+  economic: -0.6
+  social: 0.2
+  federalism: -0.2
+  institutionalism: 0.5
+personality:
+  ambition: 0.5
+  risk_tolerance: 0.4
+  loyalty: 0.65
+  pragmatism: 0.5
+interests:
+- public_employment
+- real_wages
+influence:
+  public: 0.3
+  congress: 0.0
+  streets: 0.4
+  markets: 0.0
+relationships: {}
+bio: Empleo publico nacional y provincial. Defiende planta y salario estatal, capacidad de protesta gremial
+  via ATE.
+assessment: analyst
+assessment_note: 'Planta del Estado nacional/provincial, cohorte public_employees (econ_pref -0.6): interes
+  directo en el nivel de empleo publico y el salario real estatal.'

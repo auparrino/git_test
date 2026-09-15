@@ -1,0 +1,27 @@
+id: bloc_informal
+name: Bloque de Trabajadores Informales
+role: social_bloc
+ideology:
+  economic: -0.5
+  social: 0.3
+  federalism: 0.1
+  institutionalism: 0.1
+personality:
+  ambition: 0.45
+  risk_tolerance: 0.55
+  loyalty: 0.55
+  pragmatism: 0.45
+interests:
+- employment
+- social_programs
+influence:
+  public: 0.2
+  congress: 0.0
+  streets: 0.55
+  markets: 0.0
+relationships: {}
+bio: Economia informal/changas, el segmento de menor ingreso y mayor precariedad. Muy sensible a planes
+  sociales y al empleo, bajo apego institucional.
+assessment: analyst
+assessment_note: 'Trabajadores sin relacion de dependencia formal, cohorte informal (econ_pref -0.3, el
+  trust mas bajo de cohorts.csv, 30): interes en empleo y contencion social directa, bajo apego institucional.'

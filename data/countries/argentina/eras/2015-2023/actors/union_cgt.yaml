@@ -1,0 +1,28 @@
+id: union_cgt
+name: Confederacion General del Trabajo
+role: union
+ideology:
+  economic: -0.6
+  social: 0.3
+  federalism: 0.0
+  institutionalism: 0.5
+personality:
+  ambition: 0.6
+  risk_tolerance: 0.6
+  loyalty: 0.6
+  pragmatism: 0.55
+interests:
+- real_wages
+- employment
+- social_programs
+influence:
+  public: 0.4
+  congress: 0.25
+  streets: 0.65
+  markets: 0.05
+relationships: {}
+bio: Confederacion General del Trabajo. Central sindical general, negocia paritarias y moviliza contra
+  ajustes al salario real.
+assessment: analyst
+assessment_note: Central sindical general, historicamente alineada al PJ/peronismo; negociadora pero con
+  alta capacidad de movilizacion callejera.

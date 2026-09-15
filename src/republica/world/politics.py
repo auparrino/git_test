@@ -4,6 +4,7 @@ sociedad ya en `t+1`."""
 from __future__ import annotations
 
 from republica.world.config import Coefficients
+from republica.world.economy import MacroCoefficients
 from republica.world.events import ShockAggregate
 from republica.world.state import WorldState, clamp, pos
 
@@ -15,15 +16,34 @@ def step_politics(
     coalition_seats: float,
     shocks: ShockAggregate,
     coeff: Coefficients,
+    macro_coeff: MacroCoefficients | None = None,
+    months_since_crisis: int = 0,
 ) -> WorldState:
     """`prev` es el snapshot `t`; `new` ya tiene economia y sociedad en `t+1`
     (salida de `step_society`). Devuelve `new` con government_approval,
     congress_support, institutional_confidence y political_stability
     actualizados.
+
+    `macro_coeff`/`months_since_crisis` (ADR 012 secc. 5, default `None`/`0`
+    = comportamiento de siempre): con un `MacroCoefficients`, (a) el piso de
+    reversion de `government_approval` deja de ser el `approval_reversion`
+    fijo de `coeff` y pasa a `approval_reversion + e_rev_sentiment_k ·
+    (consumer_confidence/100)` -- "el desgaste tiene piso si la economia va
+    bien" (literal) usando `consumer_confidence` (ya en `new`, calculado por
+    `step_society` antes que este modulo corra) como proxy de
+    `economic_sentiment` (el ADR no define esa variable en ningun otro lado
+    del motor, ver Notas de implementacion); y (b) `institutional_confidence`
+    recupera hacia `ic_target = ic_target_base + ic_target_bonus ·
+    [months_since_crisis >= ic_crisis_free_months]`.
     """
     # 5.6 aprobacion del gobierno
     delta_wage_pct = (new.real_wage - prev.real_wage) / prev.real_wage * 100.0
     delta_unemployment = new.unemployment - prev.unemployment
+    approval_reversion_target = coeff.approval_reversion
+    if macro_coeff is not None:
+        approval_reversion_target = coeff.approval_reversion + macro_coeff.e_rev_sentiment_k * (
+            new.consumer_confidence / 100.0
+        )
     approval_new = (
         prev.government_approval
         + coeff.e_w * delta_wage_pct
@@ -32,7 +52,7 @@ def step_politics(
         + coeff.e_pi_low * (coeff.pi_ref - clamp(new.inflation, 0.0, coeff.pi_ref))
         + coeff.e_g * demand_gap
         - coeff.e_t * pos(new.social_tension - coeff.tension_threshold) / 10.0
-        + coeff.e_rev * (coeff.approval_reversion - prev.government_approval)
+        + coeff.e_rev * (approval_reversion_target - prev.government_approval)
         + shocks.term("shock_approval")
     )
 
@@ -52,6 +72,15 @@ def step_politics(
         + coeff.ic_s * (prev.political_stability - coeff.stability_base) / 10.0
         + shocks.term("shock_conf")
     )
+    if macro_coeff is not None:
+        ic_target = macro_coeff.ic_target_base + (
+            macro_coeff.ic_target_bonus
+            if months_since_crisis >= macro_coeff.ic_crisis_free_months
+            else 0.0
+        )
+        institutional_confidence_new += macro_coeff.ic_rec * pos(
+            ic_target - institutional_confidence_new
+        )
 
     # 5.9 estabilidad politica
     stability_target = (

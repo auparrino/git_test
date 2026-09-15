@@ -1,0 +1,27 @@
+id: bloc_middle_class
+name: Bloque de Clase Media
+role: social_bloc
+ideology:
+  economic: 0.3
+  social: 0.1
+  federalism: 0.0
+  institutionalism: 0.6
+personality:
+  ambition: 0.55
+  risk_tolerance: 0.45
+  loyalty: 0.4
+  pragmatism: 0.6
+interests:
+- price_stability
+- financial_stability
+influence:
+  public: 0.45
+  congress: 0.0
+  streets: 0.3
+  markets: 0.1
+relationships: {}
+bio: Clase media urbana profesional y de servicios. Muy sensible a inflacion y estabilidad cambiaria;
+  voto volatil entre eleccion y eleccion.
+assessment: analyst
+assessment_note: 'Profesionales/cuentapropistas urbanos, cohorte middle_class (econ_pref 0.5): prioridad
+  antiinflacionaria y de estabilidad financiera (ahorros en pesos/dolares).'

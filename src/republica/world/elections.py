@@ -109,12 +109,52 @@ def is_election_month(month: int, term_length: int) -> bool:
 class LoyaltyTable:
     loyalty: dict[tuple[str, str], float] = field(default_factory=dict)
     turnout: dict[str, float] = field(default_factory=dict)
+    #: ADR 013 secc. 1/2/5 (`world/eras.py::build_era_overlay`): ventana de
+    #: meses (indice de la corrida, 1-based, ambos limites inclusive) en la
+    #: que un partido participa de la eleccion -- el mecanismo comun a "un
+    #: partido con `founded` posterior al inicio de la corrida no existe
+    #: hasta su fundacion" (secc. 5) y a "cambia de epoca en la eleccion que
+    #: cruza la frontera" (secc. 1): un partido de la epoca SIGUIENTE tiene
+    #: `party_active_from` = el mes de esa eleccion; uno que "se retira" al
+    #: cruzar tiene `party_active_until` = el mes anterior. Ausente en ambos
+    #: dicts (el default, y SIEMPRE el caso para el `LoyaltyTable` de Aurora
+    #: -- `load_loyalty()` nunca llena estos dicts) = sin limite, mismo
+    #: comportamiento que antes de ADR 013: todo partido de `parties` vota
+    #: todos los meses.
+    party_active_from: dict[str, int] = field(default_factory=dict)
+    party_active_until: dict[str, int] = field(default_factory=dict)
+    #: ADR 013 secc. 5, literal: coeficiente `outsider_bonus` por partido
+    #: (0.0/ausente = sin termino, el default para todo partido que no lo
+    #: declare en su `parties.json` de epoca -- en particular, para
+    #: `load_loyalty()` de Aurora, que nunca llena este dict: cero efecto en
+    #: el golden de Aurora).
+    party_outsider_bonus: dict[str, float] = field(default_factory=dict)
+    #: ADR 013 secc. 1/6 punto 4: `{indice_de_mes: era_id}` de cada
+    #: frontera de epoca que la corrida cruza (`world/eras.py::
+    #: build_era_overlay`) -- `run_election` lo consulta con `month` para
+    #: poner `ElectionResult.era_change` (JSONL, via el mecanismo generico
+    #: ya existente de `History.to_jsonl()`, sin tocar `engine/
+    #: simulation.py`). Vacio (el default) = ninguna corrida cruza de
+    #: epoca, mismo comportamiento que antes de ADR 013.
+    era_boundaries: dict[int, str] = field(default_factory=dict)
 
     def get_loyalty(self, cohort_id: str, party_id: str) -> float:
         return self.loyalty.get((cohort_id, party_id), 0.0)
 
     def get_turnout(self, cohort_id: str) -> float:
         return self.turnout.get(cohort_id, DEFAULT_TURNOUT)
+
+    def is_active(self, party_id: str, month: int) -> bool:
+        """`True` si `party_id` participa de la eleccion de `month` (ADR
+        013 secc. 1/5): dentro de `[party_active_from, party_active_until]`
+        cuando estan declarados, sin limite del lado que falte."""
+        lo = self.party_active_from.get(party_id)
+        if lo is not None and month < lo:
+            return False
+        hi = self.party_active_until.get(party_id)
+        if hi is not None and month > hi:
+            return False
+        return True
 
 
 def load_loyalty(path: str | Path | None = None) -> LoyaltyTable:
@@ -276,6 +316,7 @@ def compute_vote_intention(
     now_turn: int = 0,
     loyalty_adjustments: dict[tuple[str, str], float] | None = None,
     regional_bonus: dict[tuple[str, str], float] | None = None,
+    institutional_confidence: float = 50.0,
 ) -> dict[str, dict[str, float]]:
     """Intencion de voto por cohorte y partido (ADR 006 secc. 2.2):
     `{cohort_id: {party_id: share}}`, `share` ya normalizado por softmax
@@ -285,17 +326,35 @@ def compute_vote_intention(
     (`compute_regional_bonus`, calibracion: ver docs/ADR_006_memory_elections.md
     nota de implementacion #10, ahora resuelta con `data/cohort_provinces.csv`)
     -- default `{}` (0 para todos) si el llamador no lo pasa, mismo
-    comportamiento que antes de la calibracion."""
+    comportamiento que antes de la calibracion.
+
+    `now_turn` (ya existia, secc. 2.2 "shocks/escandalos ultimos 6 meses")
+    hace doble uso desde ADR 013: tambien es el indice de mes que
+    `loyalty.is_active(p.id, now_turn)` usa para excluir de esta cohorte
+    (secc. 1/5, `world/eras.py::build_era_overlay`/`party_exists`) a
+    cualquier partido fuera de su ventana activa -- un partido no fundado
+    aun, o de una epoca de la que la corrida ya se fue. Con
+    `party_active_from`/`party_active_until` vacios (Aurora, y cualquier
+    `LoyaltyTable` que no venga de un `EraOverlay`) esto no excluye a nadie,
+    mismo comportamiento que antes de ADR 013.
+
+    `institutional_confidence` (ADR 013 secc. 5, literal: termino
+    `outsider_bonus · pos(50 − government_approval) · (1 −
+    institutional_confidence/100)`) default 50.0 (neutro): solo tiene
+    efecto para partidos con `loyalty.party_outsider_bonus[p.id] != 0`, que
+    es `{}` para Aurora y para cualquier partido que no lo declare en su
+    `parties.json` de epoca -- cero efecto fuera de ADR 013."""
     campaign_state = campaign_state or {}
     loyalty_adjustments = loyalty_adjustments or {}
     regional_bonus = regional_bonus or {}
+    active_parties = [p for p in parties if loyalty.is_active(p.id, now_turn)]
     out: dict[str, dict[str, float]] = {}
     for c in cohorts:
         cs = cohort_state[c.id]
         econ = econ_vote(c, delta_real_wage_pct_12m, delta_unemployment_12m, cs.perceived_inflation)
         evt = recent_events_term(memory_store, c.id, now_turn)
         util: dict[str, float] = {}
-        for p in parties:
+        for p in active_parties:
             u = 0.0
             if p.in_government:
                 u += WEIGHTS["v_econ"] * econ
@@ -315,6 +374,16 @@ def compute_vote_intention(
             u += WEIGHTS["v_reg"] * regional_bonus.get((c.id, p.id), 0.0)
             camp = campaign_state.get(p.id, {})
             u += WEIGHTS["v_camp"] * (camp.get(c.id, 0.0) + camp.get("all", 0.0))
+            # ADR 013 secc. 5, literal: "el voto anti-sistema crece con el
+            # descontento y la desconfianza" -- solo para las cohortes "del
+            # lado del partido" (mismo signo de `econ_pref_c`/`economic_p`).
+            outsider_coef = loyalty.party_outsider_bonus.get(p.id, 0.0)
+            if outsider_coef and c.econ_pref * p.economic > 0.0:
+                u += (
+                    outsider_coef
+                    * pos(50.0 - government_approval)
+                    * (1.0 - institutional_confidence / 100.0)
+                )
             util[p.id] = u
         m = max(util.values())
         exps = {pid: math.exp((v - m) / TAU_SHARE) for pid, v in util.items()}
@@ -413,13 +482,20 @@ class ElectionResult:
     winner: str
     seats: dict[str, int]
     incumbent_party: str
+    #: ADR 013 secc. 1/6 punto 4: `era_id` si esta eleccion cruza de epoca
+    #: (`LoyaltyTable.era_boundaries[month]`), `None` en cualquier otro caso
+    #: (siempre `None` para Aurora, que nunca llena `era_boundaries`). Se
+    #: serializa como parte del JSONL `kind: "election"` que ya existe --
+    #: no hace falta un `kind` nuevo ni tocar `engine/simulation.py::
+    #: History.to_jsonl()`.
+    era_change: str | None = None
 
     @property
     def outcome_type(self) -> str:
         return "reelected" if self.winner == self.incumbent_party else "defeated"
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d = {
             "kind": "election",
             "month": self.month,
             "intention": self.intention,
@@ -429,7 +505,20 @@ class ElectionResult:
             "seats": self.seats,
             "incumbent_party": self.incumbent_party,
             "outcome_type": self.outcome_type,
+            "era_change": self.era_change,
         }
+        # ADR 012 golden-hash fix (touched by the ADR 012 agent, not ADR 013):
+        # `era_change` is `None` for every run that never crosses an era
+        # boundary (Aurora always, and any Argentina run with a single
+        # `LoyaltyTable`). Serializing it as a literal JSON `null` changed
+        # `test_aurora_without_country_matches_golden_hash_pre_a2`'s bytes
+        # even though the docstring above says this should be "el mismo
+        # comportamiento que antes de ADR 013". Dropping the key when it is
+        # `None` restores that documented behavior; the key is still present
+        # (and non-null) the moment an era boundary is actually crossed.
+        if d["era_change"] is None:
+            del d["era_change"]
+        return d
 
 
 def run_election(
@@ -450,6 +539,7 @@ def run_election(
     province_records: list[ProvinceRecord] | None = None,
     province_weights: dict[str, dict[str, float]] | None = None,
     national_unemployment: float | None = None,
+    institutional_confidence: float = 50.0,
 ) -> ElectionResult:
     """Orquesta secc. 2.2 + 2.3: intencion -> primera vuelta -> balotaje (si
     corresponde) -> bancas.
@@ -457,7 +547,11 @@ def run_election(
     `provinces`/`province_records`/`province_weights`/`national_unemployment`
     (calibracion, `regional_bonus_c,p`): los 4 son opcionales y solo tienen
     efecto juntos -- si falta alguno, `regional_bonus` queda en `{}` (0 para
-    todos, mismo comportamiento que antes de esta calibracion)."""
+    todos, mismo comportamiento que antes de esta calibracion).
+
+    `institutional_confidence` (ADR 013 secc. 5) default 50.0: ver el
+    docstring de `compute_vote_intention`, cero efecto fuera de un partido
+    con `outsider_bonus` (Aurora nunca tiene uno)."""
     incumbent = next((p.id for p in parties if p.in_government), parties[0].id)
     regional_bonus = (
         compute_regional_bonus(
@@ -482,6 +576,7 @@ def run_election(
         now_turn=month,
         loyalty_adjustments=loyalty_adjustments,
         regional_bonus=regional_bonus,
+        institutional_confidence=institutional_confidence,
     )
     first_round = aggregate_vote(cohorts, intention, loyalty, rng)
     winner, runoff = resolve_presidential(first_round, parties)
@@ -494,6 +589,7 @@ def run_election(
         winner=winner,
         seats=seats,
         incumbent_party=incumbent,
+        era_change=loyalty.era_boundaries.get(month),
     )
 
 

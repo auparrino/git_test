@@ -1,0 +1,26 @@
+id: central_bank
+name: Federico Sturzenegger
+role: central_bank
+ideology:
+  economic: 0.6
+  social: 0.0
+  federalism: 0.0
+  institutionalism: 0.6
+personality:
+  ambition: 0.5
+  risk_tolerance: 0.5
+  loyalty: 0.5
+  pragmatism: 0.5
+interests:
+- price_stability
+- financial_stability
+influence:
+  public: 0.2
+  congress: 0.1
+  streets: 0.0
+  markets: 0.7
+relationships: {}
+bio: Presidente del Banco Central (10-dic-2015 a 14-jun-2018), adopta metas de inflacion.
+assessment: analyst
+assessment_note: Ideologia/intereses asignados por el analista para el periodo 2015-12-10/2018-06-14;
+  nombre y fechas son un hecho publico verificable.

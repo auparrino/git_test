@@ -1,0 +1,30 @@
+id: gov_tucuman
+name: Julio Cesar Miranda
+role: governor
+ideology:
+  economic: -0.15
+  social: 0.1
+  federalism: 0.4
+  institutionalism: 0.4
+personality:
+  ambition: 0.5
+  risk_tolerance: 0.5
+  loyalty: 0.5
+  pragmatism: 0.5
+interests:
+- provincial_transfers
+- employment
+influence:
+  public: 0.4
+  congress: 0.2
+  streets: 0.25
+  markets: 0.1
+relationships: {}
+bio: Gobernador de Tucuman (PJ) tras la etapa de Bussi. Confianza baja sobre la fecha exacta de asuncion
+  respecto de mayo de 2003, sin fuente primaria verificada.
+assessment: analyst
+assessment_note: Ideologia/intereses asignados por el analista (confianza baja sobre el nombre/fecha de
+  asuncion, ver bio); provincia = la mas poblada de su region (politics/regions.csv, Censo 2022) segun
+  ADR 013 secc. 3.
+party: fpv_pj
+province: tucuman

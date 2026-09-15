@@ -49,10 +49,14 @@ from republica.world.cohorts import (
 )
 from republica.world.config import Country, load_country
 from republica.world.economy import (
+    DEFAULT_X0_M0_USD_M,
+    MacroCoefficients,
+    MacroState,
     apply_historical_shock_effects,
     finalize_exogenous,
     step_economy,
     step_exogenous,
+    step_macro_economy,
 )
 from republica.world.elections import (
     PROMISE_WINDOW_MONTHS,
@@ -142,8 +146,21 @@ class MonthRecord:
     regime_mode: str = ""
     #: Bloque bimonetario (ADR 011 secc. 5, `features.bimonetary`):
     #: `world/bimonetary.py::ExternalState.to_dict()`. `{}` (AUSENTE de
-    #: `to_dict()`) sin `bimonetary_coefficients` en `run()`.
+    #: `to_dict()`) sin `bimonetary_coefficients` en `run()`. Con
+    #: `macro_coefficients` activo (ADR 012, ver mas abajo) este bloque
+    #: queda vacio TAMBIEN: el canal viejo de `step_bimonetary` se apaga
+    #: para no duplicar/contradecir `dollar_demand`/`fx_gap`/`default_risk`
+    #: (ver Notas de implementacion del ADR 012); lo que antes vivia aca
+    #: pasa a `macro` con el MISMO shape de claves, mas los campos nuevos.
     external: dict = field(default_factory=dict)
+    #: Bloque macro (ADR 012, `features.macro_regime`):
+    #: `world/economy.py::MacroState.to_dict()` mas `MacroAux` (secc. 2-4,
+    #: narracion/tests). `{}` (AUSENTE de `to_dict()`) sin
+    #: `macro_coefficients` en `run()` -- mismo patron que `external`: con
+    #: `macro` vacio Y `external` vacio (el default), el JSONL sigue siendo
+    #: byte a byte identico al de antes del ADR 012 (ver test de aceptacion,
+    #: `tests/test_macro_regime.py::test_flag_off_golden`).
+    macro: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -153,6 +170,8 @@ class MonthRecord:
             del d["regime_mode"]
         if not d["external"]:
             del d["external"]
+        if not d["macro"]:
+            del d["macro"]
         return d
 
 
@@ -410,6 +429,18 @@ class Simulation:
     #: (`engine/game.py::Game.new()` lo pone en `False`; ver
     #: `engine/scheduler.py::run_actor_turn(auto_approve_execute=...)`).
     auto_approve_governance: bool = True
+    #: ADR 012 (`features.macro_regime`, default `None` = comportamiento de
+    #: siempre): `macro_coefficients` fijo para toda la corrida y
+    #: `macro_state` mutable mes a mes (`world/economy.py::MacroState`).
+    #: Los pone `run()` DESPUES de `new_simulation()` (ver mas abajo, mismo
+    #: patron que `regime_calendar`/`bimonetary_coefficients`: se resuelven
+    #: fuera del constructor para no tener que agregarles parametros a
+    #: `new_simulation`/`Simulation.__init__` -- `advance_month` es el
+    #: unico que los lee). Con `macro_state is None` (default),
+    #: `advance_month` llama a `step_economy` exactamente como siempre: CERO
+    #: cambios al camino con el flag apagado.
+    macro_coefficients: MacroCoefficients | None = None
+    macro_state: MacroState | None = None
 
 
 def new_simulation(
@@ -616,6 +647,7 @@ def _run_election(
         province_records=provinces,
         province_weights=sim.province_weights_table,
         national_unemployment=clamped.unemployment,
+        institutional_confidence=clamped.institutional_confidence,  # ADR 013 secc. 5
     )
 
     # Bancas/`in_government` de la proxima temporada, siempre (ADR 006 secc.
@@ -986,9 +1018,52 @@ def advance_month(sim: Simulation) -> MonthRecord:
     # `policy` vuelven identicos (mismo objeto): golden hash de Aurora y de
     # cualquier corrida sin esos shocks, intacto.
     econ_coeff, econ_policy = apply_historical_shock_effects(coeff, policy, set(sim.active_shocks))
-    econ_state, aux = step_economy(
-        sim.state, sim.exo, exo_new, econ_policy, agg, country.structure, econ_coeff
-    )
+    #: ADR 012 (`features.macro_regime`): rama NUEVA, separada de
+    #: `step_economy` (ver `world/economy.py::step_macro_economy`, que no
+    #: comparte codigo con `step_economy` a proposito). Se activa unicamente
+    #: si `run()` fijo `sim.macro_state` (ver `Simulation.macro_state`
+    #: arriba): sin eso, exactamente la misma llamada a `step_economy` que
+    #: siempre, byte a byte.
+    macro_events: list[str] = []
+    macro_record: dict = {}
+    if sim.macro_state is not None:
+        assert sim.macro_coefficients is not None
+        macro_active_shock_ids = set(sim.active_shocks) | set(new_ids)
+        (
+            econ_state,
+            aux,
+            macro_aux,
+            new_macro,
+            macro_events,
+            macro_pending,
+        ) = step_macro_economy(
+            sim.state,
+            sim.exo,
+            exo_new,
+            econ_policy,
+            agg,
+            country.structure,
+            econ_coeff,
+            sim.macro_coefficients,
+            sim.macro_state,
+            macro_active_shock_ids,
+            sim.rng,
+        )
+        for name, value in macro_pending.items():
+            sim.pending_terms[name] = sim.pending_terms.get(name, 0.0) + value
+        sim.macro_state = new_macro
+        macro_record = new_macro.to_dict()
+        macro_record.update(asdict(macro_aux))
+        if (
+            new_macro.default_risk >= sim.macro_coefficients.default_risk_threshold
+            and "imf_program" not in macro_active_shock_ids
+            and "sovereign_default" not in macro_active_shock_ids
+        ):
+            sim.forced_shocks.setdefault(month + 1, []).append("sovereign_default")
+    else:
+        econ_state, aux = step_economy(
+            sim.state, sim.exo, exo_new, econ_policy, agg, country.structure, econ_coeff
+        )
     if sim.actors_enabled:
         assert sim.actor_engine is not None
         # Las percepciones del mes que viene ven el `Aux` de este mes (el de
@@ -1154,7 +1229,13 @@ def advance_month(sim: Simulation) -> MonthRecord:
         weighted_perceived_inflation(sim.cohorts, sim.cohort_state) if sim.cohorts_enabled else None
     )
     soc_state = step_society(
-        sim.state, econ_state, policy, agg, coeff, perceived_inflation_agg=perceived_inflation_agg
+        sim.state,
+        econ_state,
+        policy,
+        agg,
+        coeff,
+        perceived_inflation_agg=perceived_inflation_agg,
+        macro_coeff=sim.macro_coefficients if sim.macro_state is not None else None,
     )
 
     # 9. cohortes -> approval agregada (ADR 005 secc. 3), antes del resto de
@@ -1183,7 +1264,16 @@ def advance_month(sim: Simulation) -> MonthRecord:
 
     # 6. politica (5.6 -> 5.9)
     full_state = step_politics(
-        sim.state, soc_state, aux.demand_gap, country.coalition_seats, agg, coeff
+        sim.state,
+        soc_state,
+        aux.demand_gap,
+        country.coalition_seats,
+        agg,
+        coeff,
+        macro_coeff=sim.macro_coefficients if sim.macro_state is not None else None,
+        months_since_crisis=(
+            sim.macro_state.months_since_crisis if sim.macro_state is not None else 0
+        ),
     )
     if cohort_approval is not None:
         # `government_approval` pasa a ser la agregada por cohorte (secc. 3):
@@ -1217,7 +1307,7 @@ def advance_month(sim: Simulation) -> MonthRecord:
     clamped, overflow = clamp_state(full_state, country.ranges)
 
     # 8. eventos endogenos y fin de partida
-    events: list[str] = list(agreement_events)
+    events: list[str] = list(agreement_events) + macro_events
     clamped, pending, dev_event = check_forced_devaluation(
         clamped, month, country.terminal, sim.tracker
     )
@@ -1344,6 +1434,7 @@ def advance_month(sim: Simulation) -> MonthRecord:
         cohorts={c.id: sim.cohort_state[c.id].to_dict() for c in sim.cohorts}
         if sim.cohorts_enabled
         else {},
+        macro=macro_record,
     )
     sim.records.append(record)
 
@@ -1382,6 +1473,10 @@ def run(
     bimonetary_coefficients: BimonetaryCoefficients | None = None,
     fx_regime: str | None = None,
     historical_exogenous: dict[int, tuple[float, float]] | None = None,
+    macro_coefficients: MacroCoefficients | None = None,
+    macro_x0: float | None = None,
+    macro_m0: float | None = None,
+    macro_external_debt_usd_init: float | None = None,
 ) -> History:
     """Corre `months` meses (o hasta un fin de partida temprano) y devuelve
     la `History`.
@@ -1417,7 +1512,26 @@ def run(
     con el `Aux.r_real` de ese mes (ver Notas de implementacion del ADR 011
     para el porque de este disenio: cero cambios a `advance_month`/
     `step_economy`, asi que Aurora sin estos parametros es imposible de
-    afectar)."""
+    afectar).
+
+    `macro_coefficients` (ADR 012, default `None` = comportamiento de
+    siempre, byte a byte identico): a diferencia de `bimonetary_coefficients`
+    de arriba, esto SI activa una rama nueva DENTRO de `advance_month`
+    (`world/economy.py::step_macro_economy`, ver `Simulation.macro_state`);
+    `run()` solo hace `init_macro_state` antes del loop y desactiva el canal
+    VIEJO de `bimonetary_coefficients` (si tambien se paso: no se corren los
+    dos a la vez, para no tener dos `dollar_demand`/`fx_gap`/`default_risk`
+    contradictorios -- ver Notas de implementacion del ADR 012). `fx_regime`
+    (ya existia, ADR 011) fija el regimen INICIAL tanto para el canal viejo
+    como para el nuevo. `macro_x0`/`macro_m0` (USD M/mes, ADR 012 secc. 4):
+    `X0`/`M0` de balance de pagos; sin pasarlos, el fallback generico
+    `economy.DEFAULT_X0_M0_USD_M` (`world/countries.py::x0_m0_from_gdp_usd`
+    es quien normalmente los calcula desde `gdp_usd` real, ver
+    `world/countries.py`). `macro_external_debt_usd_init` (USD M): stock de
+    deuda externa inicial; sin pasarlo, `bimonetary_coefficients.
+    external_debt_usd_init_pct_gdp` convertido a USD via `macro_x0` (o
+    `DEFAULT_X0_M0_USD_M`) si hay `bimonetary_coefficients`, si no un
+    default fijo documentado abajo."""
     sim = new_simulation(
         seed,
         policy_rule,
@@ -1449,9 +1563,60 @@ def run(
     base_congress_enabled = sim.congress_enabled
     base_elections_enabled = sim.elections_enabled
     regime_state = RegimeState() if regime_calendar is not None else None
+    if macro_coefficients is not None:
+        resolved_fx_regime = fx_regime or (
+            bimonetary_coefficients.fx_regime_default
+            if bimonetary_coefficients is not None
+            else "float"
+        )
+        debt_init = macro_external_debt_usd_init
+        if debt_init is None:
+            x0_for_debt = macro_x0 if macro_x0 is not None else DEFAULT_X0_M0_USD_M
+            # NOTA (probado y descartado, ver Notas de implementacion del
+            # ADR 012): usar `sim.state.public_debt` (el indice YA resuelto
+            # para `start`, 35.4 en 1998-01 vs 156.8 en 2003-06) en vez del
+            # `external_debt_usd_init_pct_gdp` FIJO de `bimonetary` de abajo
+            # parecia mas realista (distingue solvencia por fecha), pero
+            # dispara `default_risk` mucho mas alto en 2003-06 y rompe el
+            # test 5 (recuperacion, 20/20 -> 0/20 semillas) sin arreglar el
+            # test 3 (0/20 sigue): el mismo cociente deuda/exportaciones que
+            # se buscaba corregir tiene efectos de segundo orden (el gate
+            # `default_risk < 0.5` de `capital_account`, secc. 4) que pesan
+            # mas de lo que ayuda la diferenciacion. Se revirtio.
+            pct_gdp = (
+                bimonetary_coefficients.external_debt_usd_init_pct_gdp
+                if bimonetary_coefficients is not None
+                else 30.0
+            )
+            # Proxy documentado (ADR 012 secc. 4 no fija esta conversion):
+            # `pct_gdp` (deuda externa como % del PIB indice de ADR 011
+            # secc. 5) se pasa a USD asumiendo que la relacion
+            # exportaciones/PIB del pais es la misma que `X0/gdp_usd`
+            # implicita en `x0_m0_pct_gdp` -- consistente con como `X0` se
+            # deriva de `gdp_usd` en `world/countries.py::x0_m0_from_gdp_usd`.
+            debt_init = (pct_gdp / 100.0) * (x0_for_debt * 12.0 / macro_coefficients.x0_m0_pct_gdp)
+        sim.macro_coefficients = macro_coefficients
+        sim.macro_state = MacroState(
+            fx_regime=resolved_fx_regime,
+            pi_anchor_ema=sim.state.inflation,
+            fx_gap=0.0,
+            dollar_demand=(
+                bimonetary_coefficients.dollar_demand_init
+                if bimonetary_coefficients is not None
+                else 0.35
+            ),
+            rer=100.0,
+            external_debt_usd=debt_init,
+            default_risk=0.05,
+            months_since_crisis=0,
+            banking_crisis_months_left=0,
+            exit_count=0,
+            x0=macro_x0 if macro_x0 is not None else DEFAULT_X0_M0_USD_M,
+            m0=macro_m0 if macro_m0 is not None else DEFAULT_X0_M0_USD_M,
+        )
     external_state = (
         init_external_state(bimonetary_coefficients, fx_regime)
-        if bimonetary_coefficients is not None
+        if bimonetary_coefficients is not None and macro_coefficients is None
         else None
     )
 

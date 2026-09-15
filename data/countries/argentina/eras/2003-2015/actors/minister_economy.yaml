@@ -1,0 +1,27 @@
+id: minister_economy
+name: Roberto Lavagna
+role: economy_minister
+ideology:
+  economic: -0.1
+  social: -0.1
+  federalism: 0.0
+  institutionalism: 0.6
+personality:
+  ambition: 0.5
+  risk_tolerance: 0.5
+  loyalty: 0.5
+  pragmatism: 0.5
+interests:
+- price_stability
+- fiscal_balance
+influence:
+  public: 0.4
+  congress: 0.5
+  streets: 0.1
+  markets: 0.6
+relationships: {}
+bio: Ministro de Economia desde abr-2002 (gobierno de Duhalde), continua con Kirchner hasta nov-2005.
+  En funciones el 25-may-2003.
+assessment: analyst
+assessment_note: Ideologia/intereses asignados por el analista para el periodo 2002-04-27/2005-11-28;
+  nombre y fechas son un hecho publico verificable.

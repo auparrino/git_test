@@ -1,0 +1,29 @@
+id: gov_cordoba
+name: Jose Manuel de la Sota
+role: governor
+ideology:
+  economic: 0.1
+  social: 0.0
+  federalism: 0.5
+  institutionalism: 0.5
+personality:
+  ambition: 0.5
+  risk_tolerance: 0.5
+  loyalty: 0.5
+  pragmatism: 0.5
+interests:
+- provincial_transfers
+- industrial_protection
+influence:
+  public: 0.4
+  congress: 0.2
+  streets: 0.25
+  markets: 0.1
+relationships: {}
+bio: Gobernador de Cordoba (PJ, linea no kirchnerista), primer mandato 1999-2003, en funciones en 2003-05.
+assessment: analyst
+assessment_note: Ideologia/intereses asignados por el analista (confianza alta sobre el nombre/fecha de
+  asuncion, ver bio); provincia = la mas poblada de su region (politics/regions.csv, Censo 2022) segun
+  ADR 013 secc. 3.
+party: pj_disidente
+province: cordoba

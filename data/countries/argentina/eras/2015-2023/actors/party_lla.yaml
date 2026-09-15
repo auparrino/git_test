@@ -1,0 +1,28 @@
+id: party_lla
+name: La Libertad Avanza
+role: party
+ideology:
+  economic: 0.95
+  social: 0.4
+  federalism: -0.2
+  institutionalism: 0.5
+personality:
+  ambition: 0.6
+  risk_tolerance: 0.5
+  loyalty: 0.55
+  pragmatism: 0.55
+interests:
+- reelection
+- party_unity
+influence:
+  public: 0.5
+  congress: 0.5
+  streets: 0.25
+  markets: 0.15
+relationships: {}
+bio: Fundado en 2021 (Javier Milei); no existía al inicio de la era (2015). Gana la presidencia en 2023,
+  fuera de esta ventana de gobierno.
+assessment: analyst
+assessment_note: 'economic/social/federalism de politics/parties/2015-2023.json (assessment: analyst en
+  el origen); institutionalism/personality/interests/influence de este script, mismo criterio.'
+party: lla

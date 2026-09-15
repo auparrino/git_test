@@ -1,0 +1,27 @@
+id: biz_agro
+name: Sociedad Rural Argentina
+role: business
+ideology:
+  economic: 0.7
+  social: -0.1
+  federalism: 0.4
+  institutionalism: 0.5
+personality:
+  ambition: 0.6
+  risk_tolerance: 0.55
+  loyalty: 0.5
+  pragmatism: 0.5
+interests:
+- agricultural_exports
+- low_taxes
+influence:
+  public: 0.3
+  congress: 0.15
+  streets: 0.2
+  markets: 0.2
+relationships: {}
+bio: Sociedad Rural Argentina. Representa a los grandes productores agropecuarios, opositora historica
+  a retenciones y controles de cambio.
+assessment: analyst
+assessment_note: Entidad patronal del agro pampeano; opone retenciones/controles de cambio, favorece apertura
+  exportadora.

@@ -1,0 +1,30 @@
+id: gov_caba
+name: Intendencia de la Ciudad de Buenos Aires (cargo no electivo hasta 1996)
+role: governor
+ideology:
+  economic: 0.0
+  social: -0.1
+  federalism: -0.3
+  institutionalism: 0.5
+personality:
+  ambition: 0.5
+  risk_tolerance: 0.5
+  loyalty: 0.5
+  pragmatism: 0.5
+interests:
+- provincial_transfers
+influence:
+  public: 0.4
+  congress: 0.2
+  streets: 0.25
+  markets: 0.1
+relationships: {}
+bio: 'Antes de la reforma de 1994/la eleccion de 1996, el intendente de la Ciudad era designado por el
+  Poder Ejecutivo Nacional, no un cargo electivo: se modela el puesto sin atribuir un nombre individual
+  no verificado.'
+assessment: analyst
+assessment_note: Ideologia/intereses asignados por el analista (confianza alta (sobre el status institucional,
+  no sobre un nombre de intendente especifico) sobre el nombre/fecha de asuncion, ver bio); provincia
+  = la mas poblada de su region (politics/regions.csv, Censo 2022) segun ADR 013 secc. 3.
+party: ucr
+province: caba

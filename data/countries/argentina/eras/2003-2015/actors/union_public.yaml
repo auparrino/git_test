@@ -1,0 +1,27 @@
+id: union_public
+name: Asociacion de Trabajadores del Estado (ATE)
+role: union
+ideology:
+  economic: -0.7
+  social: 0.4
+  federalism: -0.1
+  institutionalism: 0.4
+personality:
+  ambition: 0.55
+  risk_tolerance: 0.55
+  loyalty: 0.6
+  pragmatism: 0.5
+interests:
+- public_employment
+- real_wages
+influence:
+  public: 0.25
+  congress: 0.1
+  streets: 0.5
+  markets: 0.0
+relationships: {}
+bio: Asociacion de Trabajadores del Estado. Sindicato estatal, defiende empleo publico y salario de la
+  administracion nacional y provincial.
+assessment: analyst
+assessment_note: Sindicato del empleo publico estatal; defiende planta y salario del Estado, opositor
+  natural a ajustes fiscales via despidos.

@@ -1,0 +1,7 @@
+date_from,date_to,fx_regime,notes
+1983-12,1991-03,crawl,Plan Austral y esquemas de mini-devaluaciones administradas (ADR 012 deliverable 5: banda 1983-1991 declarada crawl/float; se elige crawl como representativa)
+1991-04,2002-01,peg,Ley de Convertibilidad (1 a 1 peso-dolar)
+2002-02,2011-10,float,Post-convertibilidad, flotacion administrada sin control de cambios
+2011-11,2015-12,control,Cepo cambiario (Resolucion AFIP 3210 y sucesivas)
+2016-01,2019-08,float,Levantamiento del cepo (dic-2015) hasta el reestablecimiento de controles
+2019-09,2023-12,control,Reestablecimiento del control de cambios (ago-2019 en adelante)

@@ -1,0 +1,27 @@
+id: party_pro
+name: Propuesta Republicana (PRO)
+role: party
+ideology:
+  economic: 0.6
+  social: 0.2
+  federalism: 0.1
+  institutionalism: 0.5
+personality:
+  ambition: 0.6
+  risk_tolerance: 0.5
+  loyalty: 0.55
+  pragmatism: 0.55
+interests:
+- reelection
+- party_unity
+influence:
+  public: 0.5
+  congress: 0.5
+  streets: 0.25
+  markets: 0.15
+relationships: {}
+bio: Fundado 2005 (Macri); gana la Ciudad de Buenos Aires en 2007; no existía al inicio de la era (2003).
+assessment: analyst
+assessment_note: 'economic/social/federalism de politics/parties/2003-2015.json (assessment: analyst en
+  el origen); institutionalism/personality/interests/influence de este script, mismo criterio.'
+party: pro

@@ -1,0 +1,27 @@
+id: bloc_rural
+name: Bloque de Productores Rurales
+role: social_bloc
+ideology:
+  economic: 0.5
+  social: 0.0
+  federalism: 0.6
+  institutionalism: 0.5
+personality:
+  ambition: 0.55
+  risk_tolerance: 0.6
+  loyalty: 0.5
+  pragmatism: 0.6
+interests:
+- agricultural_exports
+- low_taxes
+influence:
+  public: 0.25
+  congress: 0.05
+  streets: 0.35
+  markets: 0.15
+relationships: {}
+bio: Productores agropecuarios del interior. Sensibles a retenciones/tipo de cambio, capacidad de corte
+  de rutas y protesta sectorial.
+assessment: analyst
+assessment_note: 'Chacareros/productores agropecuarios, cohorte rural de cohorts.csv (econ_pref 0.4):
+  interes exportador y de baja presion tributaria sobre el campo.'

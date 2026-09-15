@@ -1,0 +1,27 @@
+id: party_provinciales_1983
+name: Partidos provinciales (MPN, Bloquismo, Pacto Autonomista Liberal, etc.)
+role: party
+ideology:
+  economic: 0.1
+  social: 0.2
+  federalism: 0.9
+  institutionalism: 0.5
+personality:
+  ambition: 0.6
+  risk_tolerance: 0.5
+  loyalty: 0.55
+  pragmatism: 0.55
+interests:
+- reelection
+- party_unity
+influence:
+  public: 0.5
+  congress: 0.5
+  streets: 0.25
+  markets: 0.15
+relationships: {}
+bio: Partidos provinciales (MPN, Bloquismo, Pacto Autonomista Liberal, etc.)
+assessment: analyst
+assessment_note: 'economic/social/federalism de politics/parties/1983-2001.json (assessment: analyst en
+  el origen); institutionalism/personality/interests/influence de este script, mismo criterio.'
+party: provinciales_1983

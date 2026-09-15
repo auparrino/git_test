@@ -1,0 +1,27 @@
+id: party_fit_u
+name: Frente de Izquierda y de los Trabajadores - Unidad
+role: party
+ideology:
+  economic: -0.9
+  social: -0.7
+  federalism: -0.1
+  institutionalism: 0.5
+personality:
+  ambition: 0.6
+  risk_tolerance: 0.5
+  loyalty: 0.55
+  pragmatism: 0.55
+interests:
+- reelection
+- party_unity
+influence:
+  public: 0.5
+  congress: 0.5
+  streets: 0.25
+  markets: 0.15
+relationships: {}
+bio: Frente de Izquierda y de los Trabajadores - Unidad
+assessment: analyst
+assessment_note: 'economic/social/federalism de politics/parties/2015-2023.json (assessment: analyst en
+  el origen); institutionalism/personality/interests/influence de este script, mismo criterio.'
+party: fit_u

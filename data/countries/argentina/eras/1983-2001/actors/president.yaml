@@ -1,0 +1,27 @@
+id: president
+name: Raul Alfonsin
+role: president
+ideology:
+  economic: -0.1
+  social: -0.3
+  federalism: 0.0
+  institutionalism: 0.8
+personality:
+  ambition: 0.5
+  risk_tolerance: 0.5
+  loyalty: 0.5
+  pragmatism: 0.5
+interests:
+- price_stability
+- reelection
+influence:
+  public: 0.8
+  congress: 0.7
+  streets: 0.2
+  markets: 0.3
+relationships: {}
+bio: Presidente electo en 1983, primer gobierno democratico tras la dictadura. Asume el 10-dic-1983.
+assessment: analyst
+assessment_note: Ideologia/intereses asignados por el analista para el momento de asuncion (1983-12-10);
+  nombre y fecha son un hecho publico verificable.
+party: ucr

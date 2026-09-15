@@ -1,0 +1,26 @@
+id: media_nacional
+name: Clarin
+role: media
+ideology:
+  economic: 0.2
+  social: 0.1
+  federalism: -0.1
+  institutionalism: 0.7
+personality:
+  ambition: 0.6
+  risk_tolerance: 0.5
+  loyalty: 0.3
+  pragmatism: 0.6
+interests:
+- audience
+influence:
+  public: 0.65
+  congress: 0.1
+  streets: 0.05
+  markets: 0.15
+relationships: {}
+bio: Multimedios de mayor alcance del pais, linea editorial establishment/centroderecha moderada en este
+  periodo.
+assessment: analyst
+assessment_note: Multimedios de mayor alcance del pais, linea editorial establishment/centroderecha moderada
+  en este periodo.

@@ -85,6 +85,20 @@ class ActorSheet(BaseModel):
     influence: Influence
     relationships: dict[str, int] = Field(default_factory=dict)
     bio: str = ""
+    #: ADR 013 secc. 3: quien fijo `ideology`/`interests` de esta ficha.
+    #: `"analyst"` (el unico valor que usan las fichas de epoca de
+    #: Argentina) marca que son evaluacion del analista, no un dato
+    #: verificable como la fecha de asuncion de un presidente -- mismo
+    #: patron que `assessment` en `data/countries/argentina/politics/
+    #: parties/*.json`. `None` (el default, todas las 29 fichas de Aurora)
+    #: = sin marcar, mismo comportamiento que antes de ADR 013.
+    assessment: Literal["analyst"] | None = None
+    #: Linea de justificacion de `assessment` (ADR 013 secc. 3: "con una
+    #: linea de justificacion"), obligatoria en la practica cuando
+    #: `assessment` esta puesto (no se fuerza aca via validator para no
+    #: romper una ficha vieja que ya traiga `assessment` sin esto; lo
+    #: documenta `tests/test_eras_argentina.py`).
+    assessment_note: str | None = None
 
     def relationship(self, other_id: str) -> int:
         """Relacion con `other_id`, default 50 (ADR 003 secc. 2) si no figura

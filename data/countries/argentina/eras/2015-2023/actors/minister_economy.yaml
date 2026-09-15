@@ -1,0 +1,26 @@
+id: minister_economy
+name: Alfonso Prat-Gay
+role: economy_minister
+ideology:
+  economic: 0.5
+  social: 0.0
+  federalism: 0.0
+  institutionalism: 0.6
+personality:
+  ambition: 0.5
+  risk_tolerance: 0.5
+  loyalty: 0.5
+  pragmatism: 0.5
+interests:
+- financial_stability
+- price_stability
+influence:
+  public: 0.4
+  congress: 0.5
+  streets: 0.1
+  markets: 0.6
+relationships: {}
+bio: Ministro de Hacienda y Finanzas Publicas (10-dic-2015 a 2-ene-2017).
+assessment: analyst
+assessment_note: Ideologia/intereses asignados por el analista para el periodo 2015-12-10/2017-01-02;
+  nombre y fechas son un hecho publico verificable.

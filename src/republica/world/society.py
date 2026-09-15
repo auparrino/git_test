@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from republica.world.config import Coefficients
+from republica.world.economy import MacroCoefficients
 from republica.world.events import ShockAggregate
 from republica.world.state import Policy, WorldState, pos
 
@@ -14,6 +15,7 @@ def step_society(
     shocks: ShockAggregate,
     coeff: Coefficients,
     perceived_inflation_agg: float | None = None,
+    macro_coeff: MacroCoefficients | None = None,
 ) -> WorldState:
     """`prev` es el snapshot `t`; `new` ya tiene el bloque economico en `t+1`
     (salida de `step_economy`). Devuelve `new` con consumer_confidence,
@@ -24,6 +26,12 @@ def step_society(
     `Σ pop_share_c · perceived_inflation_c` (`world/cohorts.py::
     weighted_perceived_inflation`) para que `consumer_confidence` use la
     inflacion percibida en vez de la real en el termino `s_pi`.
+
+    `macro_coeff` (ADR 012 secc. 5, default `None` = comportamiento de
+    siempre): con un `MacroCoefficients`, la tension social recupera hacia
+    `tension_base` (`t_rec · pos(tension − tension_base)`) los meses en que
+    la inflacion y el desempleo estan bajos -- unico cambio de este modulo
+    bajo el flag, el resto de secc. 5.1-5.5 queda igual.
     """
     # 5.1 confianza del consumidor
     inflation_for_cc = (
@@ -68,6 +76,16 @@ def step_society(
         + coeff.t_adj * (tension_target - prev.social_tension)
         + shocks.term("shock_tension")
     )
+    if macro_coeff is not None:
+        # ADR 012 secc. 5, literal: recuperacion de largo plazo, solo si la
+        # inflacion y el desempleo de ESTE mes (`new`, ya con el bloque
+        # economico de `t+1`) estan por debajo de los umbrales.
+        recovering = (
+            new.inflation < macro_coeff.recovery_inflation_max
+            and new.unemployment < macro_coeff.recovery_unemployment_max
+        )
+        if recovering:
+            social_tension_new -= macro_coeff.t_rec * pos(social_tension_new - coeff.tension_base)
 
     # 5.4 protesta
     protest_target = (

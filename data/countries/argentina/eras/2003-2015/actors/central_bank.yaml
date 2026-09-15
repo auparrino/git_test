@@ -1,0 +1,26 @@
+id: central_bank
+name: Alfonso Prat-Gay
+role: central_bank
+ideology:
+  economic: 0.1
+  social: 0.0
+  federalism: 0.0
+  institutionalism: 0.6
+personality:
+  ambition: 0.5
+  risk_tolerance: 0.5
+  loyalty: 0.5
+  pragmatism: 0.5
+interests:
+- price_stability
+- financial_stability
+influence:
+  public: 0.2
+  congress: 0.1
+  streets: 0.0
+  markets: 0.7
+relationships: {}
+bio: Presidente del Banco Central desde dic-2002, continua con Kirchner. En funciones el 25-may-2003.
+assessment: analyst
+assessment_note: Ideologia/intereses asignados por el analista para el periodo 2002-12-11/2004-09-23;
+  nombre y fechas son un hecho publico verificable.
