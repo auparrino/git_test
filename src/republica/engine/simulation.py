@@ -74,8 +74,10 @@ from republica.world.elections import (
 from republica.world.events import (
     ActiveShock,
     EndogenousTracker,
+    LegitimacyContext,
     ShockAggregate,
     ShockCatalog,
+    apply_legitimacy_floor,
     build_catalog,
     check_forced_devaluation,
     check_termination,
@@ -457,6 +459,26 @@ class Simulation:
     #: Grupo cuyo vector esta activo ahora mismo (`None` hasta el primer
     #: mes con `coefficients_by_fx_regime`).
     active_fx_regime_group: str | None = None
+    #: ADR 016 (`features.legitimacy_floor`, default `False` = comportamiento
+    #: de siempre): piso de `political_stability` por mandato constitucional
+    #: vigente. Lo prende `run()` despues de `new_simulation()`, igual que
+    #: `macro_coefficients`. Con `False`, `advance_month` no calcula ni
+    #: aplica NADA de ADR 016: cero cambios al camino con el flag apagado.
+    legitimacy_floor_enabled: bool = False
+    #: Mes de la ultima eleccion celebrada (0 = ninguna todavia; el mandato
+    #: se cuenta desde el arranque de la corrida).
+    last_election_month: int = 0
+    #: Meses consecutivos con inflacion > `MacroCoefficients.
+    #: lf_rupture_inflation` (compuerta de ruptura, ADR 016 secc. 3).
+    rupture_high_pi_months: int = 0
+    #: Mes del ultimo `fx_regime_exit` forzado ocurrido dentro del mandato en
+    #: curso (`None` si no hubo). Se reinicia en cada eleccion.
+    fx_exit_month: int | None = None
+    #: `repression` del regimen de este mes (`world/regime.py::
+    #: REPRESSION_BY_MODE`). La fija `run()` antes de cada `advance_month`
+    #: cuando hay `regime_calendar`; sin calendario queda en 0.0
+    #: (democracia), que es el caso de Aurora.
+    current_repression: float = 0.0
 
 
 def new_simulation(
@@ -1373,6 +1395,39 @@ def advance_month(sim: Simulation) -> MonthRecord:
         sim.pending_terms.update(pending)
         events.append(dev_event.kind)
 
+    # -- ADR 016 secc. 3: piso de estabilidad por legitimidad democratica ---
+    # Se aplica sobre el estado YA clampeado y ANTES de `check_termination`
+    # (el piso es sobre el estado publicado, no un veto en la terminacion:
+    # ver `world/events.py::apply_legitimacy_floor`). Con el flag apagado
+    # (default, y unico caso de Aurora) no se ejecuta nada de este bloque.
+    if sim.legitimacy_floor_enabled and sim.macro_coefficients is not None:
+        lf_coeff = sim.macro_coefficients
+        sim.rupture_high_pi_months = (
+            sim.rupture_high_pi_months + 1
+            if clamped.inflation > lf_coeff.lf_rupture_inflation
+            else 0
+        )
+        if "fx_regime_exit" in macro_events:
+            sim.fx_exit_month = month
+        clamped = apply_legitimacy_floor(
+            clamped,
+            LegitimacyContext(
+                month=month,
+                last_election_month=sim.last_election_month,
+                term_length=country.term_length,
+                repression=sim.current_repression,
+                high_inflation_months=sim.rupture_high_pi_months,
+                banking_crisis=(
+                    sim.macro_state is not None and sim.macro_state.banking_crisis_months_left > 0
+                ),
+                sovereign_default="sovereign_default" in sim.active_shocks,
+                months_since_fx_exit=(
+                    None if sim.fx_exit_month is None else month - sim.fx_exit_month
+                ),
+            ),
+            lf_coeff,
+        )
+
     outcome = check_termination(clamped, country.terminal, sim.tracker, month, country.months)
 
     # -- ADR 006 secc. 1: memoria (generacion + consolidacion) -------------
@@ -1465,6 +1520,11 @@ def advance_month(sim: Simulation) -> MonthRecord:
         assert sim.actor_engine is not None
         clamped, election_result = _run_election(sim, clamped, month, country, provinces)
         sim.election_records.append(election_result)
+        # ADR 016 secc. 3: una eleccion celebrada renueva el mandato -- el
+        # piso de legitimidad vuelve a `lf_base` y la ruptura cambiaria del
+        # mandato anterior deja de contar contra el gobierno nuevo.
+        sim.last_election_month = month
+        sim.fx_exit_month = None
         events.append(f"election:{election_result.winner}")
         if outcome == "survived":
             outcome = election_result.outcome_type
@@ -1536,6 +1596,7 @@ def run(
     macro_external_debt_usd_init: float | None = None,
     coefficients_by_fx_regime: dict[str, tuple[Coefficients, MacroCoefficients | None]]
     | None = None,
+    legitimacy_floor: bool | None = None,
 ) -> History:
     """Corre `months` meses (o hasta un fin de partida temprano) y devuelve
     la `History`.
@@ -1600,7 +1661,15 @@ def run(
     `_swap_fx_regime_vector`) y deja el evento `fx_vector_switch:<grupo>`
     en el `MonthRecord` de ese mes. Solo tiene efecto con `macro_
     coefficients` (sin `macro_state` no hay regimen cambiario simulado que
-    seguir)."""
+    seguir).
+
+    `legitimacy_floor` (ADR 016, default `None`): piso de
+    `political_stability` mientras corre un mandato constitucional en
+    democracia y no hay ruptura monetaria/financiera aguda. `None` lo
+    resuelve desde `country.features["legitimacy_floor"]` (Argentina lo trae
+    en `true`; Aurora no declara el feature y queda apagado, asi que el
+    golden de Aurora no se mueve). Se ignora sin `macro_coefficients`: los
+    coeficientes `lf_*` viven en `MacroCoefficients`."""
     sim = new_simulation(
         seed,
         policy_rule,
@@ -1699,6 +1768,17 @@ def run(
         # start=...)`, esto solo lo deja consistente si el regimen inicial
         # resuelto por `run()` no coincide con el que uso el llamador.
         sim.coefficients_by_fx_regime = coefficients_by_fx_regime
+    # ADR 016 (`features.legitimacy_floor`): `None` = lo decide el paquete de
+    # pais (`--country argentina` lo trae en `true`, Aurora no lo declara y
+    # queda en `False`); `True`/`False` explicitos lo fuerzan
+    # (`--legitimacy-floor` / `--no-legitimacy-floor` de la CLI). Requiere
+    # `macro_coefficients` (es de donde salen `lf_*`): sin macro el flag no
+    # tiene coeficientes que leer y queda apagado, igual que el resto de
+    # ADR 012.
+    if legitimacy_floor is None:
+        legitimacy_floor = bool(sim.country.features.get("legitimacy_floor", False))
+    sim.legitimacy_floor_enabled = bool(legitimacy_floor) and macro_coefficients is not None
+
     external_state = (
         init_external_state(bimonetary_coefficients, fx_regime)
         if bimonetary_coefficients is not None and macro_coefficients is None
@@ -1732,6 +1812,10 @@ def run(
                 propensity,
                 transition_coefficients=regime_transition_coefficients,
             )
+            # ADR 016 secc. 3: el piso de legitimidad solo rige en democracia
+            # (`repression == 0`). Sin `regime_calendar` queda en 0.0, que es
+            # el caso de Aurora (donde ademas el flag esta apagado).
+            sim.current_repression = regime_result.repression
             sim.state = regime_effects_on_state(sim.state, regime_result.repression)
             sim.congress_enabled = base_congress_enabled and congress_active(regime_result.mode)
             sim.elections_enabled = base_elections_enabled and elections_allowed(regime_result.mode)

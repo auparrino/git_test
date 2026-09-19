@@ -48,6 +48,7 @@ from republica.world.countries import (
     historical_exogenous_series,
     load_country_pack,
 )
+from republica.world.economy import merge_structural_coefficients
 
 #: Hipotesis de la tabla de ADR 011 secc. 8, columna "Hipotesis", LITERAL.
 #: `tests/test_validation_argentina.py::test_hypotheses_match_adr_text` las
@@ -397,6 +398,7 @@ def run_test_arm(
     seeds: int,
     seed_base: int,
     calibration_run_id: str,
+    legitimacy_floor: bool | None = None,
 ) -> list[SeedRun]:
     """Corre `seeds` semillas de `test` con el brazo `arm`
     (`calibrated`/`aurora`). Todo lo demas (estado inicial real, calendario
@@ -428,7 +430,13 @@ def run_test_arm(
     usaria una `LoyaltyTable` sin ninguna entrada para esos partidos
     (lealtad 0 para todos) y el `ActorEngine` seguiria con los 29 actores
     de Aurora -- el mismo bug que el fix de `cli.py` corrigio para
-    `republica run`."""
+    `republica run`.
+
+    ADR 016: `legitimacy_floor` (default `None`) se pasa tal cual a `run()`,
+    que con `None` lo resuelve desde `country.features["legitimacy_floor"]`
+    (Argentina: prendido). Existe como parametro explicito para que
+    `tests/test_collapse_recovery.py` pueda medir el MISMO brazo con y sin
+    el piso sin tocar `country.json`."""
     from dataclasses import replace as dc_replace
 
     country = pack.country
@@ -451,7 +459,12 @@ def run_test_arm(
         )
         country = country.model_copy(update={"coefficients": coeff})
         if macro_active and calibrated_macro is not None:
-            macro = calibrated_macro
+            # ADR 016: los `lf_*` son estructurales y NO estan en el vector
+            # calibrado (`coefficients.json` de `a5b_macro` guarda 60 claves,
+            # ninguna `lf_*`), asi que se toman del paquete de pais en vez de
+            # los defaults de la clase. Ver `world/economy.py::
+            # LEGITIMACY_FIELDS`.
+            macro = merge_structural_coefficients(calibrated_macro, pack.macro_coefficients)
         # ADR 017 secc. 3.6: cambio de vector en caliente si el regimen
         # simulado sale de su grupo (`None` con el formato viejo).
         coefficients_by_fx_regime = load_calibrated_vectors_by_group(calibration_run_id)
@@ -508,6 +521,7 @@ def run_test_arm(
             macro_m0=pack.macro_m0 if macro is not None else None,
             fx_regime=resolved_fx_regime if macro is not None else test.fx_regime,
             coefficients_by_fx_regime=coefficients_by_fx_regime,
+            legitimacy_floor=legitimacy_floor,
         )
         runs.append(_history_to_seed_run(seed, history, forced_ids))
     return runs

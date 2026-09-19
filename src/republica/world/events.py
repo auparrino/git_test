@@ -249,6 +249,86 @@ def check_forced_devaluation(
     return adjusted, pending, event
 
 
+@dataclass(frozen=True)
+class LegitimacyContext:
+    """Lo que `legitimacy_stability_floor` necesita saber del mes en curso
+    (ADR 016 secc. 3). Lo arma `engine/simulation.py::advance_month` cuando
+    `features.legitimacy_floor` esta prendido; con el flag apagado la
+    funcion nunca se llama y nada de esto se calcula."""
+
+    #: Mes en curso de la corrida (1-based).
+    month: int
+    #: Mes de la ULTIMA eleccion celebrada, o 0 si todavia no hubo ninguna
+    #: (el mandato se cuenta desde el arranque de la corrida, que en las
+    #: ventanas de validacion coincide con una asuncion presidencial real:
+    #: 2019-12 = Fernandez, 1998-01 = Menem II, 2003-06 = Kirchner).
+    last_election_month: int
+    #: `country.term_length` en meses (48 desde la reforma de 1994, 72 antes
+    #: -- `politics/constitutions.csv`, ADR 011 secc. 2). Con 0 (modo anual)
+    #: el piso no se aplica: no hay mandato que invocar.
+    term_length: int
+    #: `repression` del regimen de este mes (`world/regime.py`). Solo
+    #: `repression == 0` (democracia) habilita el piso: un gobierno que se
+    #: sostiene reprimiendo no esta invocando legitimidad electoral.
+    repression: float
+    #: Meses consecutivos con inflacion > `lf_rupture_inflation`.
+    high_inflation_months: int
+    #: `True` si hay una crisis bancaria activa (corralito) este mes.
+    banking_crisis: bool
+    #: `True` si hay un `sovereign_default` activo este mes.
+    sovereign_default: bool
+    #: Meses transcurridos desde la ultima salida forzada de regimen
+    #: cambiario (`fx_regime_exit`) ocurrida DENTRO del mandato en curso, o
+    #: `None` si no hubo ninguna.
+    months_since_fx_exit: int | None
+
+
+def legitimacy_rupture_active(ctx: LegitimacyContext, coeff) -> bool:
+    """`True` si hay una ruptura monetaria o financiera aguda en curso
+    (ADR 016 secc. 3): hiperinflacion sostenida, crisis bancaria, default
+    soberano o salida forzada del regimen cambiario dentro del mandato. Con
+    una ruptura activa el piso de legitimidad NO se aplica -- es lo que
+    separa 1989/2001 (salidas anticipadas reales) de 2020-2023 (inflacion
+    alta, mandato completo)."""
+    if ctx.high_inflation_months >= coeff.lf_rupture_months:
+        return True
+    if ctx.banking_crisis or ctx.sovereign_default:
+        return True
+    return (
+        ctx.months_since_fx_exit is not None
+        and ctx.months_since_fx_exit <= coeff.lf_exit_window_months
+    )
+
+
+def legitimacy_stability_floor(ctx: LegitimacyContext, coeff) -> float:
+    """Piso de `political_stability` que impone el mandato constitucional
+    vigente (ADR 016 secc. 3). Devuelve `0.0` (sin piso) fuera de la
+    democracia, sin mandato (`term_length == 0`) o con una ruptura aguda
+    activa. Si no, decae linealmente de `lf_base` (recien electo) a `lf_min`
+    (fin del mandato): la legitimidad de origen se gasta."""
+    if coeff is None or ctx.term_length <= 0 or ctx.repression > 0.0:
+        return 0.0
+    if legitimacy_rupture_active(ctx, coeff):
+        return 0.0
+    months_into_term = max(0, ctx.month - ctx.last_election_month)
+    remaining = 1.0 - months_into_term / float(ctx.term_length)
+    remaining = min(1.0, max(0.0, remaining))
+    return coeff.lf_min + (coeff.lf_base - coeff.lf_min) * remaining
+
+
+def apply_legitimacy_floor(state: WorldState, ctx: LegitimacyContext, coeff) -> WorldState:
+    """Aplica el piso de `legitimacy_stability_floor` sobre el estado YA
+    clampeado del mes. Se aplica sobre el estado publicado (no es un veto
+    solo en `check_termination`) para que `political_stability` entre a la
+    `institutional_confidence` del mes siguiente por el termino
+    `ic_s·(estab − stability_base)/10` de la seccion 5.8 -- el unico canal
+    de vuelta que existe (ADR 016 secc. 2.5)."""
+    floor = legitimacy_stability_floor(ctx, coeff)
+    if floor <= state.political_stability:
+        return state
+    return state.model_copy(update={"political_stability": floor})
+
+
 def check_termination(
     state: WorldState, terminal, tracker: EndogenousTracker, month: int, months_total: int
 ) -> str | None:

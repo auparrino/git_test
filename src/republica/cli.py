@@ -36,6 +36,7 @@ from republica.world.countries import (
     load_country_pack,
     load_country_pack_annual,
 )
+from republica.world.economy import merge_structural_coefficients
 
 app = typer.Typer(help="Republica Artificial - laboratorio politico jugable.")
 actors_app = typer.Typer(help="Fichas de actores (ADR 003).")
@@ -290,6 +291,18 @@ def run(
             "`calibration/<run_id>/coefficients.json`. Requiere --country.",
         ),
     ] = None,
+    legitimacy_floor: Annotated[
+        bool | None,
+        typer.Option(
+            "--legitimacy-floor/--no-legitimacy-floor",
+            help="Piso de estabilidad por legitimidad democratica (ADR 016): mientras corre un "
+            "mandato constitucional en democracia y no hay ruptura aguda (hiperinflacion, "
+            "crisis bancaria, default o salida forzada del regimen cambiario), "
+            "`political_stability` no cae debajo del piso. Default: "
+            "`features.legitimacy_floor` de country.json (Argentina: prendido; Aurora: "
+            "apagado). Requiere macro activo.",
+        ),
+    ] = None,
 ) -> None:
     """Corre una simulacion de `months` meses y la guarda en `out` (JSONL)."""
     from republica.governance import parse_governance_overrides
@@ -445,8 +458,13 @@ def run(
             # coefficients`. Una calibracion SIN macro (`a3_main`) deja
             # `calibrated_macro is None` y usa el macro del paquete tal
             # cual, igual que sin `--calibration`.
+            # ADR 016: los `lf_*` son ESTRUCTURALES y no viajan en el vector
+            # calibrado, asi que se toman siempre del paquete de pais (ver
+            # `world/economy.py::LEGITIMACY_FIELDS`).
             macro_coefficients = (
-                calibrated_macro if calibrated_macro is not None else pack.macro_coefficients
+                merge_structural_coefficients(calibrated_macro, pack.macro_coefficients)
+                if calibrated_macro is not None
+                else pack.macro_coefficients
             )
             macro_x0 = pack.macro_x0
             macro_m0 = pack.macro_m0
@@ -527,6 +545,7 @@ def run(
         macro_x0=macro_x0,
         macro_m0=macro_m0,
         coefficients_by_fx_regime=calibrated_by_group,
+        legitimacy_floor=legitimacy_floor,
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(history.to_jsonl(), encoding="utf-8")

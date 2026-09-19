@@ -263,7 +263,8 @@
     "historical_shocks": false,
     "bimonetary": false,
     "annual_mode": false,
-    "macro_regime": true
+    "macro_regime": true,
+    "legitimacy_floor": true
   },
   "bimonetary": {
     "dollar_demand_init": 0.35,
@@ -347,7 +348,12 @@
       "t_rec": 0.02,
       "recovery_inflation_max": 3.0,
       "recovery_unemployment_max": 10.0,
-      "e_rev_sentiment_k": 10.0
+      "e_rev_sentiment_k": 10.0,
+      "lf_base": 28.0,
+      "lf_min": 18.0,
+      "lf_rupture_inflation": 15.0,
+      "lf_rupture_months": 3,
+      "lf_exit_window_months": 600
     }
   },
   "initial_states": {
