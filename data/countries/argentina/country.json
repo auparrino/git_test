@@ -264,7 +264,8 @@
     "bimonetary": false,
     "annual_mode": false,
     "macro_regime": true,
-    "legitimacy_floor": true
+    "legitimacy_floor": true,
+    "political_recovery": true
   },
   "bimonetary": {
     "dollar_demand_init": 0.35,
