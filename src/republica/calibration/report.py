@@ -25,6 +25,12 @@ def _fmt(v: float) -> str:
 
 def _n_header(tables: dict) -> str:
     n = tables["n_start_months"]
+    if n == 0:
+        return (
+            "n = 0 meses de arranque en esta ventana: el grupo no tiene ningun mes de arranque "
+            "aca (se imprime igual, con 'sin dato', para que la ausencia sea visible -- ADR 017 "
+            "secc. 4)."
+        )
     weighted = tables.get("n_weighted_pre_1997")
     if weighted is None:
         return f"n = {n} meses de arranque."
@@ -129,6 +135,47 @@ def _both_metric_tables(tables: dict) -> str:
     )
 
 
+def _by_regime_sections(by_regime: dict, params: list[Parameter]) -> list[str]:
+    """Una seccion por GRUPO de regimen cambiario (ADR 017 secc. 4), con
+    las mismas tablas que las secciones agregadas de train/holdout, mas el
+    drift del vector de ESE grupo. Las secciones agregadas van arriba, en
+    `## Train`/`## Holdout`: esto es el detalle."""
+    lines: list[str] = [
+        "",
+        "## Por grupo de regimen cambiario",
+        "",
+        "Particion de los meses de arranque por el `fx_regime` REAL de `fx_regimes.csv` en `t0` "
+        "(ADR 017 secc. 3). Cada grupo tiene su propio CMA-ES y su propio vector; las tablas "
+        "agregadas de arriba puntuan cada mes con el vector de SU grupo.",
+        "",
+        "| grupo | meses de arranque (train) | meses de arranque (holdout) |",
+        "|---|---:|---:|",
+    ]
+    for group in by_regime["groups"]:
+        lines.append(
+            f"| `{group}`"
+            f"{' (default)' if group == by_regime['default_group'] else ''} "
+            f"| {by_regime['n_by_group_train'].get(group, 0)} "
+            f"| {by_regime['n_by_group_holdout'].get(group, 0)} |"
+        )
+    for group in by_regime["groups"]:
+        lines += [
+            "",
+            f"### Grupo `{group}` -- Train",
+            "",
+            _both_metric_tables(by_regime["train"][group]),
+            "",
+            f"### Grupo `{group}` -- Holdout",
+            "",
+            _both_metric_tables(by_regime["holdout"][group]),
+            "",
+            f"### Grupo `{group}` -- Drift de parametros (Aurora -> calibrado)",
+            "",
+            _drift_table(params, by_regime["x_by_group"][group]),
+        ]
+    return lines
+
+
 def _drift_table(params: list[Parameter], calibrated_x: list[float], top_n: int = 15) -> str:
     rows = []
     for p, v in zip(params, calibrated_x, strict=True):
@@ -193,11 +240,13 @@ def write_report(
     holdout_tables: dict,
     result,
     extra_notes: list[str] | None = None,
+    by_regime: dict | None = None,
 ) -> None:
     from republica.calibration.run import input_data_hash
 
     include_macro = any(p.group == "macro" for p in params)
     loss = getattr(cfg, "loss", "rmse")
+    weights = getattr(cfg, "weights", None)
     macro_note = (
         "Vector de calibracion CON el grupo `macro` (A5, ADR 012 secc. 6): simula con "
         "`step_macro_economy` (regimen cambiario efectivo + balance de pagos), "
@@ -219,14 +268,39 @@ def write_report(
         else "Holdout corrido UNA SOLA VEZ, al final, despues de fijar los coeficientes con "
         "train -- protocolo de honestidad, PLAN_ARGENTINA.md #0.3/#4."
     )
+    weights_note = (
+        "Pesos por variable del objetivo (`--weights`, ADR 017 secc. 5): `"
+        + ", ".join(f"{k}={v}" for k, v in sorted(weights.items()))
+        + "`. Afectan SOLO el escalar que minimiza CMA-ES; las tablas de abajo muestran cada "
+        "variable SIN ponderar. Una corrida con pesos no es comparable con una sin pesos."
+        if weights
+        else "Pesos por variable del objetivo: todos en 1.0 (default, `--weights` sin usar)."
+    )
+    by_regime_note = (
+        "Calibracion POR REGIMEN CAMBIARIO (`--by-regime`, ADR 017 secc. 3): un CMA-ES por "
+        f"grupo ({', '.join('`' + g + '`' for g in by_regime['groups'])}), con "
+        f"{by_regime['budget_per_group']} evaluaciones de presupuesto CADA UNO, particionando "
+        "los meses de arranque por el `fx_regime` real de `fx_regimes.csv` en `t0` (`crawl` va "
+        "con `peg`: `world/economy.py::step_macro_economy` los trata en la MISMA rama). Vector "
+        f"`default` = el del grupo con mas meses de arranque de train: `"
+        f"{by_regime['default_group']}`."
+        if by_regime is not None
+        else "Calibracion con UN SOLO vector para toda la ventana (sin `--by-regime`)."
+    )
+    budget_line = (
+        f"Presupuesto: {by_regime['budget_per_group']} evaluaciones POR GRUPO "
+        f"({len(by_regime['groups'])} grupos; usadas en total: {result.evaluations}). "
+        if by_regime is not None
+        else f"Presupuesto: {cfg.budget} evaluaciones (usadas: {result.evaluations}). "
+    )
 
     lines = [
         f"# Calibracion Argentina -- run `{cfg.run_id}`",
         "",
         f"Pais: `{cfg.country_id}`. Train: `{cfg.train_start}:{cfg.train_end}`. "
         f"Holdout: `{cfg.holdout_start}:{cfg.holdout_end}`. {holdout_order_note}",
-        f"Presupuesto: {cfg.budget} evaluaciones (usadas: {result.evaluations}). "
-        f"Stride: {cfg.stride} meses. lambda_reg: {cfg.lambda_reg}. Semilla: {cfg.seed}. "
+        budget_line
+        + f"Stride: {cfg.stride} meses. lambda_reg: {cfg.lambda_reg}. Semilla: {cfg.seed}. "
         f"Perdida optimizada por CMA-ES: `{loss}` (el reporte muestra ambas metricas, RMSE y "
         "cola pesada, para cualquier corrida -- A5, ADR 012 secc. 6).",
         f"Tiempo de pared del optimizador: {result.wall_seconds:.1f}s.",
@@ -234,6 +308,10 @@ def write_report(
         f"`{input_data_hash(cfg.country_id)}`.",
         "",
         macro_note,
+        "",
+        by_regime_note,
+        "",
+        weights_note,
         "",
         "## Shocks forzados en el periodo",
         "",
@@ -244,13 +322,17 @@ def write_report(
         "`data/countries/argentina/politics/shocks_calendar.csv` para la lista completa; no se "
         "repite aca fila por fila para no duplicar la fuente de verdad.",
         "",
-        "## Train",
+        "## Train" + (" (AGREGADO: cada mes con el vector de su grupo)" if by_regime else ""),
         "",
         _both_metric_tables(train_tables),
         "",
-        "## Holdout",
+        "## Holdout" + (" (AGREGADO: cada mes con el vector de su grupo)" if by_regime else ""),
         "",
         _both_metric_tables(holdout_tables),
+    ]
+    if by_regime is not None:
+        lines += _by_regime_sections(by_regime, params)
+    lines += [
         "",
         "## Drift de parametros (Aurora -> calibrado)",
         "",

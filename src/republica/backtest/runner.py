@@ -29,7 +29,7 @@ from republica.backtest.features import compute_window_features
 from republica.backtest.scoring import SeedOutcome, score_window
 from republica.backtest.windows import Window, generate_windows
 from republica.calibration.initial_states import flat_initial_state
-from republica.calibration.run import load_calibrated_country
+from republica.calibration.run import load_calibrated_country, load_calibrated_vectors_by_group
 from republica.engine.policy import PassivePolicy
 from republica.engine.simulation import run as run_simulation
 from republica.world.annual import load_annual_regime, run_annual
@@ -127,11 +127,21 @@ def run_monthly_arm(
     macro_active = country.features.get("macro_regime", False)
     macro = pack.macro_coefficients if macro_active else None
     if arm == "calibrated":
-        coeff, bimonetary_cal, macro_cal = load_calibrated_country("argentina", calibration_run_id)
+        # ADR 017 secc. 3.5: con una calibracion `--by-regime`, el vector
+        # se elige por el `fx_regime` real de `t0`; con el formato viejo el
+        # `start` se ignora y sale el unico vector, igual que siempre.
+        coeff, bimonetary_cal, macro_cal = load_calibrated_country(
+            "argentina", calibration_run_id, start=window.t0
+        )
         country = country.model_copy(update={"coefficients": coeff})
         bimonetary = bimonetary_cal
         if macro_active and macro_cal is not None:
             macro = macro_cal
+        # ADR 017 secc. 3.6: cambio de vector en caliente si el regimen
+        # simulado sale de su grupo (`None` con el formato viejo).
+        coefficients_by_fx_regime = load_calibrated_vectors_by_group(calibration_run_id)
+    else:
+        coefficients_by_fx_regime = None
     bimonetary = dataclasses.replace(bimonetary, fx_regime_default=pack.fx_regime_auto)
 
     era_actors = None
@@ -180,6 +190,7 @@ def run_monthly_arm(
                 macro_x0=pack.macro_x0 if macro is not None else None,
                 macro_m0=pack.macro_m0 if macro is not None else None,
                 fx_regime=pack.fx_regime_auto if macro is not None else None,
+                coefficients_by_fx_regime=coefficients_by_fx_regime,
             )
         except _NUMERIC_FAILURE_EXCEPTIONS as exc:
             n_failed += 1
@@ -221,7 +232,11 @@ def run_annual_arm(
     years = window.h // 12
     country = load_country_pack_annual("argentina", year0, years)
     if arm == "calibrated":
-        coeff, _bimon, _macro = load_calibrated_country("argentina", calibration_run_id)
+        # Modo anual: el `t0` de la ventana es un año, se usa `<year>-01`
+        # para resolver el grupo de regimen cambiario (ADR 017 secc. 3.5).
+        coeff, _bimon, _macro = load_calibrated_country(
+            "argentina", calibration_run_id, start=f"{year0:04d}-01"
+        )
         country = country.model_copy(update={"coefficients": coeff})
     regime_lookup = load_annual_regime(country_pack_dir("argentina") / "politics" / "regimes.csv")
     policy_rule = PassivePolicy(

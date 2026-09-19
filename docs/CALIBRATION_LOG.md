@@ -775,3 +775,107 @@ recalibración**: habilita el término cambiario en el holdout, no mejora ningú
 La próxima corrida completa es la que va a decir si el holdout con dato cambiario cambia la
 lectura de `a5b_macro`.
 
+
+## Argentina A7 (ADR 017): calibración por régimen cambiario y exclusión de coeficientes legacy
+
+Ronda de MECANISMO: se construyeron y probaron los tres cambios de abajo con `--quick`; **la corrida
+completa no está en esta entrada** (la corre el orquestador con el comando de `docs/ADR_017_
+calibration_by_regime.md` §8, run-id sugerido `a7_by_regime`). Ningún número de ajuste de acá sale
+de una calibración real.
+
+### 1. Los 8 `Coefficients` legacy sin señal salen del vector
+
+Diagnóstico completo en ADR 017 §1. Con `features.macro_regime` prendido, la función objetivo corre
+siempre por `step_macro_economy` y **nunca** por `step_economy`, así que los campos de
+`Coefficients` que solo lee el motor legacy no cambian la pérdida ni una décima: CMA-ES los deja
+donde quiera. Medido en `a5b_macro`: `rho_pi = 2.298` contra el 0.85 de Aurora (un AR(1) de precios
+con coeficiente 2.3, explosivo por construcción). Esa es la causa raíz del hallazgo de ADR 014
+(las 135 ventanas anuales 1916–1960 del backtest `b1_a5b` perdieron el 100 % de sus semillas
+calibradas por `OverflowError` en `(1 + g_m/100)**12`, 4050 de 4050).
+
+La lista se obtuvo comparando por programa las referencias `coeff.<campo>` del cuerpo de las dos
+funciones: `step_economy` lee 44, `step_macro_economy` lee 36, y los 36 son un subconjunto de los
+44. La diferencia son 8, todos de bloques que ADR 012 reemplazó entero: `rho_pi`, `c_e`, `c_r`,
+`c_g`, `c_f` (ecuación de precios legacy, §4.3 del spec), `k_w` (canal salarial, 4.4), `k_tb`
+(balanza comercial, 4.5), `k_conf` (confianza institucional, 4.6).
+
+`build_parameter_space(include_macro=True)` los excluye: el vector pasa de **155 a 147** parámetros
+(89 de `Coefficients` + 58 macro). Quedan fijos en el valor de Aurora del paquete y se escriben así
+en el `coefficients.json`, para que el objeto siga siendo usable por `world/annual.py`, que sí los
+lee. Los otros ~53 campos de `Coefficients` (sociedad, política, elecciones, percepción) siguen en
+el vector: los ejercitan `step_society`/`step_politics`, que corren igual con macro activo.
+
+### 2. Guarda numérica del modo anual, contada
+
+La exclusión arregla las calibraciones futuras, no las ya escritas. `world/annual.py` acota ahora
+`g_m` a `[-50, +50] %` **mensual** (±50 % mensual compuesto son −99.8 % o +12.875 % anual: fuera de
+ese rango es ruido numérico, no economía) antes de `(1 + g_m/100)**12`, y **cuenta** los clampeos en
+`AnnualRecord.g_m_clamped` / `AnnualHistory.g_m_clamped` (también en la última línea del JSONL). El
+clamp llega a `step_economy` como un parámetro opcional `g_m_clamp` cuyo default `None` deja el modo
+mensual byte a byte igual que antes.
+
+Resultado medido con `a5b_macro` (`python -m republica.backtest --country argentina --calibration
+a5b_macro --from 1920 --to 1925 --horizons 12 --seeds 3`): el brazo calibrado pasa de **0 semillas
+usables a 3 de 3 en las seis ventanas**. Pero el contador dice `g_m_clamped = 29` sobre 60 sub-pasos
+en 5 años y el `gdp_growth` queda pegado al techo (30 %): **el brazo calibrado de 1916–1960 con
+`a5b_macro` ahora tiene datos, y son datos contra la guarda, no contra el modelo**. Para eso está el
+contador. Con Aurora (o con cualquier calibración hecha ya con la exclusión de arriba) da 0.
+
+### 3. Calibración POR RÉGIMEN CAMBIARIO (`--by-regime`)
+
+`a5b_macro` ajustó un solo vector de 155 parámetros a 124 meses de arranque que cruzan cuatro
+regímenes cambiarios que `step_macro_economy` trata con **ramas de código distintas** (ADR 012 §3).
+El pendiente de `PLAN_ARGENTINA` §7 pedía partir eso; `republica calibrate --by-regime` lo hace:
+particiona los meses de arranque de train por el `fx_regime` real de `fx_regimes.csv` en `t0` y
+corre un CMA-ES por grupo (`--budget-per-group`, default `--budget`).
+
+**Tres grupos**, con `crawl` agrupado con `peg` porque el motor ya los trata juntos (una sola rama
+`elif fx_regime in ("crawl", "peg")`) y porque en el train no hay ni un mes de arranque `crawl`.
+Distribución con stride 3 y horizonte 12:
+
+| grupo | train `1992-01:2023-12` (124) | holdout `1983-12:1991-12` (29) |
+|---|---:|---:|
+| `float` | 54 (43.5 %) | 0 |
+| `peg` (41 `peg`, 0 `crawl`) | 41 (33.1 %) | **29** (todos `crawl`) |
+| `control` | 29 (23.4 %) | 0 |
+
+Consecuencia que hay que tener presente al leer el reporte de la corrida completa: **el holdout cae
+entero en el grupo `peg`**, así que mide la generalización de ese vector a una banda `crawl` que
+nunca vio, y los vectores `float` y `control` quedan sin ninguna prueba de generalización.
+
+`coefficients.json` nuevo: `{"by_regime": {"peg": {...}, "float": {...}, "control": {...}},
+"default": {...}}`, donde `default` es una COPIA del vector del grupo con más meses de arranque de
+train (`float`, 54 de 124) y se usa cuando no hay fecha o el grupo no tiene vector propio. El
+formato viejo (un solo vector en la raíz) se sigue leyendo sin cambios: `a3_main`, `a5_macro` y
+`a5b_macro` cargan igual que siempre.
+
+El vector se elige por el `fx_regime` de la fecha de `--start`, y `republica run` loguea cuál
+eligió. Si el régimen SIMULADO sale de su grupo dentro de la corrida (`fx_regime_exit`: salida
+forzada de un `peg` por reservas), el vector cambia en caliente el mes siguiente y queda el evento
+`fx_vector_switch:<grupo>` en el JSONL — verificado en una corrida real desde 1998-01
+(`fx_regime_exit` mes 7, `fx_vector_switch:float` mes 8). Lo que **no** cambia el vector es cruzar
+una frontera de `fx_regimes.csv` por CALENDARIO: el motor tampoco cambia el régimen por calendario
+(simplificación ya declarada en ADR 012), y hacerlo sería un cambio de modelo, no de calibración.
+
+El reporte muestra las tablas de siempre (RMSE + cola pesada + "terminaron antes del horizonte",
+contra persistencia, Aurora sin calibrar y `a3_main`) **por grupo Y agregadas**; en las agregadas
+cada mes de arranque se puntúa con el vector de su grupo.
+
+### 4. `--weights`: ponderación de las variables del objetivo
+
+Sale del hallazgo de A5b de más arriba (`a3_main`, sin macro, ajusta mejor el PBI que `a5b_macro`
+porque la capa macro no gobierna el PBI). `republica calibrate --weights "inflation=2,gdp_growth=0.5"`
+multiplica el término de cada variable en el escalar que minimiza CMA-ES. **El default no cambia**:
+sin `--weights`, todos los pesos quedan en 1.0 y el escalar es el de siempre. Los pesos se guardan
+en `coefficients.json` y se imprimen en el reporte — una corrida con pesos no es comparable con una
+sin pesos y tiene que verse. Las tablas siguen mostrando cada variable sin ponderar.
+
+### Hipótesis registrada, todavía sin evaluar
+
+> Por régimen, el calibrado iguala o supera a persistencia en inflación a h=12 en al menos 2 de 3
+> grupos en train, y no empeora el holdout agregado respecto de `a5b_macro`.
+
+Criterio operativo y referencias en ADR 017 §6, fijados antes de correr. La corrida probe de esta
+ronda (`a7_quick_probe`: `--quick --by-regime --workers 2`, 40 evaluaciones por grupo, stride 12,
+100 s de pared) sirvió únicamente para verificar el pipeline de punta a punta y se borró de `data/`;
+con ese presupuesto sus números no significan nada y no se reportan.

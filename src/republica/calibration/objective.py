@@ -687,6 +687,7 @@ def scalar_objective(
     x: list[float],
     lambda_reg: float,
     loss: str = "rmse",
+    weights: dict[str, float] | None = None,
 ) -> float:
     """Escalar que minimiza CMA-ES: suma de las metricas normalizadas por
     `(var, horizonte)` (NaN ignorado -- variable/horizonte sin dato real en
@@ -695,16 +696,36 @@ def scalar_objective(
     para que todos pesen parecido sin importar la escala nativa del
     coeficiente). `loss` (A5, ADR 012 secc. 6): `"rmse"` (default, igual que
     antes de A5) o `"heavy"` (cola pesada, `{var}_h{h}_heavy` en vez de
-    `{var}_h{h}`) -- cualquier otro valor es un error del llamador."""
+    `{var}_h{h}`) -- cualquier otro valor es un error del llamador.
+
+    `weights` (ADR 017 secc. 5, default `None` = todos los pesos en 1.0 =
+    el escalar de siempre, byte a byte): multiplicador POR VARIABLE de
+    `VARIABLES`, para poder pedirle a CMA-ES que priorice unas series sobre
+    otras. Motivacion medida (`docs/CALIBRATION_LOG.md`, holdout de A5b):
+    `a3_main` (sin macro) ajusta MEJOR el PBI que `a5b_macro` porque la
+    capa macro de ADR 012 no gobierna el PBI, y calibrar 155 parametros
+    sobre una perdida dominada por precios/reservas/cambiario empeora las
+    variables que no dependen de esos mecanismos. Un peso `0.0` saca la
+    variable del escalar (NO de las tablas del reporte, que siguen
+    mostrando las cinco sin ponderar). Una clave que no sea una de
+    `VARIABLES` es un error del llamador."""
     if loss not in ("rmse", "heavy"):
         raise ValueError(f"loss debe ser 'rmse' o 'heavy', se pidio {loss!r}.")
+    if weights:
+        unknown = sorted(set(weights) - set(VARIABLES))
+        if unknown:
+            raise ValueError(
+                f"--weights solo acepta variables del objetivo {VARIABLES}; "
+                f"desconocidas: {unknown}."
+            )
     suffix = "_heavy" if loss == "heavy" else ""
     total = 0.0
     for var in VARIABLES:
+        w = (weights or {}).get(var, 1.0)
         for h in HORIZONS:
             v = metrics.get(f"{var}_h{h}{suffix}", float("nan"))
             if not math.isnan(v):
-                total += v
+                total += w * v
     if not math.isnan(metrics.get("regime_accuracy", float("nan"))):
         total += 1.0 - metrics["regime_accuracy"]
     if not math.isnan(metrics.get("election_accuracy", float("nan"))):
@@ -731,6 +752,7 @@ def evaluate(
     persistence: bool = False,
     seed: int = 0,
     loss: str = "rmse",
+    weights: dict[str, float] | None = None,
 ) -> tuple[float, dict[str, float]]:
     """Evalua UN candidato `x` (vector en unidades nativas, ya clippeado)
     sobre todos los `contexts` (secuencial: la paralelizacion por mes de
@@ -748,7 +770,7 @@ def evaluate(
     ]
     metrics = aggregate_scores(scores, real)
     scalar = (
-        scalar_objective(metrics, params, x, lambda_reg, loss=loss)
+        scalar_objective(metrics, params, x, lambda_reg, loss=loss, weights=weights)
         if not persistence
         else float("nan")
     )

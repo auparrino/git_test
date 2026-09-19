@@ -293,6 +293,10 @@ def run(
     macro_coefficients = None
     macro_x0 = None
     macro_m0 = None
+    #: ADR 017 secc. 3.6: vectores por grupo de regimen cambiario de una
+    #: calibracion `--by-regime` (`None` para el formato viejo o sin
+    #: `--calibration`).
+    calibrated_by_group = None
     era_actors: dict | None = None
     era_loyalty_table = None
     era_gov_overrides: dict[str, str] = {}
@@ -366,20 +370,40 @@ def run(
                 era_gov_overrides = era_governance_overrides(pack.era.governance_path)
         calibrated_macro = None
         if calibration_run_id:
-            from republica.calibration.run import load_calibrated_country
+            from republica.calibration.run import (
+                calibration_vector_for,
+                load_calibrated_country,
+                load_calibrated_vectors_by_group,
+                load_calibration_json,
+            )
 
             try:
-                calibrated_coeff, bimonetary_coefficients, calibrated_macro = (
-                    load_calibrated_country(country_id, calibration_run_id)
-                )
+                raw_calibration = load_calibration_json(calibration_run_id)
             except FileNotFoundError as exc:
                 raise typer.BadParameter(str(exc)) from exc
+            # ADR 017 secc. 3.5: con un `coefficients.json` por regimen
+            # (`--by-regime`), `start` elige el vector; con el formato viejo
+            # el `start` se ignora y sale el unico vector, igual que
+            # siempre. `calibration_vector_for` se llama aparte solo para
+            # loguear POR QUE salio ese vector.
+            calibrated_coeff, bimonetary_coefficients, calibrated_macro = load_calibrated_country(
+                country_id, calibration_run_id, start=start
+            )
+            _, why_vector = calibration_vector_for(country_id, raw_calibration, start)
+            calibrated_by_group = load_calibrated_vectors_by_group(calibration_run_id)
             country = country.model_copy(update={"coefficients": calibrated_coeff})
             macro_note = " (con macro, ADR 012)" if calibrated_macro is not None else ""
             console.print(
                 f"[yellow]Coeficientes calibrados (A3/A5)[/yellow]{macro_note}: "
                 f"run_id={calibration_run_id}"
             )
+            console.print(f"[yellow]Vector calibrado elegido (ADR 017)[/yellow]: {why_vector}")
+            if calibrated_by_group is not None:
+                console.print(
+                    "[yellow]Cambio de vector en caliente habilitado[/yellow]: si el regimen "
+                    "simulado sale de su grupo (`fx_regime_exit`), la corrida pasa al vector "
+                    "del grupo nuevo (evento `fx_vector_switch:<grupo>` en el JSONL)."
+                )
         # ADR 012 deliverable 5: `--fx-regime auto` (default con --country,
         # ver `fx_regime_opt` mas abajo) resuelve el regimen segun
         # `fx_regimes.csv` del paquete para `start`; cualquier otro valor
@@ -487,6 +511,7 @@ def run(
         macro_coefficients=macro_coefficients,
         macro_x0=macro_x0,
         macro_m0=macro_m0,
+        coefficients_by_fx_regime=calibrated_by_group,
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(history.to_jsonl(), encoding="utf-8")
@@ -1904,6 +1929,36 @@ def ui() -> None:
     subprocess.run([sys.executable, "-m", "streamlit", "run", str(app_path)], check=False)
 
 
+def _parse_objective_weights(spec: str | None) -> dict[str, float] | None:
+    """`"inflation=2,gdp_growth=0.5"` -> `{"inflation": 2.0,
+    "gdp_growth": 0.5}` (ADR 017 secc. 5). `None`/vacio -> `None` (todos
+    los pesos en 1.0, el escalar de siempre). Las variables que no se
+    nombran quedan en 1.0; un nombre que no sea una variable del objetivo
+    es un error del usuario, no un valor ignorado en silencio."""
+    if not spec:
+        return None
+    from republica.calibration.objective import VARIABLES
+
+    out: dict[str, float] = {}
+    for chunk in spec.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        if "=" not in chunk:
+            raise typer.BadParameter(f"--weights espera 'var=peso', se pidio {chunk!r}.")
+        name, _, value = chunk.partition("=")
+        name = name.strip()
+        if name not in VARIABLES:
+            raise typer.BadParameter(
+                f"--weights: {name!r} no es una variable del objetivo {VARIABLES}."
+            )
+        try:
+            out[name] = float(value)
+        except ValueError as exc:
+            raise typer.BadParameter(f"--weights: peso no numerico en {chunk!r}.") from exc
+    return out or None
+
+
 @app.command()
 def calibrate(
     country_id: Annotated[
@@ -1947,6 +2002,32 @@ def calibrate(
             "siempre muestra las dos metricas; esto solo elige cual optimiza CMA-ES.",
         ),
     ] = "rmse",
+    by_regime: Annotated[
+        bool,
+        typer.Option(
+            "--by-regime",
+            help="ADR 017: un CMA-ES POR GRUPO de regimen cambiario (peg[+crawl]/float/control), "
+            "particionando los meses de arranque de train por el fx_regime real de "
+            "fx_regimes.csv en t0. Escribe un coefficients.json con {by_regime, default}.",
+        ),
+    ] = False,
+    budget_per_group: Annotated[
+        int | None,
+        typer.Option(
+            "--budget-per-group",
+            help="Evaluaciones de CMA-ES por grupo con --by-regime (default: el mismo --budget "
+            "para cada grupo). Ignorado sin --by-regime.",
+        ),
+    ] = None,
+    weights: Annotated[
+        str | None,
+        typer.Option(
+            "--weights",
+            help="ADR 017 secc. 5: pesos por variable del objetivo, 'var=peso,var=peso' (ej. "
+            "'inflation=2,gdp_growth=0.5'). Default: todos 1.0. Solo afecta el escalar que "
+            "minimiza CMA-ES; el reporte sigue mostrando cada variable sin ponderar.",
+        ),
+    ] = None,
 ) -> None:
     """`republica calibrate` (A3, ADR 011 secc. 7): CMA-ES sobre los
     coeficientes de `country.json` contra `history/`, con holdout evaluado
@@ -1960,6 +2041,9 @@ def calibrate(
     if quick:
         budget = 40
         stride = 12
+        budget_per_group = 40
+
+    parsed_weights = _parse_objective_weights(weights)
 
     train_start, train_end = parse_range(train)
     holdout_start, holdout_end = parse_range(holdout)
@@ -1977,10 +2061,17 @@ def calibrate(
         workers=workers,
         seed=seed,
         loss=loss,
+        by_regime=by_regime,
+        budget_per_group=budget_per_group,
+        weights=parsed_weights,
+    )
+    budget_note = (
+        f"budget_por_grupo={budget_per_group or budget}" if by_regime else f"budget={budget}"
     )
     console.print(
         f"[cyan]Calibrando[/cyan] {country_id} train={train} holdout={holdout} "
-        f"budget={budget} stride={stride} workers={workers} loss={loss}"
+        f"{budget_note} stride={stride} workers={workers} loss={loss} "
+        f"by_regime={by_regime} weights={parsed_weights or 'default (1.0)'}"
     )
     run_dir = run_calibration(cfg)
     console.print(f"[green]OK[/green] -> {run_dir}")
