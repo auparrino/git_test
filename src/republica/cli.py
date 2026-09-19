@@ -62,6 +62,24 @@ app.add_typer(core_app, name="core")
 console = Console()
 
 
+def _estado_inicial_de_cualquier_mes(country_id: str, start: str) -> dict[str, float] | None:
+    """Estado inicial real para un mes que no esta entre las 8 fechas hito.
+
+    Devuelve `None` (y el llamador deja el error original) si el pais no es
+    Argentina, si el mes cae fuera del rango con series (`MIN_YEAR`/
+    `MAX_YEAR` de `calibration/initial_states.py`) o si la construccion
+    falla por cualquier motivo: el fallback nunca debe convertir un error
+    claro en uno peor."""
+    if country_id != "argentina":
+        return None
+    try:
+        from republica.calibration.initial_states import flat_initial_state
+
+        return flat_initial_state(start)
+    except Exception:  # noqa: BLE001 - cae al error original del paquete
+        return None
+
+
 @app.command()
 def version() -> None:
     """Muestra la version instalada de Republica Artificial."""
@@ -366,7 +384,28 @@ def run(
                 regime_transitions=regime_transitions,
             )
         except CountryPackError as exc:
-            raise typer.BadParameter(str(exc)) from exc
+            # `initial_states` de `country.json` solo trae las 8 fechas hito
+            # de A2 (ADR 011 secc. 2), pero `calibration/initial_states.py::
+            # flat_initial_state` sabe construir un estado inicial REAL para
+            # cualquier mes desde 1961 -- es lo que ya usan la calibracion
+            # (`objective.py`) y el backtest (`backtest/runner.py`). Sin este
+            # fallback, `republica run --start 2015-12` fallaba aunque el
+            # dato existiera, y el usuario quedaba limitado a 8 fechas.
+            estado = _estado_inicial_de_cualquier_mes(country_id, start)
+            if estado is None:
+                raise typer.BadParameter(str(exc)) from exc
+            pack = load_country_pack(
+                country_id,
+                start,
+                months,
+                regime_mode=regime_mode_opt,
+                regime_transitions=regime_transitions,
+                initial_state_override=estado,
+            )
+            console.print(
+                f"[dim]Estado inicial de {start} construido desde las series historicas "
+                "(no es una de las fechas hito): procedencia en history/coverage.md.[/dim]"
+            )
         country = pack.country
         regime_calendar = pack.regime_calendar
         bimonetary_coefficients = pack.bimonetary_coefficients

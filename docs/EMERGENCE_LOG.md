@@ -14,3 +14,60 @@ reproducirlo. Es la materia prima del portfolio y de los evals de realismo polí
 | 2026-09 | A4 (argentina, `a3_main`) | 1–50 | 24 | Calibrar contra datos argentinos reales alejó al modelo del episodio argentino más característico: arrancando del estado real de 1988-06 (inflación 13,99 %/mes), el modelo **calibrado** termina en 1,41 %/mes a los 24 meses y Aurora **sin calibrar** en 4,39 %/mes, con la real en ~33 %/mes (jul-1989). Ninguno de los dos brazos entra nunca en `hyperinflation` (0/50 en ambos). | La calibración de A3 bajó `rho_pi` de 0,85 a 0,45 porque el período de ajuste (1993–2015: convertibilidad + post-2003) es fuertemente reversivo. El coeficiente total sobre la inflación del mes anterior queda en `rho_pi + c_e` = 0,51 < 1: la ecuación es una contracción y una hiperinflación endógena es **algebraicamente imposible** sin forzar un shock. Calibrar sobre una ventana estable puede destruir la capacidad de representar el régimen inestable del mismo país. | misma corrida; `results.json → tests[0]` y `inflation_persistence` |
 | 2026-09 | A4 (argentina, `a3_main`) | 1–50 | 69–70 | Las **50 de 50** semillas calibradas de V3 (2016-01 + 96 meses) terminan en `collapse` (`political_stability < 15` × 3 meses) alrededor del mes 70 (≈ 2021-09), mientras las 50 de Aurora sin calibrar llegan enteras al mes 96. La elección de 2023 no se celebra en ninguna corrida calibrada. | Versión acelerada y unánime de la erosión de largo plazo ya registrada para Aurora a 213 años (fila `v0.8`, 1810): con coeficientes calibrados y el estado inicial real de 2016 la erosión tarda 6 años en vez de 14 y no deja ninguna semilla en pie. Cualquier contrafáctico argentino (A6) de más de ~5 años choca contra esto antes que contra la economía. | misma corrida; `results.json → tests[2].metrics.calibrated.outcomes` |
 | 2026-09 | Argentina A4 extra | 0–49, inicio 2019-12 real, 48 meses, pandemia y sequía forzadas | 48 | Elección de 2023: el oficialismo pierde en 36 de 36 elecciones celebradas (calibrado; las otras 14 semillas colapsan antes) y en 49 de 50 (Aurora sin calibrar). La inflación final mediana queda en 29 % (calibrado) y 56 % (sin calibrar) contra ~211 % interanual real. | El bloque político acierta el signo del resultado sin acertar la economía que lo causó: la derrota sale de la erosión de aprobación y tensión, no de la inflación. El modelo no sabe quién gana: sus partidos son los de Aurora (`union_republicana` = "la oposición principal"). | ver `docs/EMERGENCE_LOG.md`; reproducir con `run_test_arm` sobre `ValidationTest(start="2019-12", months=48)` |
+
+---
+
+## Sonda exploratoria sobre seis arranques reales (sin hipótesis previa)
+
+Primera pasada de "mirar el modelo andando" en vez de puntuar una hipótesis: seis fechas reales,
+15 semillas cada una, calibración `a7_by_regime`, con transiciones de régimen y piso de legitimidad
+activos, por CLI (lo mismo que corre un usuario). El hallazgo central no es ninguno de los que las
+validaciones V1–V4 estaban midiendo.
+
+### 1. El modelo termina demasiado pronto en casi todo arranque, y el error no es de un signo
+
+| arranque | qué pasó de verdad | outcome del modelo (15 semillas) | mes de fin (mediana) | de |
+|---|---|---|---:|---:|
+| 1983-12 | hiperinflación en 1989 (mes 66) | `hyperinflation` 15/15 | **9** | 72 |
+| 1991-04 | una década de convertibilidad estable | `collapse` 15/15 | **25** | 120 |
+| 1998-01 | default y salida del peg en 2001-12 (mes 47) | `collapse` 11/15, `survived` 4 | 44 | 60 |
+| 2003-06 | la década de mayor crecimiento reciente | `collapse` 15/15 | **59** | 150 |
+| 2019-12 | mandato completo, derrota en 2023 | `hyperinflation` 12/15, `defeated` 3 | 47 | 48 |
+
+Solo **1998-01** cae cerca de la realidad (mes 44 contra 47 real), y es justamente la ventana que V2
+puntúa: la única hipótesis histórica que el modelo viene cumpliendo. Las otras cuatro fallan, y de
+maneras contradictorias entre sí: desde 1983 hiperinflación **cinco años y medio antes** de tiempo,
+desde 1991 y 2003 colapso donde la historia tuvo estabilidad y crecimiento.
+
+Lo importante: **V1 mide 1988-06 y da 0 % de hiperinflación**, mientras que 1983-12 —cinco años
+antes, el mismo episodio— da **100 % en el mes 9**. El modelo no es "demasiado explosivo" ni
+"demasiado contractivo": es extremadamente sensible al estado inicial, de forma no monótona. Ese
+diagnóstico no aparece en ninguna de las cuatro validaciones porque cada una mira un solo arranque.
+
+### 2. Tres variables terminan clavadas exactamente en su cota
+
+En las seis corridas, la mediana final de `government_approval` es **0.00 exacto**. En 2019-12,
+`real_wage` termina en **200.00 exacto** y `reserves` en **0.00 exacto**. Un valor final que coincide
+con el borde del rango en todas las semillas no es un resultado: es saturación. Las ecuaciones
+empujan a la variable contra la cota y el `clamp` la sostiene ahí, así que a partir de ese mes la
+variable deja de transportar información y cualquier término que dependa de ella queda congelado.
+Es una hipótesis sobre el mecanismo del colapso temprano del punto 1, no una conclusión: habría que
+ver si la aprobación toca 0 **antes** del mes de terminación en las corridas que colapsan.
+
+### 3. `--start` aceptaba 8 fechas cuando el dato existía para cualquier mes desde 1961
+
+La sonda pidió `--start 2015-12` (un mes antes del hito 2016-01) y `republica run` lo rechazó con
+"no hay estado inicial para esa fecha". Pero `calibration/initial_states.py::flat_initial_state`
+construye un estado inicial **real** para cualquier mes con series, y es lo que ya usaban la
+calibración y el backtest desde hace dos rondas. Era una inconsistencia entre lo que el proyecto
+sabe hacer y lo que el comando dejaba hacer. Corregido: `run` cae a ese constructor cuando la fecha
+no es un hito, avisa que el estado se construyó desde las series, y mantiene el error original
+—con la lista de fechas— cuando el mes cae fuera del rango con datos (probado con 1950-01).
+
+### Qué hacer con esto
+
+El punto 1 dice que el próximo trabajo **no** es seguir calibrando coeficientes: es entender por qué
+el mismo mecanismo hiperinflaciona en el mes 9 desde 1983 y nunca desde 1988. El punto 2 da la
+primera pista concreta y es barato de verificar. Ninguno de los dos se ve desde las validaciones
+V1–V4, que puntúan un arranque cada una; una sonda de este tipo debería correr en cada ronda.
+
