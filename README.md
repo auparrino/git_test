@@ -53,6 +53,7 @@ entonces muta el estado. Toda denegación queda registrada y es una métrica.
 | **Visor** | HTML autocontenido por corrida | `republica viewer` |
 | **Sustituto y análisis** | Dataset de decisiones, sustituto sklearn por rol con active learning (`surrogate:<path>+fallback:rules`), early-warning de crisis a 12 meses, clustering de regímenes, UI Streamlit de 12 pestañas con modo jugable | `ADR_009`, `ml/`, `ui/app.py` |
 | **Núcleo sin instituciones (v2)** | 10.000 agentes, 6 bienes, solo `OFFER`/`TRANSFER`, estrategia evolutiva y clasificación a posteriori; test de contaminación contra la lista de instituciones que no pueden aparecer en el código | `ADR_010`, `core/` |
+| **Sonda exploratoria** | `republica probe`: unos pocos arranques históricos reales (declarados en `probe_scenarios.csv`, no en código) × N semillas, **sin hipótesis previa y sin puntuar nada** — a diferencia del backtest, que puntúa objetivos contra series reales, y de la validación, que puntúa hipótesis registradas. Reporta terminación contra los meses pedidos y contra lo que pasó de verdad, saturación de cada variable contra su cota (mes del primer toque y meses clavada ahí), valores fuera de rango físico, eventos y excepciones | `ADR_020`, `probe/` |
 
 194 tests, todos offline. Cada fase tiene tests de aceptación y hashes dorados que garantizan que
 apagar una feature reproduce exactamente la versión anterior.

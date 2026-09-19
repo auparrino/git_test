@@ -2313,6 +2313,109 @@ def backtest(
     raise SystemExit(backtest_main(args))
 
 
+@app.command()
+def probe(
+    country_id: Annotated[str, typer.Option("--country", help="Paquete de pais.")] = "argentina",
+    run_id: Annotated[
+        str, typer.Option("--run-id", help="Nombre de la corrida de salida.")
+    ] = "main",
+    calibration_run_id: Annotated[
+        str | None,
+        typer.Option(
+            "--calibration",
+            help="run_id de `republica calibrate`. Sin esto: coeficientes del paquete.",
+        ),
+    ] = None,
+    seeds: Annotated[int, typer.Option(help="Semillas por escenario.")] = 10,
+    seed_base: Annotated[int, typer.Option(help="Primera semilla.")] = 1,
+    scenarios: Annotated[
+        Path | None,
+        typer.Option(
+            "--scenarios",
+            help="CSV de escenarios (default `data/countries/<pais>/probe_scenarios.csv`).",
+        ),
+    ] = None,
+    out: Annotated[
+        Path | None,
+        typer.Option("--out", help="Salida (default `data/countries/<pais>/probe/<run-id>/`)."),
+    ] = None,
+    regime_transitions: Annotated[
+        bool,
+        typer.Option(
+            "--regime-transitions/--no-regime-transitions",
+            help="Transiciones de regimen endogenas (ADR 015). Default: apagado.",
+        ),
+    ] = False,
+    series: Annotated[
+        bool,
+        typer.Option("--series/--no-series", help="CSV por semilla-escenario. Default: si."),
+    ] = True,
+) -> None:
+    """`republica probe` (ADR 020): sonda exploratoria del modelo.
+
+    NO es un backtest ni una validacion. El backtest (ADR 014) puntua
+    objetivos contra series reales en ventanas rodantes; la validacion (ADR
+    011 secc. 8) puntua hipotesis registradas antes de correr. La sonda NO
+    PUNTUA NADA: corre unos pocos arranques historicos (declarados en
+    `probe_scenarios.csv`, no en codigo) con muchas semillas y describe el
+    COMPORTAMIENTO del modelo -- terminacion, saturacion de variables
+    contra su cota, valores fuera de rango fisico, eventos y excepciones --
+    buscando sintomas de que algo este mal mecanicamente."""
+    from republica.probe.report import write_report as write_probe_report
+    from republica.probe.runner import run_probe, scenarios_path
+
+    scen_file = scenarios or scenarios_path(country_id)
+    out_dir = out or (country_pack_dir(country_id) / "probe" / run_id)
+    console.print(
+        f"[cyan]Sonda exploratoria (ADR 020)[/cyan] {country_id} run_id={run_id} "
+        f"calibracion={calibration_run_id or 'paquete'} seeds={seeds} "
+        f"escenarios={scen_file} -> {out_dir}"
+    )
+    try:
+        payload = run_probe(
+            out_dir,
+            country_id=country_id,
+            calibration_run_id=calibration_run_id,
+            seeds=seeds,
+            seed_base=seed_base,
+            scenarios_file=scen_file,
+            regime_transitions=regime_transitions,
+            write_series=series,
+            progress=lambda msg: console.print(f"  [dim]{msg}[/dim]"),
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    report_path = write_probe_report(out_dir, payload)
+
+    table = Table(title="Sonda exploratoria (ADR 020) -- NO puntua nada")
+    table.add_column("escenario")
+    table.add_column("pedidos", justify="right")
+    table.add_column("fin (mediana)", justify="right")
+    table.add_column("outcomes")
+    table.add_column("saturadas", justify="right")
+    table.add_column("fuera de rango", justify="right")
+    for sc in payload["scenarios"]:
+        if sc["error"]:
+            table.add_row(
+                sc["label"], str(sc["months_requested"]), "ERROR", sc["error"][:40], "-", "-"
+            )
+            continue
+        outcomes = ", ".join(f"{k} {v}" for k, v in sc["outcomes"].items())
+        table.add_row(
+            sc["label"],
+            str(sc["months_requested"]),
+            f"{sc['end_month_median']:.0f}" if sc["end_month_median"] is not None else "-",
+            outcomes or "-",
+            str(len(sc["saturation"])),
+            str(len(sc["violations"])),
+        )
+    console.print(table)
+    failed = [sc["label"] for sc in payload["scenarios"] if sc["error"]]
+    if failed:
+        console.print(f"[yellow]Escenarios con ERROR (no tumbaron la corrida)[/yellow]: {failed}")
+    console.print(f"[green]OK[/green] {payload['wall_seconds']:.1f}s -> {report_path}")
+
+
 @country_app.command("info")
 def country_info(
     country_id: Annotated[str, typer.Argument(help="Id del paquete (ej. 'argentina').")],
