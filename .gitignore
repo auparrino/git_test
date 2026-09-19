@@ -59,3 +59,6 @@ data/ml/*
 # -- report.md/summary.csv/plots/*.png SI se versionan (el resultado legible
 # y chico), las corridas se reproducen con `republica core run`/`batch`.
 experiments/results/core_hito1/**/*.json
+
+# Worktrees de agentes (sesiones de Claude Code)
+.claude/worktrees/
