@@ -5,6 +5,12 @@ from __future__ import annotations
 from republica.world.config import Coefficients
 from republica.world.economy import MacroCoefficients
 from republica.world.events import ShockAggregate
+from republica.world.recovery import (
+    RecoveryContext,
+    recover_crime,
+    recover_protest,
+    recover_tension,
+)
 from republica.world.state import Policy, WorldState, pos
 
 
@@ -16,6 +22,7 @@ def step_society(
     coeff: Coefficients,
     perceived_inflation_agg: float | None = None,
     macro_coeff: MacroCoefficients | None = None,
+    recovery: RecoveryContext | None = None,
 ) -> WorldState:
     """`prev` es el snapshot `t`; `new` ya tiene el bloque economico en `t+1`
     (salida de `step_economy`). Devuelve `new` con consumer_confidence,
@@ -32,7 +39,16 @@ def step_society(
     `tension_base` (`t_rec · pos(tension − tension_base)`) los meses en que
     la inflacion y el desempleo estan bajos -- unico cambio de este modulo
     bajo el flag, el resto de secc. 5.1-5.5 queda igual.
-    """
+
+    `recovery` (ADR 018, `features.political_recovery`, default `None` =
+    comportamiento de siempre): con un `RecoveryContext` ENGANCHADO (tres
+    meses consecutivos de alivio macro sin ruptura aguda), `social_tension`
+    y `protest_level` reciben el termino de recuperacion hacia su valor de
+    referencia (`world/recovery.py::recover_social`), aplicado sobre el
+    valor ya calculado de secc. 5.3/5.4 y ANTES del `clamp` del motor. Es
+    independiente de `macro_coeff`: el canal `t_rec` de ADR 012 secc. 5
+    sigue corriendo igual, con sus umbrales absolutos (ver ADR 018 secc. 1.5
+    sobre por que ese canal no alcanza)."""
     # 5.1 confianza del consumidor
     inflation_for_cc = (
         perceived_inflation_agg if perceived_inflation_agg is not None else new.inflation
@@ -86,6 +102,10 @@ def step_society(
         )
         if recovering:
             social_tension_new -= macro_coeff.t_rec * pos(social_tension_new - coeff.tension_base)
+    # ADR 018 secc. 2.1: el termino de recuperacion de la tension va ANTES
+    # de la seccion 5.4, para que la protesta de ESTE mes vea la tension ya
+    # aliviada por su termino `pr_t * (tension - tension_base)`.
+    social_tension_new = recover_tension(social_tension_new, recovery)
 
     # 5.4 protesta
     protest_target = (
@@ -98,6 +118,7 @@ def step_society(
         + coeff.pr_adj * (protest_target - prev.protest_level)
         + shocks.term("shock_protest")
     )
+    protest_level_new = recover_protest(protest_level_new, recovery)
 
     # 5.5 percepcion de inseguridad (lenta)
     crime_target = (
@@ -109,6 +130,8 @@ def step_society(
     crime_perception_new = prev.crime_perception + coeff.cr_adj * (
         crime_target - prev.crime_perception
     )
+    # ADR 018: quinta variable, APAGADA por default (`crime_rec = 0.0`).
+    crime_perception_new = recover_crime(crime_perception_new, recovery)
 
     return new.model_copy(
         update={

@@ -6,6 +6,7 @@ from __future__ import annotations
 from republica.world.config import Coefficients
 from republica.world.economy import MacroCoefficients
 from republica.world.events import ShockAggregate
+from republica.world.recovery import RecoveryContext, recover_political
 from republica.world.state import WorldState, clamp, pos
 
 
@@ -18,6 +19,7 @@ def step_politics(
     coeff: Coefficients,
     macro_coeff: MacroCoefficients | None = None,
     months_since_crisis: int = 0,
+    recovery: RecoveryContext | None = None,
 ) -> WorldState:
     """`prev` es el snapshot `t`; `new` ya tiene economia y sociedad en `t+1`
     (salida de `step_society`). Devuelve `new` con government_approval,
@@ -35,6 +37,16 @@ def step_politics(
     del motor, ver Notas de implementacion); y (b) `institutional_confidence`
     recupera hacia `ic_target = ic_target_base + ic_target_bonus ·
     [months_since_crisis >= ic_crisis_free_months]`.
+
+    `recovery` (ADR 018, `features.political_recovery`, default `None` =
+    comportamiento de siempre): con un `RecoveryContext` ENGANCHADO (tres
+    meses consecutivos de alivio macro sin ruptura aguda),
+    `government_approval` e `institutional_confidence` reciben su termino de
+    recuperacion hacia el valor de referencia
+    (`world/recovery.py::recover_political`). Se aplica sobre el valor ya
+    calculado de secc. 5.6/5.8 y ANTES de la seccion 5.9, para que la
+    estabilidad politica del mismo mes vea la aprobacion y la confianza ya
+    recuperadas por los terminos `st_a` y `st_i`.
     """
     # 5.6 aprobacion del gobierno
     delta_wage_pct = (new.real_wage - prev.real_wage) / prev.real_wage * 100.0
@@ -81,6 +93,12 @@ def step_politics(
         institutional_confidence_new += macro_coeff.ic_rec * pos(
             ic_target - institutional_confidence_new
         )
+
+    # ADR 018 secc. 2.1: los dos terminos politicos, sobre los valores ya
+    # calculados de 5.6/5.8 y antes de 5.9.
+    approval_new, institutional_confidence_new = recover_political(
+        approval_new, institutional_confidence_new, recovery
+    )
 
     # 5.9 estabilidad politica
     stability_target = (

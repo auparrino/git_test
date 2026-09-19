@@ -101,6 +101,14 @@ from republica.world.perception import (
 )
 from republica.world.politics import step_politics
 from republica.world.provinces import ProvinceRecord, compute_provinces
+from republica.world.recovery import (
+    PoliticalRecoveryCoefficients,
+    RecoveryContext,
+    RecoveryTracker,
+    advance_recovery,
+    recover_approval,
+    track_rupture,
+)
 from republica.world.regime import (
     RegimeCalendar,
     congress_active,
@@ -479,6 +487,23 @@ class Simulation:
     #: cuando hay `regime_calendar`; sin calendario queda en 0.0
     #: (democracia), que es el caso de Aurora.
     current_repression: float = 0.0
+    #: ADR 018 (`features.political_recovery`, default `False` =
+    #: comportamiento de siempre): recuperacion de `government_approval`,
+    #: `institutional_confidence`, `social_tension` y `protest_level` hacia
+    #: su valor de referencia. Lo prende `run()`, igual que
+    #: `legitimacy_floor_enabled`, y tiene DOBLE compuerta: necesita el flag
+    #: Y `macro_coefficients` (de ahi salen los marcadores de ruptura aguda
+    #: que cierran la compuerta). Con `False`, `advance_month` no calcula ni
+    #: aplica NADA de ADR 018.
+    political_recovery_enabled: bool = False
+    #: Coeficientes de ADR 018 para esta corrida (ver
+    #: `world/recovery.py::PoliticalRecoveryCoefficients`).
+    recovery_coefficients: PoliticalRecoveryCoefficients = field(
+        default_factory=PoliticalRecoveryCoefficients
+    )
+    #: Estado entre meses de ADR 018 (ventana de inflacion y racha de
+    #: alivio). `None` con el flag apagado.
+    recovery_tracker: RecoveryTracker | None = None
 
 
 def new_simulation(
@@ -1299,6 +1324,39 @@ def advance_month(sim: Simulation) -> MonthRecord:
             )
         )
 
+    # -- ADR 018 secc. 2.2: compuerta de alivio macro -----------------------
+    # Se arma ACA (despues del bloque macro, antes de sociedad y politica)
+    # porque es el unico punto del mes en que estan a la vez los cuatro
+    # marcadores de ruptura aguda (`macro_events`, `macro_active_shock_ids`,
+    # `sim.macro_state`) y la economia de `t+1` ya calculada. Con el flag
+    # apagado (default, y unico caso de Aurora) `recovery_ctx` queda en
+    # `None` y las dos etapas corren exactamente como siempre.
+    recovery_ctx: RecoveryContext | None = None
+    if sim.political_recovery_enabled and sim.macro_state is not None:
+        assert sim.recovery_tracker is not None
+        assert sim.macro_coefficients is not None
+        if "fx_regime_exit" in macro_events:
+            sim.fx_exit_month = month
+        rupture = track_rupture(
+            sim.recovery_tracker,
+            inflation=econ_state.inflation,
+            rupture_inflation=sim.macro_coefficients.lf_rupture_inflation,
+            rupture_months=sim.macro_coefficients.lf_rupture_months,
+            banking_crisis=sim.macro_state.banking_crisis_months_left > 0,
+            sovereign_default="sovereign_default" in sim.active_shocks,
+            fx_exit_in_term=sim.fx_exit_month is not None
+            and month - sim.fx_exit_month <= sim.macro_coefficients.lf_exit_window_months,
+        )
+        recovery_ctx = advance_recovery(
+            sim.recovery_tracker,
+            sim.recovery_coefficients,
+            inflation=econ_state.inflation,
+            gdp_growth=econ_state.gdp_growth,
+            unemployment=econ_state.unemployment,
+            unemployment_prev=sim.state.unemployment,
+            rupture=rupture,
+        )
+
     # 5. sociedad (5.1 -> 5.5)
     perceived_inflation_agg = (
         weighted_perceived_inflation(sim.cohorts, sim.cohort_state) if sim.cohorts_enabled else None
@@ -1311,6 +1369,7 @@ def advance_month(sim: Simulation) -> MonthRecord:
         coeff,
         perceived_inflation_agg=perceived_inflation_agg,
         macro_coeff=sim.macro_coefficients if sim.macro_state is not None else None,
+        recovery=recovery_ctx,
     )
 
     # 9. cohortes -> approval agregada (ADR 005 secc. 3), antes del resto de
@@ -1349,8 +1408,15 @@ def advance_month(sim: Simulation) -> MonthRecord:
         months_since_crisis=(
             sim.macro_state.months_since_crisis if sim.macro_state is not None else 0
         ),
+        recovery=recovery_ctx,
     )
     if cohort_approval is not None:
+        # ADR 018: la aprobacion que se publica con `features.cohorts` es la
+        # agregada por cohorte, que pisa la de la seccion 5.6 (abajo). El
+        # termino de recuperacion se aplica tambien sobre ella, si no el
+        # mecanismo no tocaria nunca el campo publicado en Argentina (que
+        # corre con cohortes). Ver `world/recovery.py::recover_approval`.
+        cohort_approval = recover_approval(cohort_approval, recovery_ctx)
         # `government_approval` pasa a ser la agregada por cohorte (secc. 3):
         # mismo patron que `congress_support` derivado un poco mas abajo --
         # `step_politics` corre igual (su `political_stability`/
@@ -1597,6 +1663,8 @@ def run(
     coefficients_by_fx_regime: dict[str, tuple[Coefficients, MacroCoefficients | None]]
     | None = None,
     legitimacy_floor: bool | None = None,
+    political_recovery: bool | None = None,
+    political_recovery_coefficients: PoliticalRecoveryCoefficients | None = None,
 ) -> History:
     """Corre `months` meses (o hasta un fin de partida temprano) y devuelve
     la `History`.
@@ -1669,7 +1737,20 @@ def run(
     resuelve desde `country.features["legitimacy_floor"]` (Argentina lo trae
     en `true`; Aurora no declara el feature y queda apagado, asi que el
     golden de Aurora no se mueve). Se ignora sin `macro_coefficients`: los
-    coeficientes `lf_*` viven en `MacroCoefficients`."""
+    coeficientes `lf_*` viven en `MacroCoefficients`.
+
+    `political_recovery` / `political_recovery_coefficients` (ADR 018,
+    default `None`): termino de recuperacion hacia un valor de referencia
+    para `government_approval`, `institutional_confidence`, `social_tension`
+    y `protest_level`, activo solo tras `relief_months` meses consecutivos
+    de alivio macro sin ruptura aguda. `None` lo resuelve desde
+    `country.features["political_recovery"]` (Argentina lo trae en `true`;
+    Aurora no declara el feature y queda apagado, asi que el golden de
+    Aurora no se mueve). Se ignora sin `macro_coefficients`: los marcadores
+    de ruptura de la compuerta salen de ahi. `political_recovery_
+    coefficients` reemplaza los defaults de
+    `world/recovery.py::PoliticalRecoveryCoefficients` (para tests y para
+    una calibracion futura)."""
     sim = new_simulation(
         seed,
         policy_rule,
@@ -1778,6 +1859,20 @@ def run(
     if legitimacy_floor is None:
         legitimacy_floor = bool(sim.country.features.get("legitimacy_floor", False))
     sim.legitimacy_floor_enabled = bool(legitimacy_floor) and macro_coefficients is not None
+    # ADR 018 (`features.political_recovery`): mismo patron que ADR 016.
+    # `None` = lo decide el paquete de pais (`--country argentina` lo trae en
+    # `true`; Aurora no lo declara y queda en `False`). Doble compuerta: sin
+    # `macro_coefficients` no hay marcadores de ruptura aguda que leer
+    # (`lf_rupture_*`, `banking_crisis_months_left`, `sovereign_default`), y
+    # sin ellos el mecanismo seria la amnistia general que ADR 018 secc. 3.3
+    # prohibe -- asi que queda apagado.
+    if political_recovery is None:
+        political_recovery = bool(sim.country.features.get("political_recovery", False))
+    sim.political_recovery_enabled = bool(political_recovery) and macro_coefficients is not None
+    if political_recovery_coefficients is not None:
+        sim.recovery_coefficients = political_recovery_coefficients
+    if sim.political_recovery_enabled:
+        sim.recovery_tracker = RecoveryTracker()
 
     external_state = (
         init_external_state(bimonetary_coefficients, fx_regime)

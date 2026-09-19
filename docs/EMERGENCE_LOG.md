@@ -132,3 +132,99 @@ sus cotas, no hay fuerza que las devuelva. El piso de legitimidad de ADR 016 sos
 no es calibrar: es darle a esas cuatro un término de recuperación, como ADR 012 §5 hizo con
 `institutional_confidence` y `social_tension` pero midiéndolo contra episodios reales.**
 
+
+---
+
+## La saturación política no es la causa del colapso, y un término de recuperación no la despega
+
+Seguimiento directo del punto 2 de la sonda y del pendiente que quedó arriba ("darle a esas cuatro
+un término de recuperación"). Diseño, hipótesis registrada y medición completa en
+`docs/ADR_018_political_recovery.md`; acá va lo que **no** estaba previsto.
+
+**Configuración**: cinco arranques reales (1983-12, 1991-04, 1998-01, 2003-06, 2019-12), 15
+semillas, calibración `a7_by_regime` con cambio de vector en caliente, todas las features del
+paquete, piso de legitimidad activo, sin shocks ni exógenas históricas.
+
+### 1. La saturación no es causa ni consecuencia del colapso: es pérdida de información
+
+La sonda había dejado abierta la pregunta ("habría que ver si la aprobación toca 0 **antes** del mes
+de terminación"). Medida, la respuesta es que ninguna de las dos lecturas simples es correcta:
+
+| | evidencia |
+|---|---|
+| **No es consecuencia** | Desde 1991-04 las cuatro variables tocan su cota entre los meses 6 y 10 y el `collapse` llega en el 22: 13 a 16 meses después. |
+| **No es causa suficiente** | Desde 1998-01, `social_tension` está en el techo **41 meses seguidos** en 15/15 semillas y **ninguna** corrida termina antes del horizonte. |
+| **Lo que sí es** | Desde 2003-06 la tensión está en 100 durante **103 de los 107 meses** de la corrida *mientras la economía crece*: PBI +3 a +5 %, desempleo de 15,7 % a 9,8 %, inflación −1 %/mes, reservas de 14 878 a 42 276 USD M. La variable dejó de responder al mundo. |
+
+La década de mayor crecimiento reciente, atravesada con la conflictividad social clavada en su
+máximo posible, es un defecto peor que el outcome.
+
+### 2. El canal de aprobación que ADR 016 identificó **no existe** bajo la calibración por régimen
+
+ADR 016 §2.3 concluyó, con `a5b_macro`, que el término dominante de la aprobación era
+`−e_t·pos(tensión − tension_threshold)`. Con `a7_by_regime` ese término vale **exactamente 0.00
+todos los meses de las cinco corridas**, porque la calibración dejó `tension_threshold` en 110,70
+(grupo `peg`) y 110,70/117,05 — **por encima del techo 100 del `ranges`**. El término dominante es
+otro: `−e_pi·pos(π − 0,894)` con `e_pi = 2,083`, que vale **−14 a −41 puntos de aprobación por mes**
+en 1991-04, contra +0,06 a +0,78 de la reversión. Dos calibraciones del mismo modelo producen dos
+diagnósticos incompatibles del mismo colapso. Cualquier hallazgo sobre "qué canal domina" hay que
+fecharlo por calibración.
+
+### 3. El objetivo por encima de la cota: la aritmética que apaga cualquier recuperación aguas abajo
+
+`tension_target` llega a **208** en 1991-04 y a 145 en 2003-06; el techo es 100. Medido, la relación
+de fuerzas contra un término de recuperación de la forma de ADR 012 §5:
+
+```
+empuje al techo          t_adj · (tension_target − 100) = 0.359 · (140 − 100) = +14.4 / mes
+término de recuperación  ts_rec · pos(100 − 35)         = 0.06  ·  65         =  −3.9 / mes
+```
+
+3,7 a 1 en el **mejor** escenario, 10 a 1 en el peor. El mecanismo de ADR 018 se engancha el 72 % de
+los meses en 2003-06 y aun así la saturación sólo baja de 38 % a 28 %. La conclusión, medida: **un
+término `x' += rec·pos(objetivo − x)` no puede despegar una variable cuyo objetivo está por encima
+de su propia cota**, para ningún `rec` que un ancla real sostenga. La corrección no está aguas
+abajo: está en acotar los objetivos de §5.3/§5.4 o en recalibrar el lazo `t_pr`/`pr_t`/`pr_a` con la
+restricción de que sea contractivo.
+
+### 4. `government_approval` no es una variable que el motor integre
+
+Con `features.cohorts` prendido, la aprobación publicada **no** es el `approval_new` de §5.6:
+`engine/simulation.py` la pisa con la suma ponderada de `CohortState.approval_c`, que se recalcula
+cada mes desde el estado por cohorte. Cualquier término aplicado al agregado **se vuelve a aplicar
+de cero todos los meses en vez de acumularse**. No estaba documentado en ningún lado y explica por
+qué la aprobación de 2019-12 no se mueve con ningún coeficiente: para que una recuperación de la
+aprobación se integre tiene que entrar **por cohorte**, en `world/cohorts.py::step_cohorts`.
+
+### 5. `crime_perception` es la variable más saturada del modelo, y es un −50 constante en la aprobación
+
+Confirmado con 15 semillas en esta configuración: `crime_perception` está en el techo 100 el **97 %**
+de la corrida desde 2003-06, 77 % desde 1991-04 y 70 % desde 1998-01 — más que ninguna de las cuatro
+variables del encargo. Y `world/cohorts.py::step_cohorts` la consume como `crime_term =
+crime_perception − 50`: clavada en 100 es una **penalización constante de −50 disfrazada de
+variable** sobre la aprobación publicada. El término de recuperación de ADR 018 la cubre
+(`recover_crime`) pero se envía apagado (`crime_rec = 0.0`): no hay serie de percepción de
+inseguridad y está fuera del alcance. Sensibilidad medida: con `crime_rec = 0.5` la saturación de
+2003-06 cae de 97 % a 24 % sin cambiar un solo outcome.
+
+En el mismo barrido aparecen tres saturaciones contra la cota **buena**, no documentadas hasta acá:
+desde 2019-12 `poverty` está en su **piso (0 %)** el 35 % de la corrida y `real_wage` en su **techo
+(200)** el 29 %; desde 2003-06 `inequality` está en su piso (20) el 42 %. Una pobreza de 0 %
+sostenida es tan implausible como una aprobación de 0 sostenida.
+
+### 6. Lo que el mecanismo sí logró, y el único candado que funcionó de verdad
+
+La compuerta —tres meses consecutivos de alivio macro, con los cuatro marcadores de ruptura de
+ADR 016 cerrándola— **discrimina exactamente como se diseñó**: se engancha el 72 % de los meses
+desde 2003-06 y **cero veces** desde 1991-04 o 1983-12. Por eso los tres discriminantes salen
+**idénticos** con el flag prendido y apagado: hiperinflación desde 1988-06 20/20, no espuria desde
+2003-06 0/20, colapso/default desde 1998-01 con `peg` 19/20, salida del `peg` 17/20. El escenario
+1998-01 + `peg` no cambia **en una sola semilla**. El mecanismo no es una amnistía; es, por ahora,
+casi un no-op.
+
+El único cambio cualitativo: desde 2003-06 la protesta deja de tocar su techo durante los primeros
+ocho años (primer mes en la cota, del **7 al 101**). Es decir, durante la década de crecimiento.
+
+`republica run --country argentina --start 2003-06 --months 150 --calibration a7_by_regime --seed 1`
+con y sin `features.political_recovery`; o `tests/test_political_recovery.py`, secciones 4 y 5, para
+la reproducción determinista.
