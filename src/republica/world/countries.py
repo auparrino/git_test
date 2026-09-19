@@ -237,11 +237,17 @@ def load_country_pack(
     months: int,
     regime_mode: str = "auto",
     initial_state_override: dict[str, float] | None = None,
+    regime_transitions: bool = False,
 ) -> CountryPack:
     """Carga el paquete `country_id`, elige el estado inicial de `start`
     (`YYYY-MM`) y arma un `Country` (`world.config.Country`) para correr
     `months` meses desde ahi. `regime_mode`: `"auto"` o `"democracy"` (ver
     `world/regime.py::build_regime_calendar`).
+
+    `regime_transitions` (ADR 015, `features.regime_endogenous_transitions`,
+    default `False`): prende el modelo de riesgo mensual y siembra el modo
+    inicial del regimen con el dato real de `politics/regimes.csv` para
+    `start`. Apagado, el `RegimeCalendar` sale identico a antes de ADR 015.
 
     `initial_state_override` (A3, `calibration/objective.py`): si se pasa,
     reemplaza la busqueda de `start` en `initial_states` (que solo cubre las
@@ -313,7 +319,13 @@ def load_country_pack(
     bimonetary_coeffs = BimonetaryCoefficients.from_dict(raw_country.get("bimonetary"))
     macro_coeffs = MacroCoefficients.from_dict(raw_country.get("macro"))
     regime_calendar = build_regime_calendar(
-        pack_dir / "politics" / "events.csv", y, m, months, regime_mode
+        pack_dir / "politics" / "events.csv",
+        y,
+        m,
+        months,
+        regime_mode,
+        endogenous_transitions=regime_transitions,
+        regimes_csv=pack_dir / "politics" / "regimes.csv",
     )
     historical_forced = historical_shocks_calendar(pack_dir, y, m, months)
     for month_idx, shock_id in failed_coup_shock_months(pack_dir, y, m, months).items():

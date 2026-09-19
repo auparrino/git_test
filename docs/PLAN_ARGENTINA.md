@@ -118,14 +118,15 @@ Argentina; no son evidencia sobre lo que hubiera pasado.
 
 Hecho: ADR 012 (macro con régimen, 6/6 tests), ADR 013 (tres épocas de partidos/actores/lealtades;
 LLA no gana en el modelo: test en `xfail` con diagnóstico), A5 (`a5b_macro`, tras descartar `a5_macro`
-por el bug del objetivo), A6 (V1–V4) y ADR 014 (backtest 1916–2022, `b1_a5b`).
+por el bug del objetivo), A6 (V1–V4) y ADR 014 (backtest 1916–2022, `b1_a5b`). Después, ADR 015
+(transiciones de régimen endógenas, `features.regime_endogenous_transitions`, default off).
 
 | Hallazgo de esta ronda | Qué sigue |
 |---|---|
 | El calibrado no supera a persistencia ni en train ni en holdout | Calibrar por regímenes (peg / float / control) o por época, no un solo vector para 32 años |
 | Desde 2019-12 el calibrado colapsa (100 %) antes de la elección de 2023 | Revisar la terminación por `collapse` y la recuperación §5 del ADR 012 con datos de aprobación reales (no hay serie) |
 | Brazo calibrado sin dato 1916–1960: los `Coefficients` legacy no reciben señal del objetivo macro y desbordan en modo anual | Excluirlos del vector cuando macro está activo, o dar al modo anual su propio grupo de coeficientes |
-| Régimen: 0 % de acierto cuando la ventana arranca en golpe o democracia restringida | El modelo persiste el régimen inicial; falta un mecanismo de transición endógeno (ADR 011 solo lo tiene por calendario) |
+| ~~Régimen: 0 % de acierto cuando la ventana arranca en golpe o democracia restringida~~ **RESUELTO (ADR 015)** | Causa real: el motor arrancaba SIEMPRE en `democracy` (nunca se le pasaba el régimen inicial real). Se agregó un modelo de riesgo (hazard) mensual Weibull por transición, con las tasas base estimadas por máxima verosimilitud de las 6 dictaduras y los 7 períodos civiles 1916-2023, más `restricted_democracy` como quinto modo, detrás de `features.regime_endogenous_transitions` (default off). Medido (`b2_regime_probe_{off,on}`, 1961-1983, N=138): golpe **0 % → 100 %**, democracia restringida **0 % → 100 %**, dictadura 36,1 % → 63,9 %, democracia 50,0 % → 50,0 % (sin empeorar); total del objetivo régimen **27,5 % → 72,5 % (+44,9 pp)**. Sigue abierto: el 36 % restante del estrato dictadura son las ventanas donde el objetivo es volver a democracia, y ahí el límite es que la corrida termina por `collapse` al mes 10-17 (ver la fila de la terminación por `collapse`), no el hazard |
 | Holdout sin tipo de cambio mensual antes de 1992 | Serie anual/mensual 1960–1991 (script local o mirror), interpolada como se hizo con inflación |
 | Fase 4 con Ollama y APIs oficiales: bloqueadas también desde la sesión en la nube | Correr `scripts/fase4_ollama.sh` y `scripts/fetch_argentina_local.py` desde una red sin proxy |
 

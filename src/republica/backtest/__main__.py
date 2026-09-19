@@ -60,6 +60,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--resume", action="store_true", help="Retoma desde `checkpoint.json` si existe."
     )
     p.add_argument(
+        "--regime-transitions",
+        dest="regime_transitions",
+        action="store_true",
+        default=False,
+        help="Transiciones de regimen endogenas (ADR 015): hazard mensual por transicion "
+        "y modo inicial sembrado de politics/regimes.csv. SIN golpes forzados (ADR 014).",
+    )
+    p.add_argument(
+        "--no-regime-transitions",
+        dest="regime_transitions",
+        action="store_false",
+        help="Apaga ADR 015 (default): maquina de estados de ADR 011 secc. 3.",
+    )
+    p.add_argument(
         "--out",
         type=Path,
         default=None,
@@ -83,7 +97,8 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"Backtest {args.country} run_id={args.run_id} calibracion={args.calibration_run_id} "
         f"t0={args.from_year}..{args.to_year} horizontes={list(args.horizons)} "
-        f"({n_windows} ventanas) seeds={args.seeds} workers={args.workers} -> {out_dir}"
+        f"({n_windows} ventanas) seeds={args.seeds} workers={args.workers} "
+        f"regime_transitions={args.regime_transitions} -> {out_dir}"
     )
 
     t0 = time.perf_counter()
@@ -97,6 +112,7 @@ def main(argv: list[str] | None = None) -> int:
         workers=args.workers,
         seed_base=args.seed_base,
         resume=args.resume,
+        regime_transitions=args.regime_transitions,
         progress=print,
     )
     wall = time.perf_counter() - t0

@@ -210,11 +210,23 @@ revalidación V1–V4 (`a6_macro`, 50 semillas) cumple solo V2 (default/colapso 
 que la pregunta "¿gana LLA?" sigue sin denominador. El backtest rodante 1916–2022 (107 orígenes × 3
 horizontes × 30 semillas × 2 brazos, 8 min) dice en qué condiciones el modelo predice: la calibración
 solo mejora la magnitud de la inflación (+25 pp de acierto), el régimen se acierta 95 % si la ventana
-arranca en democracia y 0 % si arranca en golpe (el modelo persiste el régimen inicial), y la
-dispersión entre semillas correlaciona con el error (Spearman 0,43: sabe cuándo no sabe). Detalle y
-lo que no se puede concluir: [`docs/ADR_014_rolling_backtest.md`](docs/ADR_014_rolling_backtest.md),
+arranca en democracia y 0 % si arranca en golpe, y la dispersión entre semillas correlaciona con el
+error (Spearman 0,43: sabe cuándo no sabe). Detalle y lo que no se puede concluir:
+[`docs/ADR_014_rolling_backtest.md`](docs/ADR_014_rolling_backtest.md),
 [`docs/CALIBRATION_LOG.md`](docs/CALIBRATION_LOG.md) y
 [`data/countries/argentina/backtest/b1_a5b/report.md`](data/countries/argentina/backtest/b1_a5b/report.md).
+
+Ese 0 % del régimen resultó no ser "el modelo persiste el régimen inicial" sino que el motor nunca
+recibía el régimen inicial: arrancaba SIEMPRE en `democracy`. `ADR 015` lo corrige con un modelo de
+riesgo mensual Weibull por transición —tasas base estimadas por máxima verosimilitud de las seis
+dictaduras y los siete períodos civiles 1916–2023— más `restricted_democracy` como quinto modo,
+detrás de `features.regime_endogenous_transitions` (default apagado, golden de Aurora intacto). En la
+muestra 1961–1983 el acierto del régimen pasa de 27,5 % a 72,5 %: 0 % → 100 % cuando la ventana
+arranca en golpe o en democracia restringida, 36 % → 64 % cuando arranca en dictadura y sin empeorar
+cuando arranca en democracia. Lo que queda abierto, con números, en
+[`docs/ADR_015_endogenous_regime_transitions.md`](docs/ADR_015_endogenous_regime_transitions.md):
+las ventanas que fallan son todas aquellas cuyo objetivo es la vuelta a la democracia, y ahí el
+límite no es el hazard sino que la corrida termina por `collapse` al mes 10–17.
 
 ## Lo que viene
 
