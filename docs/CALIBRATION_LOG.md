@@ -1305,3 +1305,56 @@ literalmente plana en 12 meses.
 
 Estos resultados describen el comportamiento de República Artificial calibrada con datos de
 Argentina; no son evidencia sobre lo que hubiera pasado.
+
+---
+
+## Objetivos y umbrales fuera del rango de su propia variable (causa raíz de la saturación)
+
+Encontrado al integrar ADR 018. El agente de ADR 018 midió que un término de recuperación
+`x' += rec·pos(objetivo − x)` no puede despegar una variable saturada cuando el objetivo está por
+encima de la cota: +14.4 puntos por mes de empuje contra −3.9 de recuperación. La pregunta era por
+qué el objetivo estaba ahí, y la respuesta es que la calibración podía ponerlo ahí.
+
+**Lo que `a7_by_regime` dejó**, para variables que `clamp_state` acota a `[0, 100]`:
+
+| parámetro | grupo | valor | variable comparada | cota |
+|---|---|---:|---|---|
+| `approval_reversion` | `peg` | **135.0** | `government_approval` | 100 |
+| `approval_ref` | `peg` | **118.5** | `government_approval` | 100 |
+| `approval_ref` | `control` | **109.6** | `government_approval` | 100 |
+| `crime_base` | `float` | **129.2** | `crime_perception` | 100 |
+| `tension_threshold` | `peg` | **117.0** | `social_tension` | 100 |
+| `tension_threshold` | `float` | **110.7** | `social_tension` | 100 |
+
+Dos formas distintas de romperse, las dos silenciosas:
+
+- **Objetivo por encima del techo.** `rec·(objetivo − x)` nunca cambia de signo, así que empuja la
+  variable contra su cota y la deja clavada ahí para siempre. Es la saturación que la sonda de
+  ADR 020 midió en seis escenarios, y es en buena parte un artefacto de calibración, no una
+  propiedad del modelo.
+- **Umbral por encima del techo.** `pos(x − umbral)` vale siempre 0: el término está muerto y el
+  coeficiente que lo multiplica no significa nada. Es por esto que el canal tensión→aprobación de
+  ADR 016 §2.3 no existía bajo `a7_by_regime`, como ADR 018 reportó sin saber la causa.
+
+**CMA-ES no hizo nada mal**: minimizó la pérdida en un espacio donde esas regiones eran alcanzables.
+El arreglo es no ofrecérselas. `COMPARED_AGAINST_STATE_VAR` en `calibration/parameters.py` mapea
+siete parámetros a la variable de estado que comparan y acota su rango al de esa variable, leído de
+la misma tabla `ranges` que usa `clamp_state`. Es la misma razón por la que `default_risk_threshold`
+ya estaba acotado a `[0, 1]` desde A3, aplicada a una clase entera que se había pasado por alto.
+
+**Un bug adicional que esto destapó**: de las tres ramas de `build_parameter_space`, el grupo
+`coefficients` era la única que **no llamaba a `_apply_physical_bounds`**. Las cotas físicas de A3 y
+A5 se aplicaban a los grupos `bimonetary` y `macro` y no al más grande de los tres.
+
+**Sobre el test de identificabilidad.** Acotar siete dimensiones de 97 corre el punto de arranque
+unas milésimas en el cubo unitario, y la corrida única de CMA-ES que el test fijaba (`seed=9`) pasó
+de 6/10 a 2/10. La identificabilidad no cambió: medida sobre cinco semillas de optimizador con todo
+lo demás igual da `9 → 2`, `42 → 7`, `7 → 5`, `13 → 7`, `21 → 6`; mediana 6 y la 9 es el caso
+atípico. El test pasa a correr tres semillas —incluida la mala, a propósito— y a exigir que la
+mediana llegue al umbral. Cuesta tres corridas en vez de una y mide la propiedad en vez de una
+tirada.
+
+**Pendiente inmediato**: recalibrar. `a7_by_regime` se ajustó con el espacio viejo y con los estados
+iniciales contaminados por el sesgo de anticipación que encontró ADR 019, así que sus coeficientes
+arrastran las dos cosas.
+

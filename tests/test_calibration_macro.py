@@ -582,3 +582,43 @@ def test_objective_weights_default_is_unchanged_and_a_weight_changes_the_scalar(
 
     with pytest.raises(ValueError):
         scalar_objective(metrics, params, x, lambda_reg=0.0, weights={"no_existe": 2.0})
+
+
+# ---------------------------------------------------------------------------
+# Objetivos y umbrales dentro del rango fisico de la variable que comparan.
+# La calibracion `a7_by_regime` dejo `approval_reversion = 135.0` y
+# `tension_threshold = 117.0` para variables acotadas a [0, 100]: un objetivo
+# por encima del techo clava la variable ahi para siempre (ADR 018 midio
+# +14.4/mes de empuje contra -3.9/mes de recuperacion) y un umbral por encima
+# del techo deja el termino muerto en 0. Las dos cosas eran alcanzables
+# porque el grupo `coefficients` era la unica rama de `build_parameter_space`
+# que no pasaba por `_apply_physical_bounds`.
+# ---------------------------------------------------------------------------
+
+
+def test_targets_and_thresholds_stay_inside_their_state_variable_range() -> None:
+    from republica.calibration.parameters import (
+        COMPARED_AGAINST_STATE_VAR,
+        build_parameter_space,
+    )
+    from republica.world.config import load_country
+
+    ranges = load_country().ranges
+    space = {p.name: p for p in build_parameter_space(include_macro=True)}
+    for name, var in COMPARED_AGAINST_STATE_VAR.items():
+        assert name in space, f"{name} ya no esta en el vector: actualiza el mapa"
+        lo_var, hi_var = ranges[var]
+        p = space[name]
+        assert p.lo >= lo_var, f"{name}: lo={p.lo} por debajo del piso de {var} ({lo_var})"
+        assert p.hi <= hi_var, f"{name}: hi={p.hi} por encima del techo de {var} ({hi_var})"
+
+
+def test_every_compared_parameter_maps_to_a_real_state_variable() -> None:
+    """El mapa no puede referirse a una variable que no exista: si alguien
+    renombra una de `WorldState`, este test lo detecta."""
+    from republica.calibration.parameters import COMPARED_AGAINST_STATE_VAR
+    from republica.world.config import load_country
+
+    ranges = load_country().ranges
+    faltantes = sorted(set(COMPARED_AGAINST_STATE_VAR.values()) - set(ranges))
+    assert not faltantes, f"variables de estado inexistentes en el mapa: {faltantes}"

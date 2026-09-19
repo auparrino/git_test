@@ -173,6 +173,50 @@ TIGHTER_BOUNDS_REASON: dict[str, str] = {
     "(ADR 012 secc. 3, columna 'Salida'): es una probabilidad, acotada a [0,1].",
 }
 
+#: Parametro -> variable de `WorldState` contra la que se COMPARA (una
+#: referencia, un objetivo de reversion o un umbral). El rango de esos
+#: parametros tiene que caer DENTRO del rango fisico de esa variable, que
+#: `clamp_state` hace cumplir: es la misma razon que ya acotaba
+#: `default_risk_threshold` a [0,1], aplicada a una clase entera que se
+#: habia pasado por alto.
+#:
+#: Por que importa, con los numeros de `a7_by_regime` (ADR 018, y la sonda
+#: de ADR 020): la calibracion dejo `approval_reversion = 135.0` en el grupo
+#: `peg` y `tension_threshold = 117.0`, para variables acotadas a [0, 100].
+#: Las dos formas de romperse:
+#:
+#: - **Objetivo por encima del techo** (`approval_reversion = 135`,
+#:   `tension_base = 140..208`): el termino `rec * (objetivo - x)` NUNCA
+#:   cambia de signo, asi que empuja a la variable contra su cota y la deja
+#:   clavada ahi para siempre. Ningun termino de recuperacion puede
+#:   despegarla -- ADR 018 lo midio: +14.4/mes de empuje contra -3.9/mes de
+#:   recuperacion. La saturacion que la sonda encontro es, en buena parte,
+#:   un artefacto de calibracion, no una propiedad del modelo.
+#: - **Umbral por encima del techo** (`tension_threshold = 110.7/117.0`):
+#:   `pos(x - umbral)` vale SIEMPRE 0, asi que el termino esta muerto y el
+#:   coeficiente que lo multiplica no significa nada. El canal
+#:   tension->aprobacion de ADR 016 no existia bajo esta calibracion.
+#:
+#: En los dos casos CMA-ES no hace nada malo: minimiza la perdida en un
+#: espacio donde esas regiones son alcanzables. El arreglo es no ofrecerselas.
+COMPARED_AGAINST_STATE_VAR: dict[str, str] = {
+    "approval_ref": "government_approval",
+    "approval_reversion": "government_approval",
+    "tension_base": "social_tension",
+    "tension_threshold": "social_tension",
+    "protest_ref": "protest_level",
+    "crime_base": "crime_perception",
+    "stability_base": "political_stability",
+}
+
+
+def _state_var_ranges() -> dict[str, tuple[float, float]]:
+    """Rangos fisicos de `WorldState` segun Aurora (`ranges` de
+    `country.json`), que es la misma tabla que usa `clamp_state`."""
+    from republica.world.config import load_country
+
+    return {k: (float(lo), float(hi)) for k, (lo, hi) in load_country().ranges.items()}
+
 
 def _default_bounds(value: float) -> tuple[float, float]:
     """`[v/3, 3v]` con signo preservado (ADR: "+-3x el valor de Aurora,
@@ -293,6 +337,12 @@ def _apply_physical_bounds(name: str, lo: float, hi: float) -> tuple[float, floa
         return lo, min(hi, 0.99)
     if name in _PHYSICAL_BOUNDS:
         return _PHYSICAL_BOUNDS[name]
+    var = COMPARED_AGAINST_STATE_VAR.get(name)
+    if var is not None:
+        rango = _state_var_ranges().get(var)
+        if rango is not None:
+            var_lo, var_hi = rango
+            return max(lo, var_lo), min(hi, var_hi)
     return lo, hi
 
 
@@ -326,6 +376,10 @@ def build_parameter_space(include_macro: bool = False) -> list[Parameter]:
             continue
         value = aurora_coeff[name]
         lo, hi = _default_bounds(value)
+        # El grupo `coefficients` no pasaba por `_apply_physical_bounds`:
+        # era la unica de las tres ramas sin ese paso, y es justo donde
+        # viven los objetivos y umbrales de `COMPARED_AGAINST_STATE_VAR`.
+        lo, hi = _apply_physical_bounds(name, lo, hi)
         params.append(Parameter(name=name, group="coefficients", aurora_value=value, lo=lo, hi=hi))
     if include_macro:
         aurora_macro = load_aurora_macro()

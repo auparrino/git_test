@@ -396,12 +396,12 @@ parameters:
     group: coefficients
     aurora_value: 35.0
     lo: 11.666666666666666
-    hi: 105.0
+    hi: 100.0
   - name: tension_threshold
     group: coefficients
     aurora_value: 50.0
     lo: 16.666666666666668
-    hi: 150.0
+    hi: 100.0
   - name: protest_ref
     group: coefficients
     aurora_value: 15.0
@@ -421,12 +421,12 @@ parameters:
     group: coefficients
     aurora_value: 50.0
     lo: 16.666666666666668
-    hi: 150.0
+    hi: 100.0
   - name: approval_reversion
     group: coefficients
     aurora_value: 45.0
     lo: 15.0
-    hi: 135.0
+    hi: 100.0
   - name: congress_ref
     group: coefficients
     aurora_value: 45.0
@@ -441,12 +441,12 @@ parameters:
     group: coefficients
     aurora_value: 50.0
     lo: 16.666666666666668
-    hi: 150.0
+    hi: 100.0
   - name: stability_base
     group: coefficients
     aurora_value: 60.0
     lo: 20.0
-    hi: 180.0
+    hi: 100.0
   - name: transfers_ref
     group: coefficients
     aurora_value: 6.0
