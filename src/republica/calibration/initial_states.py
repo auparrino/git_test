@@ -14,7 +14,15 @@ holdout, no solo desde los 8 hitos.
 
 Reglas de interpolacion (documentadas aca, ADR 011 secc. 7 / tarea A3 punto 1):
 
-- **Series mensuales** (`inflation_cpi_monthly`, `policy_rate_monthly`,
+- **`inflation`/`inflation_lag1`** (ADR 019 secc. 3C): PRIMERO
+  `inflation_cpi_monthly_linked.csv` (BCRA 'Principales Variables' id 27,
+  serie historica empalmada de INDEC, **1943-03+**), mes exacto; despues
+  `inflation_cpi_monthly.csv` (1997-02+); recien despues la anual
+  interpolada. Hasta ADR 019 la primera serie estaba en `history/` y no la
+  leia nadie, asi que TODO arranque anterior a 1997-02 -- la ventana entera
+  de la hiperinflacion, 1983-1991 -- recibia una tasa anual convertida con
+  `(1+a)^(1/12)-1`. El error medido para 1988-06 era de 4.01 pp.
+- **Series mensuales** (`policy_rate_monthly`,
   `reserves_monthly`, `emae_monthly`, `unemployment`, `fiscal_balance`,
   `poverty`, `public_debt`, `gdp_usd`): mes exacto si existe; si no, el punto
   mas cercano dentro de una tolerancia (`max_months`, por variable) --
@@ -297,14 +305,35 @@ def rule_gdp_growth(y: int, m: int, emae, gdp_pc, gdp_usd, default: float) -> di
     return {"value": default, "assumed": True}
 
 
-def rule_inflation(y: int, m: int, monthly: list[Row], annual: list[Row], default: float):
-    exact = _exact(monthly, y, m)
-    if exact is not None:
-        v, sid = exact
-        return {
-            "value": v,
-            "source": f"inflation_cpi_monthly.csv ({sid}), mes exacto {y}-{m:02d}.",
-        }
+def rule_inflation(
+    y: int,
+    m: int,
+    monthly: list[Row],
+    annual: list[Row],
+    default: float,
+    monthly_linked: list[Row] | None = None,
+):
+    """ADR 019 secc. 3C: `inflation_cpi_monthly_linked.csv` (BCRA
+    'Principales Variables' id 27, serie historica empalmada de INDEC,
+    **1943-03+**) tiene PRIORIDAD sobre `inflation_cpi_monthly.csv`
+    (1997-02+) y sobre la anual interpolada. Antes de ADR 019 esta serie
+    estaba en `history/` y no la usaba nadie, asi que todo arranque anterior
+    a 1997-02 -- toda la ventana de hiperinflacion, 1983-1991 -- recibia una
+    tasa ANUAL convertida con `(1+a)^(1/12)-1` en vez del dato mensual real.
+    El error medido para 1988-06 era de **4.01 pp** (13.99 contra 18.0
+    reales), contra un umbral de bifurcacion que 1983-12 cruzaba por 0.28 pp
+    (ADR 019 secc. 1.2)."""
+    for rows, name in (
+        (monthly_linked or [], "inflation_cpi_monthly_linked"),
+        (monthly, "inflation_cpi_monthly"),
+    ):
+        exact = _exact(rows, y, m)
+        if exact is not None:
+            v, sid = exact
+            return {
+                "value": v,
+                "source": f"{name}.csv ({sid}), mes exacto {y}-{m:02d}.",
+            }
     hit = interpolate_annual(annual, y, m)
     if hit is not None:
         v, note = hit
@@ -317,15 +346,23 @@ def rule_inflation(y: int, m: int, monthly: list[Row], annual: list[Row], defaul
     return {"value": default, "assumed": True}
 
 
-def rule_inflation_lag1(y: int, m: int, monthly, annual, current_inflation: float):
+def rule_inflation_lag1(
+    y: int, m: int, monthly, annual, current_inflation: float, monthly_linked=None
+):
+    """Mismo orden de prioridad que `rule_inflation` (ADR 019 secc. 3C),
+    para el mes anterior."""
     py, pm = (y - 1, 12) if m == 1 else (y, m - 1)
-    exact = _exact(monthly, py, pm)
-    if exact is not None:
-        v, sid = exact
-        return {
-            "value": v,
-            "source": f"inflation_cpi_monthly.csv ({sid}), mes exacto {py}-{pm:02d}.",
-        }
+    for rows, name in (
+        (monthly_linked or [], "inflation_cpi_monthly_linked"),
+        (monthly, "inflation_cpi_monthly"),
+    ):
+        exact = _exact(rows, py, pm)
+        if exact is not None:
+            v, sid = exact
+            return {
+                "value": v,
+                "source": f"{name}.csv ({sid}), mes exacto {py}-{pm:02d}.",
+            }
     hit = interpolate_annual(annual, py, pm)
     if hit is not None:
         v, note = hit
@@ -441,6 +478,7 @@ def initial_state_for(date: str) -> dict[str, dict[str, Any]]:
     aurora = load_aurora_defaults()
 
     inflation_monthly = load_series("inflation_cpi_monthly")
+    inflation_monthly_linked = load_series("inflation_cpi_monthly_linked")
     inflation_annual = load_series("inflation_cpi_annual_linked") or load_series(
         "inflation_cpi_annual"
     )
@@ -458,7 +496,14 @@ def initial_state_for(date: str) -> dict[str, dict[str, Any]]:
     v2x_libdem = load_vdem_field("v2x_libdem")
     v2x_civlib = load_vdem_field("v2x_civlib")
 
-    inflation_entry = rule_inflation(y, m, inflation_monthly, inflation_annual, aurora["inflation"])
+    inflation_entry = rule_inflation(
+        y,
+        m,
+        inflation_monthly,
+        inflation_annual,
+        aurora["inflation"],
+        monthly_linked=inflation_monthly_linked,
+    )
     entry: dict[str, dict[str, Any]] = {
         "gdp": rule_assumed(aurora["gdp"], "indice de nivel sin unidad real (base=100 en Aurora)."),
         "real_wage": rule_assumed(
@@ -471,7 +516,12 @@ def initial_state_for(date: str) -> dict[str, dict[str, Any]]:
         "gdp_growth": rule_gdp_growth(y, m, emae, gdp_pc, gdp_usd, aurora["gdp_growth"]),
         "inflation": inflation_entry,
         "inflation_lag1": rule_inflation_lag1(
-            y, m, inflation_monthly, inflation_annual, inflation_entry["value"]
+            y,
+            m,
+            inflation_monthly,
+            inflation_annual,
+            inflation_entry["value"],
+            monthly_linked=inflation_monthly_linked,
         ),
         "unemployment": rule_nearest_direct(
             y, m, unemployment, aurora["unemployment"], "unemployment", max_months=6

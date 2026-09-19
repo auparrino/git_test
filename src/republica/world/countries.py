@@ -23,6 +23,7 @@ import shutil
 import tempfile
 import warnings
 from dataclasses import dataclass, field
+from dataclasses import replace as dataclasses_replace
 from pathlib import Path
 
 from republica.world.bimonetary import BimonetaryCoefficients
@@ -335,6 +336,16 @@ def load_country_pack(
         for date, entry in raw_country.get("initial_states", {}).items()
     }
     macro_x0, macro_m0 = x0_m0_from_gdp_usd(pack_dir, start, macro_coeffs.x0_m0_pct_gdp)
+    # ADR 019 secc. 3B: la semilla del stock de indexacion se resuelve POR
+    # FECHA DE ARRANQUE desde la historia mensual real y viaja dentro de
+    # `MacroCoefficients` (ver `world/economy.py::INDEXATION_FIELDS` para el
+    # porque de que viva ahi y no en `MacroState`). Con el flag apagado el
+    # campo queda seteado pero no lo lee nadie.
+    if macro_coeffs.indexation_state:
+        macro_coeffs = dataclasses_replace(
+            macro_coeffs,
+            idx_seed_history=indexation_seed_history(pack_dir, start, macro_coeffs),
+        )
 
     return CountryPack(
         country=country,
@@ -492,6 +503,54 @@ def _annual_usd_musd(pack_dir: Path, nombre: str, year: int) -> float | None:
         return None
     elegido = year if year in by_year else min(by_year, key=lambda yy: abs(yy - year))
     return by_year[elegido] / 1.0e6
+
+
+#: Serie mensual REAL de inflacion usada para sembrar el stock de
+#: indexacion (ADR 019 secc. 3B). `inflation_cpi_monthly_linked.csv` (BCRA
+#: "Principales Variables" id 27, serie historica empalmada de INDEC) cubre
+#: 1943-03 en adelante -- a diferencia de `inflation_cpi_monthly.csv`, que
+#: arranca en 1997-02 y deja toda la ventana 1983-1991 sin dato mensual.
+INDEXATION_SEED_SERIES = "inflation_cpi_monthly_linked.csv"
+
+
+def indexation_seed_history(
+    pack_dir: Path, start: str, macro_coeff: MacroCoefficients
+) -> tuple[float, ...]:
+    """Inflacion mensual REAL de los `macro_coeff.idx_seed_months` meses
+    ANTERIORES a `start`, en orden cronologico (ADR 019 secc. 3B). Es el
+    insumo de `world/economy.py::seed_indexation`, que es quien arma con
+    esto el stock de indexacion del mes 0 -- aca solo se sirve el dato,
+    porque el calculo depende de coeficientes que pueden venir de una
+    calibracion y no del paquete (ver el docstring de `seed_indexation`).
+
+    Tupla vacia si el paquete no trae `INDEXATION_SEED_SERIES`; los meses
+    sin dato simplemente no aparecen (`seed_indexation` decide si son
+    suficientes). No se interpola ni se rellena: PLAN_ARGENTINA.md secc.
+    0.1."""
+    import csv as _csv
+
+    path = pack_dir / "history" / INDEXATION_SEED_SERIES
+    if not path.exists():
+        return ()
+    by_month: dict[tuple[int, int], float] = {}
+    with path.open(encoding="utf-8", newline="") as fh:
+        for row in _csv.DictReader(fh):
+            try:
+                by_month[(int(row["date"][:4]), int(row["date"][5:7]))] = float(row["value"])
+            except (KeyError, ValueError):
+                continue
+    if not by_month:
+        return ()
+
+    year, month = int(start.split("-")[0]), int(start.split("-")[1])
+    keys: list[tuple[int, int]] = []
+    for _ in range(max(1, int(macro_coeff.idx_seed_months))):
+        month -= 1
+        if month == 0:
+            year, month = year - 1, 12
+        keys.append((year, month))
+    keys.reverse()
+    return tuple(by_month[k] for k in keys if k in by_month)
 
 
 def x0_m0_from_gdp_usd(pack_dir: Path, start: str, x0_m0_pct_gdp: float) -> tuple[float, float]:

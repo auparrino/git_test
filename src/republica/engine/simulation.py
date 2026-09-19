@@ -54,6 +54,7 @@ from republica.world.economy import (
     MacroState,
     apply_historical_shock_effects,
     finalize_exogenous,
+    merge_structural_coefficients,
     step_economy,
     step_exogenous,
     step_macro_economy,
@@ -467,6 +468,16 @@ class Simulation:
     #: Grupo cuyo vector esta activo ahora mismo (`None` hasta el primer
     #: mes con `coefficients_by_fx_regime`).
     active_fx_regime_group: str | None = None
+    #: El `MacroCoefficients` con el que arranco la corrida (el del paquete
+    #: de pais, ya mergeado por el llamador). `_swap_fx_regime_vector` lo usa
+    #: como referencia de los campos ESTRUCTURALES: los vectores por grupo de
+    #: `coefficients_by_fx_regime` salen de un `coefficients.json` que NO los
+    #: trae (ninguna calibracion guarda `lf_*` ni `idx_*`), asi que sin esto
+    #: el primer swap -- que ocurre en el mes 1, porque `active_fx_regime_
+    #: group` arranca en `None` -- los reemplazaba por los defaults de la
+    #: clase y apagaba en silencio ADR 016 y ADR 019. Ver `world/economy.py
+    #: ::LEGITIMACY_FIELDS`/`INDEXATION_FIELDS`.
+    macro_structural_reference: MacroCoefficients | None = None
     #: ADR 016 (`features.legitimacy_floor`, default `False` = comportamiento
     #: de siempre): piso de `political_stability` por mandato constitucional
     #: vigente. Lo prende `run()` despues de `new_simulation()`, igual que
@@ -811,7 +822,17 @@ def _swap_fx_regime_vector(sim: Simulation) -> str | None:
     coeff, macro_coeff = entry
     sim.country = sim.country.model_copy(update={"coefficients": coeff})
     if macro_coeff is not None:
-        sim.macro_coefficients = macro_coeff
+        # Los campos ESTRUCTURALES (ADR 016 `lf_*`, ADR 019 `idx_*`) no
+        # viajan en un `coefficients.json` calibrado: se toman siempre del
+        # vector con el que arranco la corrida, igual que hace
+        # `cli.py`/`validation/argentina.py` con el vector inicial. Sin
+        # esto, el swap del mes 1 apagaba ADR 019 entero (y dejaba los
+        # `lf_*` en los defaults de la clase en vez de los del paquete).
+        sim.macro_coefficients = (
+            merge_structural_coefficients(macro_coeff, sim.macro_structural_reference)
+            if sim.macro_structural_reference is not None
+            else macro_coeff
+        )
     first = sim.active_fx_regime_group is None
     sim.active_fx_regime_group = group
     return None if first else group
@@ -1823,6 +1844,7 @@ def run(
             # deriva de `gdp_usd` en `world/countries.py::x0_m0_from_gdp_usd`.
             debt_init = (pct_gdp / 100.0) * (x0_for_debt * 12.0 / macro_coefficients.x0_m0_pct_gdp)
         sim.macro_coefficients = macro_coefficients
+        sim.macro_structural_reference = macro_coefficients
         sim.macro_state = MacroState(
             fx_regime=resolved_fx_regime,
             pi_anchor_ema=sim.state.inflation,
