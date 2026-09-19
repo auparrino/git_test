@@ -49,6 +49,26 @@
    se ve en `localhost:11434` solo si Ollama escucha en `0.0.0.0` (`setx OLLAMA_HOST 0.0.0.0` en
    Windows y reiniciar el servicio), y conviene exportar `OLLAMA_HOST` antes de correr.
 
+## Modelos que razonan (qwen3, deepseek-r1): apagá el razonamiento
+
+Los modelos híbridos traen el modo razonamiento **prendido por default**, y eso rompe esto de dos
+maneras a la vez. Medido en una máquina real con `qwen3:8b`, antes del arreglo:
+
+| | |
+|---|---|
+| `parse_rate` | **0.50** (umbral: 0.95) |
+| tokens de respuesta (media) | **918**, cuando el JSON que se espera necesita ~120 |
+| latencia p50 | 72 s por decisión |
+
+El modelo gastaba casi todo el presupuesto de `num_predict` razonando en voz alta y el JSON salía
+truncado. No era lentitud: era que la respuesta no llegaba a terminar.
+
+Desde el arreglo, el backend manda `"think": false` por default. Un modelo que no soporta esa clave
+responde `400` y el backend reintenta solo, sin ella, así que no hay que configurar nada. Esperable:
+la respuesta baja a unos 120 tokens y la latencia con ella. Para volver a prenderlo,
+`REPUBLICA_OLLAMA_THINK=1`. Si aun así el JSON sale cortado, subí el tope con
+`REPUBLICA_OLLAMA_NUM_PREDICT=1500`.
+
 ## Cuánto tarda (y por qué parece colgado)
 
 Cada decisión de un actor es una llamada al modelo con un prompt de 700–800 tokens. En CPU sin

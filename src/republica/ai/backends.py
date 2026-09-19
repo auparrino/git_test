@@ -41,6 +41,24 @@ DEFAULT_TIMEOUT_SECONDS = 60.0
 #: Reintentos en error de parseo (ADR 004 secc. 2, literal: "Reintento x2").
 MAX_PARSE_RETRIES = 2
 
+#: Modo razonamiento de los modelos hibridos (qwen3, deepseek-r1, ...).
+#: Por default se APAGA (`"think": false` en el payload): con el razonamiento
+#: prendido el modelo gasta el presupuesto de `num_predict` en su monologo
+#: antes del JSON, y el `ActorDecision` sale truncado o sucio -- medido en
+#: una maquina real con `qwen3:8b`: 918 tokens de respuesta para un payload
+#: que necesita ~120, y `parse_rate` 0.50. `REPUBLICA_OLLAMA_THINK=1` lo
+#: vuelve a prender. Un modelo que no soporta la clave responde `400` y el
+#: backend reintenta solo, sin ella (ver `complete`).
+THINK_ENV = "REPUBLICA_OLLAMA_THINK"
+
+#: `num_predict` por entorno, para subirlo sin tocar codigo.
+NUM_PREDICT_ENV = "REPUBLICA_OLLAMA_NUM_PREDICT"
+
+
+def _think_enabled() -> bool:
+    return os.environ.get(THINK_ENV, "0").strip().lower() in ("1", "true", "yes")
+
+
 #: Progreso por llamada a stderr (`REPUBLICA_OLLAMA_PROGRESS=0` lo apaga).
 #: Sin esto, `bench-parse`/`run` con un modelo en CPU se quedan callados
 #: varios minutos por decision y parecen colgados -- fue lo primero que se
@@ -72,6 +90,21 @@ class OllamaUnavailableError(RuntimeError):
         self.host = host
         self.cause = cause
         super().__init__(f"No se pudo conectar con Ollama en {host}: {cause}")
+
+
+class OllamaHTTPError(RuntimeError):
+    """El servidor respondio, pero con un codigo de error.
+
+    Separada de `OllamaUnavailableError` (que es "no se pudo hablar con el
+    servidor") porque aca SI hay un cuerpo de respuesta con el motivo, y
+    porque el caso mas comun -- un `400` diciendo que el modelo no soporta
+    `think` -- se recupera solo reintentando sin esa clave."""
+
+    def __init__(self, host: str, status: int, body: str) -> None:
+        self.host = host
+        self.status = status
+        self.body = body
+        super().__init__(f"Ollama en {host} respondio {status}: {body[:300]}")
 
 
 @dataclass
@@ -145,7 +178,16 @@ class OllamaBackend:
             except ValueError:
                 pass
         self.timeout = timeout
+        env_np = os.environ.get(NUM_PREDICT_ENV)
+        if num_predict == DEFAULT_NUM_PREDICT and env_np:
+            try:
+                num_predict = int(env_np)
+            except ValueError:
+                pass
         self.num_predict = num_predict
+        #: Se apaga solo si el servidor rechaza la clave `think` (modelo sin
+        #: soporte): a partir de ahi esta instancia no la manda mas.
+        self._send_think = not _think_enabled()
         #: Llamadas hechas y segundos acumulados, solo para el progreso.
         self._calls = 0
         self._elapsed_s = 0.0
@@ -162,7 +204,14 @@ class OllamaBackend:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310
                 raw = response.read().decode("utf-8")
-        except (urllib.error.URLError, OSError) as exc:  # incluye HTTPError y timeouts
+        except urllib.error.HTTPError as exc:  # el servidor contesto, con error
+            body = ""
+            try:
+                body = exc.read().decode("utf-8", errors="replace")
+            except Exception:  # noqa: BLE001 - el cuerpo es opcional
+                body = ""
+            raise OllamaHTTPError(self.host, exc.code, body) from exc
+        except (urllib.error.URLError, OSError) as exc:  # no se pudo hablar
             raise OllamaUnavailableError(self.host, exc) from exc
         latency_ms = (time.perf_counter() - t0) * 1000.0
         self._calls += 1
@@ -197,7 +246,7 @@ class OllamaBackend:
         max_attempts = 1 + MAX_PARSE_RETRIES
         while attempts < max_attempts:
             attempts += 1
-            payload = {
+            payload: dict[str, Any] = {
                 "model": self.model,
                 "messages": [
                     {"role": "system", "content": system},
@@ -211,8 +260,27 @@ class OllamaBackend:
                 },
                 "stream": False,
             }
-            data, latency_ms = self._post(payload)
-            text = data.get("message", {}).get("content", "")
+            if self._send_think:
+                payload["think"] = False
+            try:
+                data, latency_ms = self._post(payload)
+            except OllamaHTTPError as exc:
+                # Un modelo sin modo razonamiento rechaza la clave `think`
+                # con un 400; se reintenta una vez sin ella y esta instancia
+                # deja de mandarla. Cualquier otro error HTTP sube.
+                if not (self._send_think and exc.status == 400 and "think" in exc.body.lower()):
+                    raise
+                self._send_think = False
+                payload.pop("think", None)
+                data, latency_ms = self._post(payload)
+            message = data.get("message", {})
+            text = message.get("content", "")
+            if not text.strip() and message.get("thinking"):
+                # El servidor mando el razonamiento aparte y dejo `content`
+                # vacio: el JSON no llego a generarse dentro de `num_predict`.
+                # Se deja el texto del razonamiento para que la traza muestre
+                # que paso, en vez de un `parse_error` sobre una cadena vacia.
+                text = str(message["thinking"])
             try:
                 parsed = json.loads(text)
             except json.JSONDecodeError as exc:

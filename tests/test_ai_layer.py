@@ -508,3 +508,78 @@ def test_ollama_backend_raises_a_typed_error_when_the_server_is_unreachable() ->
         backend.complete(system="s", user="u", schema={"type": "object"}, temperature=0.0, seed=1)
     assert "127.0.0.1:9" in str(excinfo.value)
     assert excinfo.value.host == "http://127.0.0.1:9"
+
+
+def test_ollama_payload_disables_thinking_by_default(fake_ollama_server) -> None:
+    """Medido en una maquina real con `qwen3:8b`: con el razonamiento
+    prendido el modelo gasta el presupuesto de `num_predict` en su monologo
+    y el `ActorDecision` sale truncado (918 tokens de respuesta, `parse_rate`
+    0.50). El payload tiene que pedir `think: false`."""
+    backend = OllamaBackend(model="qwen3:8b", host=f"http://127.0.0.1:{fake_ollama_server}")
+    backend.complete(
+        system="s",
+        user="u",
+        schema=ActorDecision.model_json_schema(),
+        temperature=0.4,
+        seed=42,
+    )
+    assert _FixedOllamaHandler.captured_body.get("think") is False
+
+
+class _NoThinkOllamaHandler(_FixedOllamaHandler):
+    """Servidor que rechaza `think` con un 400, como un modelo sin modo
+    razonamiento, y acepta el reintento sin esa clave."""
+
+    rejected = 0
+
+    def do_POST(self) -> None:  # noqa: N802 - metodo de http.server
+        length = int(self.headers["Content-Length"])
+        body = json.loads(self.rfile.read(length))
+        if "think" in body:
+            type(self).rejected += 1
+            payload = json.dumps({"error": "model does not support thinking"}).encode("utf-8")
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+        _FixedOllamaHandler.captured_body = body
+        response = {
+            "model": body["model"],
+            "message": {
+                "role": "assistant",
+                "content": json.dumps(_FixedOllamaHandler.response_payload),
+            },
+            "prompt_eval_count": 10,
+            "eval_count": 20,
+        }
+        payload = json.dumps(response).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+
+def test_ollama_retries_without_think_when_the_model_rejects_it() -> None:
+    """Un modelo sin modo razonamiento devuelve 400 ante `think`. El backend
+    tiene que reintentar UNA vez sin la clave y no volver a mandarla."""
+    _NoThinkOllamaHandler.rejected = 0
+    server = HTTPServer(("127.0.0.1", 0), _NoThinkOllamaHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        backend = OllamaBackend(
+            model="sin-think", host=f"http://127.0.0.1:{server.server_address[1]}"
+        )
+        schema = ActorDecision.model_json_schema()
+        first = backend.complete(system="s", user="u", schema=schema, temperature=0.4, seed=1)
+        assert first.parsed is not None
+        assert _NoThinkOllamaHandler.rejected == 1
+        # La segunda llamada ya no manda `think`: no hay un rechazo nuevo.
+        backend.complete(system="s", user="u", schema=schema, temperature=0.4, seed=2)
+        assert _NoThinkOllamaHandler.rejected == 1
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
