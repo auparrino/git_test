@@ -1438,3 +1438,54 @@ supera a persistencia, y ahora además perdió su única ventaja medible.
 Estos resultados describen el comportamiento de República Artificial calibrada con datos de
 Argentina; no son evidencia sobre lo que hubiera pasado.
 
+### Estratificación de la caída: dos causas distintas, no una
+
+Hecha inmediatamente después, sobre los dos `windows.csv`. Separa las ventanas **mensuales**
+(1961+, estado inicial real mes a mes) de las **anuales interpoladas** (1916–1960, donde el estado
+inicial es el de Aurora y no un dato real, ADR 011 §6).
+
+| objetivo | tramo | `b3_a7` | `b4_clean` | Δ |
+|---|---|---:|---:|---:|
+| Magnitud de la inflación | mensual (N=372) | 23.9 % | 21.5 % | −2.4 |
+| Magnitud de la inflación | **anual (N=270)** | 40.7 % | **23.0 %** | **−17.8** |
+| Dirección de la inflación | mensual | 52.4 % | 46.8 % | **−5.6** |
+| Dirección de la inflación | anual | 37.0 % | 37.0 % | 0.0 |
+| Crisis | mensual | 52.7 % | 41.9 % | **−10.8** |
+| Crisis | anual | 100.0 % | 100.0 % | 0.0 |
+
+Y el brazo calibrado solo, en magnitud de la inflación: mensual **37.1 % → 31.7 %** (−5.4), anual
+**45.2 % → 9.6 % (−35.6)**.
+
+**La conclusión es que las tres lecturas del bloque anterior estaban mal planteadas como
+alternativas: hay dos causas distintas actuando sobre objetivos distintos.**
+
+1. **La caída de la magnitud es del tramo anual** (−35.6 pp contra −5.4 del mensual). Es la
+   lectura 2 y tiene mecanismo: ADR 019 hace que la indexación sea un estado con inercia
+   **sembrado desde la historia real previa al arranque**, y en modo anual esa historia no existe
+   —el estado inicial es el de Aurora—, así que el mecanismo nuevo arranca desde una semilla
+   ficticia. Con el dato real (mensual) pierde 5 puntos; sin dato real pierde 36. Además, el
+   45.2 % anterior era el número que ADR 017 §9.4 ya había marcado como no interpretable: ese
+   brazo corría **contra la guarda numérica** de `world/annual.py`. Comparar contra él era
+   comparar contra ruido acotado.
+2. **Las caídas de dirección y de crisis son enteramente del tramo mensual** (−5.6 y −10.8, con
+   0.0 exacto en el anual). Ahí no hay excusa de dato: es una pérdida real de capacidad
+   predictiva en el período donde el modelo tiene series completas, y es la lectura 1. La de
+   crisis es la más grande y la menos explicada: los mecanismos de ADR 018 y ADR 019 hacen que el
+   modelo termine menos veces por colapso, y el objetivo "crisis" del backtest puntúa
+   justamente la ocurrencia de colapso/default/hiperinflación dentro de la ventana. Dejar de
+   colapsar de más mejora la sonda y empeora este objetivo: es la misma regresión que se ve en
+   1998-01, medida sobre 372 ventanas.
+
+**Un artefacto de medición que conviene arreglar antes de sacar más conclusiones**: el objetivo
+"crisis" da **100.0 % en las 270 ventanas anuales, en los dos backtests**. Un objetivo que acierta
+siempre no está midiendo nada; lo más probable es que en modo anual no haya forma de que el modelo
+produzca una crisis y que la serie real tampoco marque ninguna en esas ventanas, así que "no hay
+crisis" acierta por construcción. Eso infla el número global de crisis de los dos backtests por
+igual y habría que excluirlo o puntuarlo aparte.
+
+**Qué se hace con esto.** La caída de la magnitud no requiere acción sobre el modelo: requiere
+cubrir el estado inicial pre-1961 o excluir el tramo anual de la comparación, que es lo que ADR 017
+ya recomendaba. La caída de crisis en el tramo mensual sí es sustantiva y es el próximo trabajo:
+hay que decidir si el modelo debe colapsar menos (mejor descripción de 2003 y 2019) o más (mejor
+acierto del objetivo crisis), y esa decisión no se toma calibrando.
+
