@@ -1358,3 +1358,83 @@ tirada.
 iniciales contaminados por el sesgo de anticipación que encontró ADR 019, así que sus coeficientes
 arrastran las dos cosas.
 
+---
+
+## Cierre de la cuarta ronda: `a9_clean`, `a10_clean`, sonda `a9`, backtest `b4_clean`
+
+Las cuatro corridas salen del mismo estado del repo: ADR 018 (recuperación política), ADR 019
+(indexación como estado y dato inicial corregido), ADR 020 (sonda), más la corrección de los
+objetivos y umbrales fuera de rango. **El resultado es contradictorio entre herramientas, y esa
+contradicción es lo más importante que dejó la ronda.**
+
+### Lo que mejoró: episodios curados
+
+Validación `a10_clean` contra `a8_a7`, 50 semillas:
+
+| prueba | `a8_a7` | `a10_clean` | real |
+|---|---|---|---|
+| V1, hiperinflación desde 1988-06 | 0 % **NO CUMPLIDA** | **100 % CUMPLIDA** | ocurrió |
+| V2, default/colapso 1998→2002 | 66 % CUMPLIDA | **84 % CUMPLIDA** | ocurrió |
+| V3, inflación 2016→2023 | 496.2 % NO CUMPLIDA | 279.6 % NO CUMPLIDA | 135 % |
+| V4, mandato y derrota 2019→2023 | 383.4 %, derrota 100 % | **201.2 %, derrota 100 %** | **211 %**, derrota |
+
+V1 no había pasado en tres rondas. Y la inflación final de V4 queda a **diez puntos** del dato real:
+es la primera vez que el modelo acierta una *magnitud* de inflación y no solo su dirección.
+
+Sonda `a9` contra la de referencia:
+
+| arranque | antes | después | real |
+|---|---|---|---|
+| 2003-06 | colapso mes 120 | **150 completos** | década de crecimiento |
+| 1991-04 | colapso mes 44 | mes 96 | 120 meses estables |
+| 2019-12 | derrota 9/10 | **derrota 10/10** | derrota |
+| 1998-01 | colapso mes 41 | **60 completos** | default en el mes 47 |
+
+La última fila es una regresión: el modelo dejó de colapsar de más y pasó a colapsar de menos ahí.
+
+### Lo que empeoró: generalización
+
+Backtest `b4_clean` (321 ventanas, 1916–2022) contra `b3_a7`, **mismo protocolo**:
+
+| objetivo | `b3_a7` | `b4_clean` | Δ |
+|---|---:|---:|---:|
+| Dirección de la inflación | 46.0 % | 42.7 % | **−3.3** |
+| Magnitud de la inflación | 31.0 % | 22.1 % | **−8.9** |
+| Crisis | 72.6 % | 66.4 % | **−6.2** |
+| Golpe | 65.9 % | 58.0 % | **−8.0** |
+| Régimen | 90.4 % | 91.8 % | +1.4 |
+| Elección | 48.1 % | 53.6 % | +5.4 |
+
+**El dato más duro**: en magnitud de la inflación, el brazo calibrado pasó de **40.5 % contra 21.5 %
+de Aurora** a **22.4 % contra 21.8 %**. La calibración perdió por completo su única ventaja clara
+sobre el modelo sin calibrar. Era el resultado que el ADR 014 citaba como "la calibración cumple lo
+que optimizó"; ya no lo cumple.
+
+### Qué significa esto, sin adornos
+
+Cuatro episodios elegidos a mano mejoran mucho y 321 ventanas rodantes empeoran. Las lecturas
+posibles, ninguna verificada todavía:
+
+1. **La calibración anterior acertaba por la razón equivocada.** Los parámetros fuera de rango
+   (`approval_reversion = 135`) y el sesgo de anticipación en los estados iniciales daban
+   grados de libertad espurios que ajustaban la magnitud de la inflación. Quitarlos quitó también
+   el ajuste. Bajo esta lectura, `b3_a7` sobreestimaba la capacidad real del modelo y `b4_clean`
+   la mide mejor: el número honesto es el peor.
+2. **Los mecanismos nuevos ayudan donde hay dato y estorban donde no.** El backtest incluye
+   1916–1960 en modo anual, donde el estado inicial es el de Aurora y no un dato real; las mejoras
+   de ADR 019 dependen justamente del dato inicial.
+3. **Sobreajuste a los cuatro episodios.** Es la lectura más incómoda y la menos probable de las
+   tres, porque ADR 018 y ADR 019 no se ajustaron contra V1–V4 sino contra mecanismos, pero no se
+   puede descartar sin estratificar el backtest.
+
+**Cómo distinguirlas**, y es el próximo trabajo: estratificar `b4_clean` contra `b3_a7` por
+`frequency` (mensual contra anual interpolado) y por década. Si la caída se concentra en las
+ventanas anuales, es la lectura 2 y se arregla cubriendo el estado inicial pre-1961. Si es pareja,
+es la 1, y entonces el modelo siempre fue peor de lo que decíamos.
+
+**Nada de esto se resuelve calibrando más.** Es la tercera ronda seguida en que la calibración no
+supera a persistencia, y ahora además perdió su única ventaja medible.
+
+Estos resultados describen el comportamiento de República Artificial calibrada con datos de
+Argentina; no son evidencia sobre lo que hubiera pasado.
+
