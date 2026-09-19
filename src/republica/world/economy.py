@@ -355,6 +355,23 @@ INDEXATION_FIELDS = (
     "idx_seed_history",
 )
 
+#: Campos de ADR 021, estructurales por el MISMO motivo que los dos grupos
+#: de arriba: `cred_adj` y `cred_rho` estan anclados en los tres episodios
+#: reales de desinflacion (Austral 1985, Convertibilidad 1991 y la
+#: estabilizacion de 2024, medidos sobre `history/
+#: inflation_cpi_monthly_linked.csv`, tabla en ADR 021 secc. 3). Meterlos a
+#: CMA-ES antes de verificar el mecanismo confundiria el diagnostico: si la
+#: desinflacion sale, hay que poder decir si salio por el mecanismo o por el
+#: ajuste. Se anotan con `StructuralFloat`/`bool` para quedar fuera de
+#: `calibration/parameters.py::MACRO_TUNABLE`, que sigue en 58 campos.
+CREDIBILITY_FIELDS = (
+    "credibility_channel",
+    "cred_adj",
+    "cred_adj_down",
+    "cred_rho",
+    "cred_surplus_full",
+)
+
 
 def seed_indexation(
     history: tuple[float, ...] | list[float], macro_coeff: MacroCoefficients
@@ -410,7 +427,7 @@ def merge_structural_coefficients(
     paquete de pais."""
     from dataclasses import replace
 
-    names = LEGITIMACY_FIELDS + INDEXATION_FIELDS
+    names = LEGITIMACY_FIELDS + INDEXATION_FIELDS + CREDIBILITY_FIELDS
     return replace(calibrated, **{name: getattr(pack, name) for name in names})
 
 
@@ -581,6 +598,50 @@ class MacroCoefficients:
     #: convierte un dato inicial con +-4 pp de error en un veredicto
     #: cualitativo (ADR 019 secc. 1.3/1.4).
     indexation_state: bool = False
+
+    # -- ADR 021: desinflacion por credibilidad del programa --
+    #: Prende el canal de credibilidad. Apagado (default), `rho_eff` queda
+    #: exactamente como lo dejo ADR 019 y `credibility` nunca se calcula.
+    credibility_channel: bool = False
+    #: Velocidad con que se gana/pierde credibilidad (ajuste parcial por
+    #: mes). 0.45 sale de los tres episodios reales de desinflacion que el
+    #: repo tiene medidos (`history/inflation_cpi_monthly_linked.csv`,
+    #: tabla en ADR 021 secc. 3): Austral 1985, Convertibilidad 1991 y la
+    #: estabilizacion de 2024 arrancan las tres en 25-27 %/mes y halvan la
+    #: inflacion en los meses 2, 1 y 3 respectivamente -- mediana 2. Con
+    #: ajuste parcial, 0.45 pone la credibilidad en 1-(1-0.45)^2 = 0.70 a
+    #: los dos meses, que es donde el efecto tiene que estar casi pleno.
+    cred_adj: StructuralFloat = 0.25
+    #: Velocidad de PERDIDA de credibilidad, mayor que la de ganancia: un
+    #: programa se desarma mas rapido de lo que se construye. Sin esta
+    #: asimetria la compuerta enganchaba con un solo mes fiscal bueno
+    #: suelto, y le daba credibilidad al 1988 argentino (medido: la
+    #: hiperinflacion desde 1988-06 caia de 15/20 semillas a 6/20, rompiendo
+    #: el discriminante H4 de ADR 021 secc. 5). Con 0.60 contra 0.25, una
+    #: secuencia alternada de meses buenos y malos deja la credibilidad
+    #: cerca de 0, que es lo que corresponde a un plan que no se sostiene.
+    cred_adj_down: StructuralFloat = 0.60
+    #: Cuanto recorta la credibilidad plena la persistencia BASE de precios
+    #: (`rho_pi`). 0.60: con credibilidad 0.70 da `rho_eff = 0.85 · (1 −
+    #: 0.6·0.70) = 0.49`, y desde 25.5 %/mes la trayectoria simulada cae
+    #: entre la de 1991 (25 -> 11 -> 5.5) y la de 2024 (25.5 -> 20.6 ->
+    #: 13.2), que son los dos extremos observados. Sin este canal, con
+    #: credibilidad plena `rho_eff` se quedaria en `rho_pi = 0.85` y la
+    #: inflacion recien se halvaria en 4.3 meses: mas lento que los TRES
+    #: episodios reales. Un programa creible no solo quita el exceso de
+    #: inercia, baja la inercia por debajo de su nivel normal porque los
+    #: contratos se desindexan de golpe (ADR 021 secc. 4).
+    cred_rho: StructuralFloat = 0.60
+    #: Superavit primario (% del PIB) que da credibilidad fiscal PLENA. Los
+    #: tres programas que desinflacionaron de verdad tuvieron una correccion
+    #: fiscal grande, no solo un deficit por debajo del limite monetizable:
+    #: la estabilizacion de 2024 corrio con ~1.8 % de superavit primario. Con
+    #: 1.0 se pide la mitad de eso para credito pleno. La version anterior de
+    #: esta compuerta pedia `deficit <= financeable` (2 % de DEFICIT) y le
+    #: daba credibilidad 0.07-0.12 al 1988 argentino, que tuvo deficits de
+    #: 4-5 puntos con episodios sueltos abajo de 2: rompia el discriminante
+    #: H4 de ADR 021 secc. 5. Medido y documentado en las Notas.
+    cred_surplus_full: StructuralFloat = 1.0
     #: Velocidad de ajuste del stock de indexacion hacia su objetivo
     #: (`indexation += idx_adj·(idx_target - indexation)`). 0.12 da una
     #: media vida de `ln 2 / (-ln 0.88) = 5.4` meses, dentro de la banda de
@@ -677,6 +738,11 @@ class MacroState:
     #: -- o sea nunca en una corrida sin `macro_coefficients`, que es la que
     #: protege el golden de Aurora).
     indexation: float | None = None
+    #: ADR 021: credibilidad del programa de estabilizacion, en [0, 1]. Se
+    #: gana cumpliendo DOS condiciones observables a la vez (ancla nominal
+    #: defendible y deficit financiable sin emitir) y se pierde en cuanto
+    #: cualquiera falla. `None` = el canal esta apagado.
+    credibility: float | None = None
 
     def to_dict(self) -> dict:
         from dataclasses import asdict
@@ -736,6 +802,9 @@ class MacroAux:
     #: `indexation_state` apagado (ADR 012 puro).
     indexation: float | None = None
     idx_target: float | None = None
+    #: ADR 021: credibilidad del programa con la que se calculo `rho_eff`
+    #: este mes. `None` con `credibility_channel` apagado.
+    credibility: float | None = None
 
 
 def step_macro_economy(
@@ -900,15 +969,80 @@ def step_macro_economy(
 
     exchange_rate_new = state.exchange_rate * (1.0 + de / 100.0)
 
+    # -- ADR 021: credibilidad del programa de estabilizacion --
+    #
+    # El modelo podia hiperinflacionar y no podia desinflacionar. La causa
+    # NO era solo `rho_eff`: con `fx_regime = control` el ancla de precios
+    # es `macro.pi_anchor_ema`, una media movil de la PROPIA inflacion, asi
+    # que el ancla persigue al nivel y el mapa queda en pendiente 1 por mas
+    # que `rho_eff` sea 0.52 (medido desde 2023-12: 24.8 -> 25.4 -> 25.9
+    # con `rho_eff = 0.52`). Un programa creible no solo desindexa: fija un
+    # ancla nominal, y el modelo no tenia forma de expresar eso bajo
+    # controles de cambio.
+    #
+    # `control` SI es un regimen anclado: `de = control_de_admin`, un
+    # deslizamiento administrado. Es exactamente el caso de 2024 (cepo
+    # vigente y crawl anunciado del 2 % mensual como ancla). El diseno
+    # original de ADR 021 secc. 4 exigia `peg`/`crawl` y por eso no
+    # enganchaba en el unico escenario que motivo el ADR; corregido y
+    # documentado en las Notas de implementacion.
+    #
+    # La credibilidad no se declara: se gana cumpliendo dos condiciones que
+    # el motor mide mes a mes, y se pierde en cuanto una falla. `fiscal_ok`
+    # depende de lo que el gobierno simulado haga con el gasto, no de un
+    # parametro: una corrida donde no se ajusta NO desinflaciona.
+    if not macro_coeff.credibility_channel:
+        credibility_new: float | None = None
+        cred = 0.0
+    else:
+        anclado = fx_regime_next in ("peg", "crawl", "control")
+        # Un ancla que se acaba de romper no es creible, y es un evento que
+        # el propio motor produce (`fx_regime_exit`, ADR 012 secc. 3). Se usa
+        # esto en vez de `reserves >= r_min` porque `r_min` son tres meses de
+        # importaciones CALCULADAS, que con inflacion alta crecen mas rapido
+        # que cualquier stock de reservas (medido desde 2023-12: r_min pasa
+        # de 39 555 a 65 716 en tres meses) -- la condicion nunca se cumpliria
+        # y el mecanismo quedaria muerto por una razon mecanica, no economica.
+        ancla_ok = anclado and "fx_regime_exit" not in events
+        # El cumplimiento fiscal es CONTINUO, no binario: 1.0 con las
+        # cuentas equilibradas o en superavit, 0.0 cuando el deficit llega al
+        # limite financiable sin emitir. Un umbral binario hacia que la
+        # credibilidad parpadeara con el ruido del gasto simulado.
+        # Se pide SUPERAVIT, no un deficit chico: ver `cred_surplus_full`.
+        fiscal_factor = clamp(-deficit / max(macro_coeff.cred_surplus_full, 1e-6), 0.0, 1.0)
+        cred_target = fiscal_factor if ancla_ok else 0.0
+        credibility_prev = 0.0 if macro.credibility is None else macro.credibility
+        # Asimetrico: cuesta ganarla y es rapido perderla.
+        tasa = macro_coeff.cred_adj if cred_target > credibility_prev else macro_coeff.cred_adj_down
+        credibility_new = clamp(
+            credibility_prev + tasa * (cred_target - credibility_prev), 0.0, 1.0
+        )
+        cred = credibility_new
+
     # -- secc. 2: precios con expectativas y dominancia fiscal --
     if fx_regime == "peg":
         pi_anchor = 0.0 + structure.pi_world
     elif fx_regime == "crawl":
         pi_anchor = macro_coeff.crawl_rate + structure.pi_world
+    elif fx_regime == "control" and cred > 0.0:
+        # ADR 021: con credibilidad, el ancla bajo controles es la tasa
+        # administrada, no la media movil de la propia inflacion. Se mezcla
+        # por credibilidad para que no haya un salto discontinuo el primer
+        # mes que la compuerta engancha.
+        anclado_rate = macro_coeff.control_de_admin + structure.pi_world
+        pi_anchor = (1.0 - cred) * macro.pi_anchor_ema + cred * anclado_rate
     else:
         pi_anchor = macro.pi_anchor_ema
 
-    pi_exp = macro_coeff.w_adapt * state.inflation_lag1 + (1.0 - macro_coeff.w_adapt) * pi_anchor
+    # ADR 021: la credibilidad ANCLA las expectativas. Sin este canal el
+    # mecanismo no alcanza: con `w_adapt` alto, `pi_exp` sigue pegado a la
+    # inflacion pasada y sostiene el nivel por mas que `rho_eff` baje
+    # (medido: con credibilidad plena y solo los otros dos canales, la
+    # inflacion caia de 25 a 20.5 %/mes en un mes, contra el 25 -> 11 de la
+    # convertibilidad). Con credibilidad plena la expectativa ES el ancla,
+    # que es la definicion de un programa creible.
+    w_eff = macro_coeff.w_adapt * (1.0 - cred)
+    pi_exp = w_eff * state.inflation_lag1 + (1.0 - w_eff) * pi_anchor
     #: Valor SIN MEMORIA de ADR 012 secc. 2: la rampa en el nivel del mes
     #: anterior. Es lo que corre con `indexation_state` apagado, y tambien
     #: el fallback de la semilla de ADR 019 cuando el paquete no resolvio
@@ -941,6 +1075,15 @@ def step_macro_economy(
             indexation_prev + macro_coeff.idx_adj * (idx_target - indexation_prev), 0.0, 2.0
         )
         rho_eff = macro_coeff.rho_pi + macro_coeff.rho_slope * indexation_new
+    if macro_coeff.credibility_channel:
+        # Dos canales (ADR 021 secc. 4): la credibilidad recorta la
+        # persistencia BASE y ademas apaga la rampa de indexacion. Con
+        # credibilidad 0 el resultado es identico al de ADR 019.
+        rampa = indexation_new if macro_coeff.indexation_state else idx_memoryless
+        rho_eff = macro_coeff.rho_pi * (1.0 - macro_coeff.cred_rho * cred) + (
+            macro_coeff.rho_slope * (rampa or 0.0) * (1.0 - cred)
+        )
+
     money_demand = macro_coeff.md_0 * math.exp(-macro_coeff.md_pi * state.inflation_lag1)
     financeable = (
         macro_coeff.financeable_default
@@ -1109,6 +1252,7 @@ def step_macro_economy(
         x0=macro.x0,
         m0=macro.m0,
         indexation=indexation_new,
+        credibility=credibility_new,
     )
 
     new_state = state.model_copy(
@@ -1154,5 +1298,6 @@ def step_macro_economy(
         seigniorage_pressure=seigniorage_pressure,
         indexation=indexation_new,
         idx_target=idx_target,
+        credibility=credibility_new,
     )
     return new_state, aux, macro_aux, new_macro, events, pending

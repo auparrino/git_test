@@ -242,7 +242,7 @@
   "terminal": {
     "collapse_stability": 15.0,
     "collapse_months": 3,
-    "hyper_inflation": 20.0,
+    "hyper_inflation": 50.0,
     "hyper_months": 3,
     "devaluation_reserves": 500.0,
     "devaluation_cooldown_months": 6,
@@ -358,7 +358,12 @@
       "indexation_state": true,
       "idx_adj": 0.12,
       "idx_accel_k": 2.0,
-      "idx_seed_months": 24
+      "idx_seed_months": 24,
+      "credibility_channel": true,
+      "cred_adj": 0.25,
+      "cred_rho": 0.6,
+      "cred_adj_down": 0.6,
+      "cred_surplus_full": 1.0
     }
   },
   "initial_states": {

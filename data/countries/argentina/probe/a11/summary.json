@@ -1,0 +1,1485 @@
+{
+  "tool": "probe",
+  "adr": "ADR 020",
+  "country": "argentina",
+  "calibration": "a9_clean",
+  "seeds": 10,
+  "seed_base": 1,
+  "regime_transitions": true,
+  "scenarios_file": "data/countries/argentina/probe_scenarios.csv",
+  "wall_seconds": 17.75,
+  "scenarios": [
+    {
+      "label": "1983-12",
+      "start": "1983-12",
+      "months_requested": 72,
+      "expected": "Vuelta a la democracia. Plan Austral (1985) y despues el Austral II; la hiperinflacion llego recien en 1989, en el mes 66 de esta ventana.",
+      "error": "",
+      "wall_seconds": 2.44,
+      "seeds_run": 10,
+      "seeds_failed": 0,
+      "outcomes": {
+        "defeated": 9,
+        "hyperinflation": 1
+      },
+      "end_month_median": 72.0,
+      "end_month_min": 71,
+      "end_month_max": 72,
+      "seeds_full_horizon": 9,
+      "saturation": [
+        {
+          "variable": "institutional_confidence",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 7.0,
+          "months_at_bound_median": 66.0,
+          "share_at_bound_median": 0.9166666666666666
+        },
+        {
+          "variable": "political_stability",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 11.0,
+          "months_at_bound_median": 62.0,
+          "share_at_bound_median": 0.8611111111111112
+        },
+        {
+          "variable": "real_wage",
+          "bound": "hi",
+          "bound_value": 200.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 11.0,
+          "months_at_bound_median": 62.0,
+          "share_at_bound_median": 0.8611111111111112
+        },
+        {
+          "variable": "government_approval",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 13.0,
+          "months_at_bound_median": 59.0,
+          "share_at_bound_median": 0.8194444444444444
+        },
+        {
+          "variable": "interest_rate",
+          "bound": "hi",
+          "bound_value": 300.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 16.0,
+          "months_at_bound_median": 57.0,
+          "share_at_bound_median": 0.7916666666666666
+        },
+        {
+          "variable": "exchange_rate",
+          "bound": "hi",
+          "bound_value": 1000000.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 35.5,
+          "months_at_bound_median": 37.5,
+          "share_at_bound_median": 0.5208333333333333
+        },
+        {
+          "variable": "poverty",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 38.0,
+          "months_at_bound_median": 35.0,
+          "share_at_bound_median": 0.4861111111111111
+        },
+        {
+          "variable": "consumer_confidence",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 34,
+          "months_at_bound_median": 27,
+          "share_at_bound_median": 0.375
+        },
+        {
+          "variable": "inequality",
+          "bound": "lo",
+          "bound_value": 20.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 49.0,
+          "months_at_bound_median": 24.0,
+          "share_at_bound_median": 0.3333333333333333
+        },
+        {
+          "variable": "protest_level",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 32.0,
+          "months_at_bound_median": 19.5,
+          "share_at_bound_median": 0.27083333333333337
+        },
+        {
+          "variable": "crime_perception",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 8.0,
+          "months_at_bound_median": 15.0,
+          "share_at_bound_median": 0.20833333333333334
+        },
+        {
+          "variable": "social_tension",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 22.5,
+          "months_at_bound_median": 7.5,
+          "share_at_bound_median": 0.10416666666666666
+        },
+        {
+          "variable": "reserves",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 11.0,
+          "months_at_bound_median": 6.0,
+          "share_at_bound_median": 0.08333333333333334
+        }
+      ],
+      "events": [
+        {
+          "event": "agreement_honored:gov_buenos_aires:restore_transfers",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 2.0
+        },
+        {
+          "event": "agreement_honored:biz_agro:tax_exemption",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 4.0
+        },
+        {
+          "event": "fx_regime_exit",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 5.0
+        },
+        {
+          "event": "fx_vector_switch:float",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 6.0
+        },
+        {
+          "event": "forced_devaluation",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 7.0
+        },
+        {
+          "event": "agreement_honored:gov_cordoba:restore_transfers",
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 10
+        },
+        {
+          "event": "agreement_honored:gov_caba:restore_transfers",
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 11
+        },
+        {
+          "event": "election:pj",
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 72
+        },
+        {
+          "event": "term_end:defeated",
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 72
+        },
+        {
+          "event": "agreement_honored:gov_mendoza:restore_transfers",
+          "seeds": 5,
+          "seeds_total": 10,
+          "first_month_median": 11
+        },
+        {
+          "event": "agreement_honored:gov_rio_negro:restore_transfers",
+          "seeds": 4,
+          "seeds_total": 10,
+          "first_month_median": 12.5
+        },
+        {
+          "event": "agreement_honored:gov_entre_rios:restore_transfers",
+          "seeds": 1,
+          "seeds_total": 10,
+          "first_month_median": 11
+        },
+        {
+          "event": "agreement_honored:gov_misiones:restore_transfers",
+          "seeds": 1,
+          "seeds_total": 10,
+          "first_month_median": 17
+        },
+        {
+          "event": "hyperinflation",
+          "seeds": 1,
+          "seeds_total": 10,
+          "first_month_median": 71
+        }
+      ],
+      "violations": [],
+      "exceptions": []
+    },
+    {
+      "label": "1991-04",
+      "start": "1991-04",
+      "months_requested": 120,
+      "expected": "Arranque de la convertibilidad. Una decada de tipo de cambio fijo e inflacion de un digito anual; el regimen aguanto los 120 meses completos.",
+      "error": "",
+      "wall_seconds": 4.58,
+      "seeds_run": 10,
+      "seeds_failed": 0,
+      "outcomes": {
+        "survived": 10
+      },
+      "end_month_median": 120.0,
+      "end_month_min": 120,
+      "end_month_max": 120,
+      "seeds_full_horizon": 10,
+      "saturation": [
+        {
+          "variable": "institutional_confidence",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 18.0,
+          "months_at_bound_median": 103.0,
+          "share_at_bound_median": 0.8583333333333333
+        },
+        {
+          "variable": "political_stability",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 1.0,
+          "months_at_bound_median": 102.0,
+          "share_at_bound_median": 0.85
+        },
+        {
+          "variable": "real_wage",
+          "bound": "hi",
+          "bound_value": 200.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 22.5,
+          "months_at_bound_median": 98.5,
+          "share_at_bound_median": 0.8208333333333333
+        },
+        {
+          "variable": "government_approval",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 30.0,
+          "months_at_bound_median": 89.0,
+          "share_at_bound_median": 0.7416666666666667
+        },
+        {
+          "variable": "social_tension",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 41.0,
+          "months_at_bound_median": 77.5,
+          "share_at_bound_median": 0.6458333333333334
+        },
+        {
+          "variable": "inequality",
+          "bound": "lo",
+          "bound_value": 20.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 51.0,
+          "months_at_bound_median": 70.0,
+          "share_at_bound_median": 0.5833333333333334
+        },
+        {
+          "variable": "poverty",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 51.0,
+          "months_at_bound_median": 70.0,
+          "share_at_bound_median": 0.5833333333333334
+        },
+        {
+          "variable": "protest_level",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 31.0,
+          "months_at_bound_median": 66.0,
+          "share_at_bound_median": 0.55
+        },
+        {
+          "variable": "unemployment",
+          "bound": "lo",
+          "bound_value": 2.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 65.5,
+          "months_at_bound_median": 51.5,
+          "share_at_bound_median": 0.4291666666666667
+        },
+        {
+          "variable": "exchange_rate",
+          "bound": "hi",
+          "bound_value": 1000000.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 82.5,
+          "months_at_bound_median": 38.5,
+          "share_at_bound_median": 0.3208333333333333
+        },
+        {
+          "variable": "crime_perception",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 11.0,
+          "months_at_bound_median": 16.5,
+          "share_at_bound_median": 0.1375
+        },
+        {
+          "variable": "interest_rate",
+          "bound": "hi",
+          "bound_value": 300.0,
+          "seeds": 6,
+          "seeds_total": 10,
+          "first_month_median": 113.5,
+          "months_at_bound_median": 7.5,
+          "share_at_bound_median": 0.0625
+        },
+        {
+          "variable": "gdp",
+          "bound": "hi",
+          "bound_value": 400.0,
+          "seeds": 1,
+          "seeds_total": 10,
+          "first_month_median": 117,
+          "months_at_bound_median": 4,
+          "share_at_bound_median": 0.03333333333333333
+        },
+        {
+          "variable": "reserves",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 3,
+          "seeds_total": 10,
+          "first_month_median": 22,
+          "months_at_bound_median": 1,
+          "share_at_bound_median": 0.008333333333333333
+        }
+      ],
+      "events": [
+        {
+          "event": "agreement_honored:gov_buenos_aires:restore_transfers",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 2.0
+        },
+        {
+          "event": "agreement_honored:biz_agro:tax_exemption",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 4.0
+        },
+        {
+          "event": "agreement_honored:gov_cordoba:restore_transfers",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 5.0
+        },
+        {
+          "event": "fx_regime_exit",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 8.0
+        },
+        {
+          "event": "fx_vector_switch:float",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 9.0
+        },
+        {
+          "event": "agreement_honored:gov_caba:restore_transfers",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 20.0
+        },
+        {
+          "event": "agreement_honored:gov_rio_negro:restore_transfers",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 24.0
+        },
+        {
+          "event": "election:ucr",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 72.0
+        },
+        {
+          "event": "term_end:survived",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 120.0
+        },
+        {
+          "event": "forced_devaluation",
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 18
+        },
+        {
+          "event": "agreement_honored:gov_mendoza:restore_transfers",
+          "seeds": 8,
+          "seeds_total": 10,
+          "first_month_median": 48.0
+        },
+        {
+          "event": "agreement_honored:gov_entre_rios:restore_transfers",
+          "seeds": 6,
+          "seeds_total": 10,
+          "first_month_median": 53.0
+        },
+        {
+          "event": "agreement_honored:gov_misiones:restore_transfers",
+          "seeds": 5,
+          "seeds_total": 10,
+          "first_month_median": 70
+        },
+        {
+          "event": "banking_crisis",
+          "seeds": 3,
+          "seeds_total": 10,
+          "first_month_median": 8
+        },
+        {
+          "event": "agreement_broken:biz_agro:tax_exemption:government",
+          "seeds": 2,
+          "seeds_total": 10,
+          "first_month_median": 13.0
+        },
+        {
+          "event": "agreement_honored:gov_tucuman:restore_transfers",
+          "seeds": 1,
+          "seeds_total": 10,
+          "first_month_median": 71
+        }
+      ],
+      "violations": [],
+      "exceptions": []
+    },
+    {
+      "label": "1998-01",
+      "start": "1998-01",
+      "months_requested": 60,
+      "expected": "Ultimo ano de crecimiento antes de la recesion 1999-2001. Default y salida del peg en 2001-12, el mes 47 de esta ventana.",
+      "error": "",
+      "wall_seconds": 2.0,
+      "seeds_run": 10,
+      "seeds_failed": 0,
+      "outcomes": {
+        "survived": 10
+      },
+      "end_month_median": 60.0,
+      "end_month_min": 60,
+      "end_month_max": 60,
+      "seeds_full_horizon": 10,
+      "saturation": [
+        {
+          "variable": "crime_perception",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 13.0,
+          "months_at_bound_median": 31.0,
+          "share_at_bound_median": 0.5166666666666666
+        },
+        {
+          "variable": "political_stability",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 1.0,
+          "months_at_bound_median": 29.5,
+          "share_at_bound_median": 0.4916666666666667
+        },
+        {
+          "variable": "real_wage",
+          "bound": "hi",
+          "bound_value": 200.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 40.5,
+          "months_at_bound_median": 20.5,
+          "share_at_bound_median": 0.3416666666666667
+        },
+        {
+          "variable": "government_approval",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 13.0,
+          "months_at_bound_median": 16.5,
+          "share_at_bound_median": 0.275
+        },
+        {
+          "variable": "protest_level",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 47.0,
+          "months_at_bound_median": 13.5,
+          "share_at_bound_median": 0.225
+        },
+        {
+          "variable": "institutional_confidence",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 32.0,
+          "months_at_bound_median": 7.5,
+          "share_at_bound_median": 0.125
+        },
+        {
+          "variable": "reserves",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 28,
+          "months_at_bound_median": 4,
+          "share_at_bound_median": 0.06666666666666667
+        },
+        {
+          "variable": "social_tension",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 56,
+          "months_at_bound_median": 4,
+          "share_at_bound_median": 0.06666666666666667
+        }
+      ],
+      "events": [
+        {
+          "event": "agreement_honored:biz_agro:tax_exemption",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 4.0
+        },
+        {
+          "event": "agreement_honored:gov_buenos_aires:restore_transfers",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 9.5
+        },
+        {
+          "event": "fx_regime_exit",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 9.5
+        },
+        {
+          "event": "fx_vector_switch:float",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 10.5
+        },
+        {
+          "event": "forced_devaluation",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 26.0
+        },
+        {
+          "event": "agreement_honored:gov_caba:restore_transfers",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 29.0
+        },
+        {
+          "event": "election:ucr",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 48.0
+        },
+        {
+          "event": "term_end:survived",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 60.0
+        },
+        {
+          "event": "agreement_honored:gov_rio_negro:restore_transfers",
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 17
+        },
+        {
+          "event": "agreement_honored:gov_cordoba:restore_transfers",
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 28
+        },
+        {
+          "event": "agreement_broken:biz_agro:tax_exemption:government",
+          "seeds": 6,
+          "seeds_total": 10,
+          "first_month_median": 10.0
+        },
+        {
+          "event": "agreement_honored:gov_mendoza:restore_transfers",
+          "seeds": 6,
+          "seeds_total": 10,
+          "first_month_median": 34.0
+        },
+        {
+          "event": "agreement_honored:gov_entre_rios:restore_transfers",
+          "seeds": 5,
+          "seeds_total": 10,
+          "first_month_median": 41
+        },
+        {
+          "event": "banking_crisis",
+          "seeds": 2,
+          "seeds_total": 10,
+          "first_month_median": 9.0
+        },
+        {
+          "event": "agreement_broken:biz_agro:tax_exemption:actor",
+          "seeds": 1,
+          "seeds_total": 10,
+          "first_month_median": 13
+        },
+        {
+          "event": "agreement_broken:gov_rio_negro:restore_transfers:government",
+          "seeds": 1,
+          "seeds_total": 10,
+          "first_month_median": 20
+        },
+        {
+          "event": "agreement_broken:gov_mendoza:restore_transfers:government",
+          "seeds": 1,
+          "seeds_total": 10,
+          "first_month_median": 29
+        },
+        {
+          "event": "agreement_honored:gov_misiones:restore_transfers",
+          "seeds": 1,
+          "seeds_total": 10,
+          "first_month_median": 45
+        }
+      ],
+      "violations": [],
+      "exceptions": []
+    },
+    {
+      "label": "2003-06",
+      "start": "2003-06",
+      "months_requested": 150,
+      "expected": "Salida de la crisis. La decada de mayor crecimiento reciente; sin colapso ni hiperinflacion en toda la ventana.",
+      "error": "",
+      "wall_seconds": 5.22,
+      "seeds_run": 10,
+      "seeds_failed": 0,
+      "outcomes": {
+        "survived": 10
+      },
+      "end_month_median": 150.0,
+      "end_month_min": 150,
+      "end_month_max": 150,
+      "seeds_full_horizon": 10,
+      "saturation": [
+        {
+          "variable": "political_stability",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 39.0,
+          "months_at_bound_median": 112.0,
+          "share_at_bound_median": 0.7466666666666667
+        },
+        {
+          "variable": "real_wage",
+          "bound": "hi",
+          "bound_value": 200.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 46.0,
+          "months_at_bound_median": 105.0,
+          "share_at_bound_median": 0.7
+        },
+        {
+          "variable": "social_tension",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 47.0,
+          "months_at_bound_median": 104.0,
+          "share_at_bound_median": 0.6933333333333334
+        },
+        {
+          "variable": "protest_level",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 43.0,
+          "months_at_bound_median": 100.0,
+          "share_at_bound_median": 0.6666666666666666
+        },
+        {
+          "variable": "government_approval",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 48.5,
+          "months_at_bound_median": 93.5,
+          "share_at_bound_median": 0.6233333333333333
+        },
+        {
+          "variable": "inequality",
+          "bound": "lo",
+          "bound_value": 20.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 70.0,
+          "months_at_bound_median": 81.0,
+          "share_at_bound_median": 0.54
+        },
+        {
+          "variable": "poverty",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 71.0,
+          "months_at_bound_median": 80.0,
+          "share_at_bound_median": 0.5333333333333333
+        },
+        {
+          "variable": "unemployment",
+          "bound": "lo",
+          "bound_value": 2.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 58.0,
+          "months_at_bound_median": 78.0,
+          "share_at_bound_median": 0.52
+        },
+        {
+          "variable": "reserves",
+          "bound": "hi",
+          "bound_value": 200000.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 93.5,
+          "months_at_bound_median": 57.5,
+          "share_at_bound_median": 0.3833333333333333
+        },
+        {
+          "variable": "institutional_confidence",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 96.0,
+          "months_at_bound_median": 55.0,
+          "share_at_bound_median": 0.3666666666666667
+        },
+        {
+          "variable": "crime_perception",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 5.0,
+          "months_at_bound_median": 35.0,
+          "share_at_bound_median": 0.23333333333333334
+        },
+        {
+          "variable": "gdp",
+          "bound": "hi",
+          "bound_value": 400.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 137.0,
+          "months_at_bound_median": 14.0,
+          "share_at_bound_median": 0.09333333333333334
+        },
+        {
+          "variable": "congress_support",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 145.0,
+          "months_at_bound_median": 6.0,
+          "share_at_bound_median": 0.04
+        },
+        {
+          "variable": "exchange_rate",
+          "bound": "hi",
+          "bound_value": 1000000.0,
+          "seeds": 1,
+          "seeds_total": 10,
+          "first_month_median": 150,
+          "months_at_bound_median": 1,
+          "share_at_bound_median": 0.006666666666666667
+        }
+      ],
+      "events": [
+        {
+          "event": "agreement_broken:biz_agro:tax_exemption:government",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 6.0
+        },
+        {
+          "event": "agreement_broken:biz_agro:tax_exemption:actor",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 10.0
+        },
+        {
+          "event": "agreement_honored:gov_rio_negro:restore_transfers",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 33.0
+        },
+        {
+          "event": "agreement_honored:gov_buenos_aires:restore_transfers",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 36.5
+        },
+        {
+          "event": "agreement_honored:biz_agro:tax_exemption",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 39.0
+        },
+        {
+          "event": "agreement_honored:gov_cordoba:restore_transfers",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 44.0
+        },
+        {
+          "event": "election:fpv_pj",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 48.0
+        },
+        {
+          "event": "election:fpv_fdt_pj",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 144.0
+        },
+        {
+          "event": "term_end:survived",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 150.0
+        },
+        {
+          "event": "agreement_broken:gov_buenos_aires:restore_transfers:government",
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 15
+        },
+        {
+          "event": "agreement_broken:gov_buenos_aires:restore_transfers:actor",
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 19
+        },
+        {
+          "event": "agreement_broken:gov_cordoba:restore_transfers:government",
+          "seeds": 8,
+          "seeds_total": 10,
+          "first_month_median": 3.0
+        },
+        {
+          "event": "agreement_broken:gov_cordoba:restore_transfers:actor",
+          "seeds": 8,
+          "seeds_total": 10,
+          "first_month_median": 7.0
+        },
+        {
+          "event": "agreement_honored:gov_caba:restore_transfers",
+          "seeds": 8,
+          "seeds_total": 10,
+          "first_month_median": 47.5
+        },
+        {
+          "event": "agreement_broken:gov_rio_negro:restore_transfers:government",
+          "seeds": 7,
+          "seeds_total": 10,
+          "first_month_median": 11
+        },
+        {
+          "event": "agreement_honored:gov_entre_rios:restore_transfers",
+          "seeds": 7,
+          "seeds_total": 10,
+          "first_month_median": 48
+        },
+        {
+          "event": "agreement_honored:gov_mendoza:restore_transfers",
+          "seeds": 6,
+          "seeds_total": 10,
+          "first_month_median": 68.5
+        },
+        {
+          "event": "election:pj_disidente",
+          "seeds": 6,
+          "seeds_total": 10,
+          "first_month_median": 96.0
+        },
+        {
+          "event": "agreement_broken:gov_rio_negro:restore_transfers:actor",
+          "seeds": 4,
+          "seeds_total": 10,
+          "first_month_median": 25.0
+        },
+        {
+          "event": "agreement_broken:gov_mendoza:restore_transfers:government",
+          "seeds": 3,
+          "seeds_total": 10,
+          "first_month_median": 9
+        },
+        {
+          "event": "agreement_broken:gov_mendoza:restore_transfers:actor",
+          "seeds": 3,
+          "seeds_total": 10,
+          "first_month_median": 13
+        },
+        {
+          "event": "agreement_honored:gov_misiones:restore_transfers",
+          "seeds": 3,
+          "seeds_total": 10,
+          "first_month_median": 93
+        },
+        {
+          "event": "agreement_honored:gov_tucuman:restore_transfers",
+          "seeds": 3,
+          "seeds_total": 10,
+          "first_month_median": 94
+        },
+        {
+          "event": "agreement_broken:gov_entre_rios:restore_transfers:government",
+          "seeds": 1,
+          "seeds_total": 10,
+          "first_month_median": 33
+        }
+      ],
+      "violations": [],
+      "exceptions": []
+    },
+    {
+      "label": "2015-12",
+      "start": "2015-12",
+      "months_requested": 48,
+      "expected": "Cambio de gobierno con salida del cepo. Mandato completo de 48 meses y derrota del oficialismo en la eleccion de 2019.",
+      "error": "",
+      "wall_seconds": 1.74,
+      "seeds_run": 10,
+      "seeds_failed": 0,
+      "outcomes": {
+        "defeated": 9,
+        "collapse": 1
+      },
+      "end_month_median": 48.0,
+      "end_month_min": 45,
+      "end_month_max": 48,
+      "seeds_full_horizon": 9,
+      "saturation": [
+        {
+          "variable": "government_approval",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 11.0,
+          "months_at_bound_median": 35.0,
+          "share_at_bound_median": 0.7416666666666667
+        },
+        {
+          "variable": "social_tension",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 17.0,
+          "months_at_bound_median": 32.0,
+          "share_at_bound_median": 0.6666666666666666
+        },
+        {
+          "variable": "consumer_confidence",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 20.5,
+          "months_at_bound_median": 23.5,
+          "share_at_bound_median": 0.48958333333333337
+        },
+        {
+          "variable": "institutional_confidence",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 29.5,
+          "months_at_bound_median": 19.5,
+          "share_at_bound_median": 0.40625
+        },
+        {
+          "variable": "reserves",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 35.0,
+          "months_at_bound_median": 12.0,
+          "share_at_bound_median": 0.25
+        },
+        {
+          "variable": "protest_level",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 21.0,
+          "months_at_bound_median": 7.5,
+          "share_at_bound_median": 0.15625
+        },
+        {
+          "variable": "inequality",
+          "bound": "hi",
+          "bound_value": 75.0,
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 46,
+          "months_at_bound_median": 3,
+          "share_at_bound_median": 0.0625
+        }
+      ],
+      "events": [
+        {
+          "event": "agreement_broken:gov_cordoba:restore_transfers:government",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 4.0
+        },
+        {
+          "event": "agreement_broken:gov_rio_negro:restore_transfers:government",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 16.0
+        },
+        {
+          "event": "forced_devaluation",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 34.0
+        },
+        {
+          "event": "agreement_broken:gov_buenos_aires:restore_transfers:government",
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 15
+        },
+        {
+          "event": "agreement_broken:gov_buenos_aires:restore_transfers:actor",
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 18
+        },
+        {
+          "event": "agreement_honored:biz_agro:tax_exemption",
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 42
+        },
+        {
+          "event": "election:fpv_fdt_pj",
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 48
+        },
+        {
+          "event": "term_end:defeated",
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 48
+        },
+        {
+          "event": "agreement_broken:gov_cordoba:restore_transfers:actor",
+          "seeds": 8,
+          "seeds_total": 10,
+          "first_month_median": 8.0
+        },
+        {
+          "event": "agreement_broken:biz_agro:tax_exemption:government",
+          "seeds": 8,
+          "seeds_total": 10,
+          "first_month_median": 20.5
+        },
+        {
+          "event": "agreement_honored:gov_rio_negro:restore_transfers",
+          "seeds": 8,
+          "seeds_total": 10,
+          "first_month_median": 32.5
+        },
+        {
+          "event": "agreement_honored:gov_cordoba:restore_transfers",
+          "seeds": 8,
+          "seeds_total": 10,
+          "first_month_median": 37.0
+        },
+        {
+          "event": "agreement_broken:biz_agro:tax_exemption:actor",
+          "seeds": 7,
+          "seeds_total": 10,
+          "first_month_median": 24
+        },
+        {
+          "event": "agreement_honored:gov_entre_rios:restore_transfers",
+          "seeds": 7,
+          "seeds_total": 10,
+          "first_month_median": 41
+        },
+        {
+          "event": "agreement_honored:gov_buenos_aires:restore_transfers",
+          "seeds": 6,
+          "seeds_total": 10,
+          "first_month_median": 42.0
+        },
+        {
+          "event": "agreement_broken:gov_rio_negro:restore_transfers:actor",
+          "seeds": 5,
+          "seeds_total": 10,
+          "first_month_median": 33
+        },
+        {
+          "event": "agreement_broken:gov_entre_rios:restore_transfers:government",
+          "seeds": 3,
+          "seeds_total": 10,
+          "first_month_median": 4
+        },
+        {
+          "event": "agreement_honored:gov_mendoza:restore_transfers",
+          "seeds": 3,
+          "seeds_total": 10,
+          "first_month_median": 45
+        },
+        {
+          "event": "agreement_honored:gov_misiones:restore_transfers",
+          "seeds": 3,
+          "seeds_total": 10,
+          "first_month_median": 47
+        },
+        {
+          "event": "agreement_broken:gov_entre_rios:restore_transfers:actor",
+          "seeds": 2,
+          "seeds_total": 10,
+          "first_month_median": 8.0
+        },
+        {
+          "event": "agreement_broken:gov_mendoza:restore_transfers:government",
+          "seeds": 2,
+          "seeds_total": 10,
+          "first_month_median": 20.0
+        },
+        {
+          "event": "agreement_broken:gov_mendoza:restore_transfers:actor",
+          "seeds": 2,
+          "seeds_total": 10,
+          "first_month_median": 23.0
+        },
+        {
+          "event": "collapse",
+          "seeds": 1,
+          "seeds_total": 10,
+          "first_month_median": 45
+        }
+      ],
+      "violations": [],
+      "exceptions": []
+    },
+    {
+      "label": "2019-12",
+      "start": "2019-12",
+      "months_requested": 48,
+      "expected": "Cambio de gobierno, pandemia en 2020 y sequia en 2023. Mandato completo de 48 meses, inflacion ~211 % interanual al cierre y derrota del oficialismo en 2023.",
+      "error": "",
+      "wall_seconds": 1.75,
+      "seeds_run": 10,
+      "seeds_failed": 0,
+      "outcomes": {
+        "defeated": 10
+      },
+      "end_month_median": 48.0,
+      "end_month_min": 48,
+      "end_month_max": 48,
+      "seeds_full_horizon": 10,
+      "saturation": [
+        {
+          "variable": "government_approval",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 12.5,
+          "months_at_bound_median": 34.5,
+          "share_at_bound_median": 0.71875
+        },
+        {
+          "variable": "social_tension",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 17.0,
+          "months_at_bound_median": 32.0,
+          "share_at_bound_median": 0.6666666666666666
+        },
+        {
+          "variable": "consumer_confidence",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 17.5,
+          "months_at_bound_median": 30.5,
+          "share_at_bound_median": 0.6354166666666667
+        },
+        {
+          "variable": "institutional_confidence",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 24.5,
+          "months_at_bound_median": 24.5,
+          "share_at_bound_median": 0.5104166666666667
+        },
+        {
+          "variable": "reserves",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 35.0,
+          "months_at_bound_median": 12.0,
+          "share_at_bound_median": 0.25
+        },
+        {
+          "variable": "protest_level",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 21.0,
+          "months_at_bound_median": 8.0,
+          "share_at_bound_median": 0.16666666666666666
+        },
+        {
+          "variable": "inequality",
+          "bound": "hi",
+          "bound_value": 75.0,
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 46.0,
+          "months_at_bound_median": 3.0,
+          "share_at_bound_median": 0.0625
+        }
+      ],
+      "events": [
+        {
+          "event": "agreement_honored:biz_agro:tax_exemption",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 3.0
+        },
+        {
+          "event": "agreement_honored:gov_caba:restore_transfers",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 21.0
+        },
+        {
+          "event": "agreement_honored:gov_cordoba:restore_transfers",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 21.0
+        },
+        {
+          "event": "agreement_broken:gov_buenos_aires:restore_transfers:actor",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 25.5
+        },
+        {
+          "event": "agreement_honored:gov_rio_negro:restore_transfers",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 25.5
+        },
+        {
+          "event": "forced_devaluation",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 34.0
+        },
+        {
+          "event": "election:fpv_fdt_pj",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 48.0
+        },
+        {
+          "event": "term_end:defeated",
+          "seeds": 10,
+          "seeds_total": 10,
+          "first_month_median": 48.0
+        },
+        {
+          "event": "agreement_honored:gov_buenos_aires:restore_transfers",
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 3
+        },
+        {
+          "event": "agreement_broken:biz_agro:tax_exemption:government",
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 9
+        },
+        {
+          "event": "agreement_broken:gov_rio_negro:restore_transfers:government",
+          "seeds": 9,
+          "seeds_total": 10,
+          "first_month_median": 23
+        },
+        {
+          "event": "agreement_broken:gov_buenos_aires:restore_transfers:government",
+          "seeds": 8,
+          "seeds_total": 10,
+          "first_month_median": 12.5
+        },
+        {
+          "event": "agreement_broken:biz_agro:tax_exemption:actor",
+          "seeds": 8,
+          "seeds_total": 10,
+          "first_month_median": 16.5
+        },
+        {
+          "event": "agreement_honored:gov_entre_rios:restore_transfers",
+          "seeds": 7,
+          "seeds_total": 10,
+          "first_month_median": 44
+        },
+        {
+          "event": "agreement_broken:gov_caba:restore_transfers:actor",
+          "seeds": 6,
+          "seeds_total": 10,
+          "first_month_median": 15.5
+        },
+        {
+          "event": "agreement_honored:gov_mendoza:restore_transfers",
+          "seeds": 6,
+          "seeds_total": 10,
+          "first_month_median": 19.5
+        },
+        {
+          "event": "agreement_broken:gov_caba:restore_transfers:government",
+          "seeds": 5,
+          "seeds_total": 10,
+          "first_month_median": 8
+        },
+        {
+          "event": "agreement_broken:gov_mendoza:restore_transfers:government",
+          "seeds": 4,
+          "seeds_total": 10,
+          "first_month_median": 9.0
+        },
+        {
+          "event": "agreement_broken:gov_cordoba:restore_transfers:government",
+          "seeds": 3,
+          "seeds_total": 10,
+          "first_month_median": 15
+        },
+        {
+          "event": "agreement_broken:gov_mendoza:restore_transfers:actor",
+          "seeds": 2,
+          "seeds_total": 10,
+          "first_month_median": 16.5
+        },
+        {
+          "event": "agreement_broken:gov_rio_negro:restore_transfers:actor",
+          "seeds": 2,
+          "seeds_total": 10,
+          "first_month_median": 27.5
+        },
+        {
+          "event": "agreement_broken:gov_cordoba:restore_transfers:actor",
+          "seeds": 1,
+          "seeds_total": 10,
+          "first_month_median": 27
+        }
+      ],
+      "violations": [],
+      "exceptions": []
+    }
+  ]
+}

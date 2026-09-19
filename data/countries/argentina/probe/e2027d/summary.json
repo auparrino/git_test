@@ -1,0 +1,194 @@
+{
+  "tool": "probe",
+  "adr": "ADR 020",
+  "country": "argentina",
+  "calibration": "a9_clean",
+  "seeds": 40,
+  "seed_base": 1,
+  "regime_transitions": true,
+  "scenarios_file": "data/countries/argentina/probe_scenarios_2027.csv",
+  "wall_seconds": 4.51,
+  "scenarios": [
+    {
+      "label": "2023-12",
+      "start": "2023-12",
+      "months_requested": 48,
+      "expected": "Mandato en curso; la eleccion presidencial real es octubre de 2027. NO hay epoca de partidos para 2023+: el modelo solo distingue si el oficialismo retiene o pierde, no que partido gana.",
+      "error": "",
+      "wall_seconds": 4.5,
+      "seeds_run": 40,
+      "seeds_failed": 0,
+      "outcomes": {
+        "collapse": 40
+      },
+      "end_month_median": 32.0,
+      "end_month_min": 27,
+      "end_month_max": 36,
+      "seeds_full_horizon": 0,
+      "saturation": [
+        {
+          "variable": "consumer_confidence",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 40,
+          "seeds_total": 40,
+          "first_month_median": 1.0,
+          "months_at_bound_median": 32.0,
+          "share_at_bound_median": 1.0
+        },
+        {
+          "variable": "interest_rate",
+          "bound": "hi",
+          "bound_value": 300.0,
+          "seeds": 40,
+          "seeds_total": 40,
+          "first_month_median": 2.0,
+          "months_at_bound_median": 31.0,
+          "share_at_bound_median": 0.96875
+        },
+        {
+          "variable": "government_approval",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 40,
+          "seeds_total": 40,
+          "first_month_median": 3.0,
+          "months_at_bound_median": 30.0,
+          "share_at_bound_median": 0.9375
+        },
+        {
+          "variable": "institutional_confidence",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 40,
+          "seeds_total": 40,
+          "first_month_median": 3.0,
+          "months_at_bound_median": 30.0,
+          "share_at_bound_median": 0.936491935483871
+        },
+        {
+          "variable": "social_tension",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 40,
+          "seeds_total": 40,
+          "first_month_median": 6.0,
+          "months_at_bound_median": 27.0,
+          "share_at_bound_median": 0.8507130124777184
+        },
+        {
+          "variable": "protest_level",
+          "bound": "hi",
+          "bound_value": 100.0,
+          "seeds": 40,
+          "seeds_total": 40,
+          "first_month_median": 7.0,
+          "months_at_bound_median": 25.0,
+          "share_at_bound_median": 0.8
+        },
+        {
+          "variable": "reserves",
+          "bound": "lo",
+          "bound_value": 0.0,
+          "seeds": 40,
+          "seeds_total": 40,
+          "first_month_median": 6.0,
+          "months_at_bound_median": 23.0,
+          "share_at_bound_median": 0.7142857142857143
+        },
+        {
+          "variable": "inequality",
+          "bound": "hi",
+          "bound_value": 75.0,
+          "seeds": 40,
+          "seeds_total": 40,
+          "first_month_median": 19.0,
+          "months_at_bound_median": 14.0,
+          "share_at_bound_median": 0.43087121212121215
+        }
+      ],
+      "events": [
+        {
+          "event": "forced_devaluation",
+          "seeds": 40,
+          "seeds_total": 40,
+          "first_month_median": 5.0
+        },
+        {
+          "event": "collapse",
+          "seeds": 40,
+          "seeds_total": 40,
+          "first_month_median": 32.0
+        },
+        {
+          "event": "agreement_broken:gov_buenos_aires:restore_transfers:government",
+          "seeds": 38,
+          "seeds_total": 40,
+          "first_month_median": 4.0
+        },
+        {
+          "event": "agreement_honored:gov_buenos_aires:restore_transfers",
+          "seeds": 13,
+          "seeds_total": 40,
+          "first_month_median": 2
+        },
+        {
+          "event": "agreement_honored:gov_cordoba:restore_transfers",
+          "seeds": 12,
+          "seeds_total": 40,
+          "first_month_median": 2.0
+        },
+        {
+          "event": "agreement_broken:gov_buenos_aires:restore_transfers:actor",
+          "seeds": 7,
+          "seeds_total": 40,
+          "first_month_median": 9
+        },
+        {
+          "event": "agreement_honored:gov_caba:restore_transfers",
+          "seeds": 6,
+          "seeds_total": 40,
+          "first_month_median": 2.0
+        },
+        {
+          "event": "agreement_broken:gov_caba:restore_transfers:government",
+          "seeds": 6,
+          "seeds_total": 40,
+          "first_month_median": 5.5
+        },
+        {
+          "event": "agreement_broken:biz_agro:tax_exemption:government",
+          "seeds": 6,
+          "seeds_total": 40,
+          "first_month_median": 8.0
+        },
+        {
+          "event": "agreement_broken:gov_mendoza:restore_transfers:government",
+          "seeds": 2,
+          "seeds_total": 40,
+          "first_month_median": 8.0
+        },
+        {
+          "event": "agreement_honored:gov_mendoza:restore_transfers",
+          "seeds": 1,
+          "seeds_total": 40,
+          "first_month_median": 2
+        },
+        {
+          "event": "agreement_broken:gov_cordoba:restore_transfers:government",
+          "seeds": 1,
+          "seeds_total": 40,
+          "first_month_median": 4
+        },
+        {
+          "event": "agreement_honored:biz_agro:tax_exemption",
+          "seeds": 1,
+          "seeds_total": 40,
+          "first_month_median": 8
+        }
+      ],
+      "violations": [],
+      "exceptions": []
+    }
+  ]
+}
