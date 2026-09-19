@@ -62,7 +62,11 @@ def wall_time(text: str) -> str:
 
 
 def read_or_none(path: Path) -> str | None:
-    return path.read_text(encoding="utf-8", errors="replace") if path.exists() else None
+    # `utf-8-sig` en vez de `utf-8`: en Windows PowerShell 5.1, `Out-File
+    # -Encoding utf8` escribe UTF-8 CON BOM (`scripts/fase4_ollama.ps1`), y
+    # el BOM entraria como un caracter mas al principio de la primera linea.
+    # Sobre un archivo sin BOM se comporta igual que `utf-8`.
+    return path.read_text(encoding="utf-8-sig", errors="replace") if path.exists() else None
 
 
 def bench_section(logs: Path, model: str) -> list[str]:

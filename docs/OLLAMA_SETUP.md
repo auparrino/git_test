@@ -27,6 +27,24 @@
 8. Timeout por decisión: `OllamaBackend` usa 60 s (ADR 004). Si el modelo corre en CPU y aparecen
    `URLError`/timeout, `REPUBLICA_OLLAMA_TIMEOUT=180` (segundos) lo sube sin tocar código; el script
    de Fase 4 ya exporta 120 por default.
-9. Windows: el script es bash (`time`, `tee`); correrlo desde WSL o Git Bash con Ollama nativo de
-   Windows corriendo (`OLLAMA_HOST=http://localhost:11434` se ve desde WSL2 si Ollama escucha en
-   `0.0.0.0`; si no, `setx OLLAMA_HOST 0.0.0.0` en Windows y reiniciar Ollama).
+9. **Windows**: hay un puerto del script a PowerShell, `scripts/fase4_ollama.ps1`, con los mismos
+   pasos, los mismos archivos de salida y el mismo formato de tiempos que lee el recolector. Desde
+   la carpeta del repo:
+
+   ```powershell
+   git clone https://github.com/auparrino/git_test.git
+   cd git_test
+   git checkout claude/relaxed-volta-sclqi6
+   uv sync --all-extras
+   .\scripts\fase4_ollama.ps1
+   ```
+
+   Si PowerShell bloquea la ejecución ("no se puede cargar porque la ejecución de scripts está
+   deshabilitada"), corré antes `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`: vale
+   solo para esa ventana. Parámetros: `-Model qwen3:4b`, `-Steps bench`, `-TimeoutSeconds 180`,
+   `-Calibration <run_id>`. Nota de sintaxis: `MODEL=qwen3:8b ./script.sh` es bash y **no** funciona
+   en PowerShell; ahí las variables van como parámetros (`-Model qwen3:8b`).
+
+   La alternativa es correr el `.sh` desde WSL o Git Bash, con Ollama nativo de Windows: desde WSL2
+   se ve en `localhost:11434` solo si Ollama escucha en `0.0.0.0` (`setx OLLAMA_HOST 0.0.0.0` en
+   Windows y reiniciar el servicio), y conviene exportar `OLLAMA_HOST` antes de correr.
