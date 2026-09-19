@@ -228,3 +228,54 @@ ocho años (primer mes en la cota, del **7 al 101**). Es decir, durante la déca
 `republica run --country argentina --start 2003-06 --months 150 --calibration a7_by_regime --seed 1`
 con y sin `features.political_recovery`; o `tests/test_political_recovery.py`, secciones 4 y 5, para
 la reproducción determinista.
+
+---
+
+## Prueba de pronóstico: la elección de 2027 (el modelo no llega)
+
+Pedido directo: qué dice el modelo sobre la próxima elección presidencial, octubre de 2027.
+40 semillas desde **2023-12**, el último estado inicial real disponible, 48 meses, calibración
+`a9_clean` con todo activo. Salida en `data/countries/argentina/probe/e2027/`.
+
+**Las 40 semillas terminan en `hyperinflation` en el mes 3.** Ninguna llega a la elección.
+
+La causa está identificada y no es azar. El estado inicial real de diciembre de 2023 trae
+`inflation = 25.47 %/mes` (procedencia `source`, el dato del IPC). ADR 019 §1 midió que `rho_eff`
+—la persistencia de precios— cruza 1 por encima de **17.48 %/mes** con el vector `peg`/`crawl`:
+desde 25.5 el mapa de precios es explosivo por construcción y no hay trayectoria que baje.
+
+Lo que pasó de verdad, con el dato que el propio repo ya tiene
+(`history/inflation_cpi_monthly_linked.csv`):
+
+| mes | inflación mensual real |
+|---|---:|
+| 2023-12 | 25.47 % |
+| 2024-03 | 11.01 % |
+| 2024-09 | 3.47 % |
+| 2025-09 | 2.08 % |
+| 2026-08 | 1.66 % |
+
+El modelo hace exactamente lo contrario de lo que pasó. **No tiene ningún mecanismo de
+desinflación desde niveles altos**: puede producir una hiperinflación, no una estabilización. Es el
+pendiente que ADR 019 §7.5 dejó anotado el mismo día ("no hay meseta de inflación alta: con
+`pi_anchor` = EMA(36) de su propia inflación el mapa queda en pendiente > 1 para cualquier nivel,
+así que toda corrida termina hiperinflacionando y sólo cambia cuánto tarda"). Esta corrida es la
+demostración más corta de por qué ese pendiente bloquea todo lo demás.
+
+**Tres razones más por las que la pregunta no tiene respuesta hoy**, aparte de la anterior:
+
+1. **No hay época de partidos para 2023+.** Las tres cargadas terminan en 2015-2023, así que el
+   modelo cae al elenco genérico de Aurora: sólo puede distinguir si el oficialismo retiene o
+   pierde, nunca qué partido gana.
+2. **El acierto electoral del backtest es 53.6 % sobre N=28.** Una moneda con muestra chica.
+3. **El modelo acierta 2019 en el 94 % de las semillas y 2023 en el 6 %** (`a8_a7`/`a10_clean`):
+   reproduce un oficialismo que pierde por deterioro económico y no uno que pierde ante un
+   outsider, que es justo el caso relevante.
+
+**Qué haría falta, en orden de bloqueo**: (1) un mecanismo de desinflación —sin él nada de lo
+demás importa—, (2) la época de partidos 2023+ con los actores reales, (3) el cuello de botella del
+balotaje de ADR 013, que hace que un outsider llegue a segunda vuelta y la pierda siempre.
+
+El escenario queda versionado en `probe_scenarios_2027.csv` para volver a correrlo cuando (1)
+exista: es la prueba más barata de si el bloqueo se levantó.
+
