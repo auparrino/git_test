@@ -1,0 +1,212 @@
+{
+  "evaluations": 414,
+  "history_rows": [
+    {
+      "evaluations": 18,
+      "generation": 1,
+      "popsize": 18,
+      "best_scalar_this_gen": 18.077161686126377,
+      "mean_scalar_this_gen": 45.0538594076086,
+      "best_scalar_so_far": 18.077161686126377,
+      "wall_seconds": 14.850343465805054
+    },
+    {
+      "evaluations": 36,
+      "generation": 2,
+      "popsize": 18,
+      "best_scalar_this_gen": 16.552254406655308,
+      "mean_scalar_this_gen": 26.461287613867675,
+      "best_scalar_so_far": 16.552254406655308,
+      "wall_seconds": 29.488773107528687
+    },
+    {
+      "evaluations": 54,
+      "generation": 3,
+      "popsize": 18,
+      "best_scalar_this_gen": 16.197786110043772,
+      "mean_scalar_this_gen": 23.33838339094958,
+      "best_scalar_so_far": 16.197786110043772,
+      "wall_seconds": 44.11441373825073
+    },
+    {
+      "evaluations": 72,
+      "generation": 4,
+      "popsize": 18,
+      "best_scalar_this_gen": 14.639839786311363,
+      "mean_scalar_this_gen": 21.678497643560693,
+      "best_scalar_so_far": 14.639839786311363,
+      "wall_seconds": 58.49936604499817
+    },
+    {
+      "evaluations": 90,
+      "generation": 5,
+      "popsize": 18,
+      "best_scalar_this_gen": 14.717407851731355,
+      "mean_scalar_this_gen": 22.233117063081835,
+      "best_scalar_so_far": 14.639839786311363,
+      "wall_seconds": 73.12554454803467
+    },
+    {
+      "evaluations": 108,
+      "generation": 6,
+      "popsize": 18,
+      "best_scalar_this_gen": 13.348516164399202,
+      "mean_scalar_this_gen": 21.307285800366632,
+      "best_scalar_so_far": 13.348516164399202,
+      "wall_seconds": 87.82631945610046
+    },
+    {
+      "evaluations": 126,
+      "generation": 7,
+      "popsize": 18,
+      "best_scalar_this_gen": 14.245938482388082,
+      "mean_scalar_this_gen": 19.01986405179267,
+      "best_scalar_so_far": 13.348516164399202,
+      "wall_seconds": 102.42396783828735
+    },
+    {
+      "evaluations": 144,
+      "generation": 8,
+      "popsize": 18,
+      "best_scalar_this_gen": 13.663656007903809,
+      "mean_scalar_this_gen": 16.951793489967443,
+      "best_scalar_so_far": 13.348516164399202,
+      "wall_seconds": 116.86665487289429
+    },
+    {
+      "evaluations": 162,
+      "generation": 9,
+      "popsize": 18,
+      "best_scalar_this_gen": 12.987265292174872,
+      "mean_scalar_this_gen": 18.565927927947325,
+      "best_scalar_so_far": 12.987265292174872,
+      "wall_seconds": 131.69088888168335
+    },
+    {
+      "evaluations": 180,
+      "generation": 10,
+      "popsize": 18,
+      "best_scalar_this_gen": 13.147569815994766,
+      "mean_scalar_this_gen": 15.998246072131117,
+      "best_scalar_so_far": 12.987265292174872,
+      "wall_seconds": 146.00655221939087
+    },
+    {
+      "evaluations": 198,
+      "generation": 11,
+      "popsize": 18,
+      "best_scalar_this_gen": 12.777196108975046,
+      "mean_scalar_this_gen": 16.4779133051751,
+      "best_scalar_so_far": 12.777196108975046,
+      "wall_seconds": 160.57561707496643
+    },
+    {
+      "evaluations": 216,
+      "generation": 12,
+      "popsize": 18,
+      "best_scalar_this_gen": 13.44727329823344,
+      "mean_scalar_this_gen": 17.341864080297732,
+      "best_scalar_so_far": 12.777196108975046,
+      "wall_seconds": 174.8385512828827
+    },
+    {
+      "evaluations": 234,
+      "generation": 13,
+      "popsize": 18,
+      "best_scalar_this_gen": 13.976070135449548,
+      "mean_scalar_this_gen": 18.100336349497034,
+      "best_scalar_so_far": 12.777196108975046,
+      "wall_seconds": 189.3977198600769
+    },
+    {
+      "evaluations": 252,
+      "generation": 14,
+      "popsize": 18,
+      "best_scalar_this_gen": 13.94208552189936,
+      "mean_scalar_this_gen": 16.856589799943777,
+      "best_scalar_so_far": 12.777196108975046,
+      "wall_seconds": 203.92230248451233
+    },
+    {
+      "evaluations": 270,
+      "generation": 15,
+      "popsize": 18,
+      "best_scalar_this_gen": 13.986456191015305,
+      "mean_scalar_this_gen": 18.391839481559558,
+      "best_scalar_so_far": 12.777196108975046,
+      "wall_seconds": 218.56294465065002
+    },
+    {
+      "evaluations": 288,
+      "generation": 16,
+      "popsize": 18,
+      "best_scalar_this_gen": 14.609368420113107,
+      "mean_scalar_this_gen": 18.056465817853965,
+      "best_scalar_so_far": 12.777196108975046,
+      "wall_seconds": 232.64709091186523
+    },
+    {
+      "evaluations": 306,
+      "generation": 17,
+      "popsize": 18,
+      "best_scalar_this_gen": 13.773897575594066,
+      "mean_scalar_this_gen": 17.634573352944223,
+      "best_scalar_so_far": 12.777196108975046,
+      "wall_seconds": 246.72554516792297
+    },
+    {
+      "evaluations": 324,
+      "generation": 18,
+      "popsize": 18,
+      "best_scalar_this_gen": 13.241677773357322,
+      "mean_scalar_this_gen": 19.169330433722077,
+      "best_scalar_so_far": 12.777196108975046,
+      "wall_seconds": 260.99194049835205
+    },
+    {
+      "evaluations": 342,
+      "generation": 19,
+      "popsize": 18,
+      "best_scalar_this_gen": 13.262557301417463,
+      "mean_scalar_this_gen": 15.888334601069841,
+      "best_scalar_so_far": 12.777196108975046,
+      "wall_seconds": 275.127108335495
+    },
+    {
+      "evaluations": 360,
+      "generation": 20,
+      "popsize": 18,
+      "best_scalar_this_gen": 13.215800989828843,
+      "mean_scalar_this_gen": 15.982512861345482,
+      "best_scalar_so_far": 12.777196108975046,
+      "wall_seconds": 289.574006319046
+    },
+    {
+      "evaluations": 378,
+      "generation": 21,
+      "popsize": 18,
+      "best_scalar_this_gen": 13.275075395033578,
+      "mean_scalar_this_gen": 15.950369232736007,
+      "best_scalar_so_far": 12.777196108975046,
+      "wall_seconds": 303.76980924606323
+    },
+    {
+      "evaluations": 396,
+      "generation": 22,
+      "popsize": 18,
+      "best_scalar_this_gen": 13.278681844499122,
+      "mean_scalar_this_gen": 16.7857849131571,
+      "best_scalar_so_far": 12.777196108975046,
+      "wall_seconds": 318.11630940437317
+    },
+    {
+      "evaluations": 414,
+      "generation": 23,
+      "popsize": 18,
+      "best_scalar_this_gen": 13.011124894408052,
+      "mean_scalar_this_gen": 15.50055790853447,
+      "best_scalar_so_far": 12.777196108975046,
+      "wall_seconds": 332.61180901527405
+    }
+  ]
+}
