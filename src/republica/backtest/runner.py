@@ -40,7 +40,11 @@ from republica.world.countries import (
     load_country_pack_annual,
 )
 from republica.world.eras import era_governance_overrides
-from republica.world.regime import RegimeCalendar, coup_propensity_by_decade
+from republica.world.regime import (
+    RegimeCalendar,
+    coup_propensity_by_decade,
+    initial_regime_state,
+)
 
 ARMS: tuple[str, str] = ("calibrated", "aurora")
 
@@ -65,16 +69,40 @@ _NUMERIC_FAILURE_EXCEPTIONS: tuple[type[Exception], ...] = (
 )
 
 
-def backtest_regime_calendar(pack_dir: Path, y0: int, m0: int, months: int) -> RegimeCalendar:
+def backtest_regime_calendar(
+    pack_dir: Path,
+    y0: int,
+    m0: int,
+    months: int,
+    regime_transitions: bool = False,
+) -> RegimeCalendar:
     """`RegimeCalendar` con `forced_coup_months` SIEMPRE vacio (ADR 014
     secc. 1: el golpe es el objetivo, no un dato que se le regala al
     modelo) pero con la propension endogena real por decada
     (`world/regime.py::coup_propensity_by_decade`, la misma que usa
     `--regime-mode auto`) -- asi el modelo SI puede producir un golpe
     endogeno (`political_stability`/`institutional_confidence` bajos +
-    sorteo), simplemente no se le fuerza ninguno real."""
+    sorteo), simplemente no se le fuerza ninguno real.
+
+    `regime_transitions` (ADR 015): prende el modelo de riesgo mensual y
+    siembra el modo inicial del regimen con el dato real de
+    `politics/regimes.csv` en `t0`. `forced_coup_months` sigue vacio: el
+    mecanismo corre SIN golpes forzados, como pide la nota "Desviacion
+    deliberada del calendario" del ADR 014. Lo que se siembra es el modo en
+    `t0` (un dato de entrada, igual que el `initial_state` economico real);
+    lo que se predice es el modo en `t0 + h`."""
     propensity_by_decade = coup_propensity_by_decade(pack_dir / "politics" / "events.csv")
-    cal = RegimeCalendar()
+    seed_state = (
+        initial_regime_state(pack_dir / "politics" / "regimes.csv", y0, m0)
+        if regime_transitions
+        else None
+    )
+    cal = RegimeCalendar(
+        endogenous_transitions=regime_transitions,
+        initial_mode=seed_state.mode if seed_state is not None else "democracy",
+        initial_months_in_mode=seed_state.months_in_mode if seed_state is not None else 0,
+        initial_de_facto_months=seed_state.de_facto_months if seed_state is not None else 0,
+    )
     for month_idx in range(1, months + 1):
         total_months = (m0 - 1) + (month_idx - 1)
         y = y0 + total_months // 12
@@ -107,7 +135,12 @@ def _history_to_outcome(seed: int, history) -> SeedOutcome:
 
 
 def run_monthly_arm(
-    window: Window, arm: str, calibration_run_id: str, seeds: int, seed_base: int
+    window: Window,
+    arm: str,
+    calibration_run_id: str,
+    seeds: int,
+    seed_base: int,
+    regime_transitions: bool = False,
 ) -> list[SeedOutcome]:
     y0, m0 = int(window.t0[:4]), int(window.t0[5:7])
     pack = load_country_pack(
@@ -120,7 +153,9 @@ def run_monthly_arm(
     # Reemplaza el calendario de regimen del paquete (que SI fuerza golpes
     # reales, `regime_mode="auto"`) por uno sin golpes forzados, ver
     # `backtest_regime_calendar`.
-    pack.regime_calendar = backtest_regime_calendar(pack.pack_dir, y0, m0, window.h)
+    pack.regime_calendar = backtest_regime_calendar(
+        pack.pack_dir, y0, m0, window.h, regime_transitions=regime_transitions
+    )
 
     country = pack.country
     bimonetary = pack.bimonetary_coefficients
@@ -226,8 +261,18 @@ def _annual_history_to_outcome(seed: int, history) -> SeedOutcome:
 
 
 def run_annual_arm(
-    window: Window, arm: str, calibration_run_id: str, seeds: int, seed_base: int
+    window: Window,
+    arm: str,
+    calibration_run_id: str,
+    seeds: int,
+    seed_base: int,
+    regime_transitions: bool = False,
 ) -> list[SeedOutcome]:
+    # `regime_transitions` se acepta por simetria de firma con
+    # `run_monthly_arm` y se IGNORA: en modo anual `regime_mode` se lee
+    # directo de `regimes.csv` (ADR 011 secc. 6) y `scoring.py` no puntua
+    # `regime`/`coup` ahi, asi que el modelo de riesgo de ADR 015 no tiene
+    # nada que decidir.
     year0 = int(window.t0[:4])
     years = window.h // 12
     country = load_country_pack_annual("argentina", year0, years)
@@ -279,14 +324,25 @@ def run_annual_arm(
 
 
 def run_window(
-    window: Window, calibration_run_id: str, seeds: int, seed_base: int = 1
+    window: Window,
+    calibration_run_id: str,
+    seeds: int,
+    seed_base: int = 1,
+    regime_transitions: bool = False,
 ) -> dict[str, list[SeedOutcome]]:
     runner_fn = run_monthly_arm if window.frequency == "monthly" else run_annual_arm
-    return {arm: runner_fn(window, arm, calibration_run_id, seeds, seed_base) for arm in ARMS}
+    return {
+        arm: runner_fn(window, arm, calibration_run_id, seeds, seed_base, regime_transitions)
+        for arm in ARMS
+    }
 
 
 def process_window(
-    window: Window, calibration_run_id: str, seeds: int, seed_base: int
+    window: Window,
+    calibration_run_id: str,
+    seeds: int,
+    seed_base: int,
+    regime_transitions: bool = False,
 ) -> tuple[str, list[dict], float]:
     """Funcion de un solo argumento-por-proceso (picklable, para
     `ProcessPoolExecutor`): corre, calcula caracteristicas, puntua, y
@@ -301,7 +357,7 @@ def process_window(
     no quede en silencio."""
     t0 = time.perf_counter()
     try:
-        runs_by_arm = run_window(window, calibration_run_id, seeds, seed_base)
+        runs_by_arm = run_window(window, calibration_run_id, seeds, seed_base, regime_transitions)
         features = compute_window_features(window, calibration_run_id)
         rows = score_window(window, features, runs_by_arm)
     except Exception as exc:  # noqa: BLE001 - red de seguridad deliberada, ver docstring
@@ -379,6 +435,7 @@ def run_backtest(
     workers: int = 1,
     seed_base: int = 1,
     resume: bool = False,
+    regime_transitions: bool = False,
     progress=None,
 ) -> Path:
     """Orquesta el backtest completo: genera las ventanas, las corre (con
@@ -415,13 +472,20 @@ def run_backtest(
 
         if workers <= 1:
             for window in pending:
-                key, rows, wall = process_window(window, calibration_run_id, seeds, seed_base)
+                key, rows, wall = process_window(
+                    window, calibration_run_id, seeds, seed_base, regime_transitions
+                )
                 _handle_result(key, rows, wall)
         else:
             with ProcessPoolExecutor(max_workers=workers) as pool:
                 futures = {
                     pool.submit(
-                        process_window, window, calibration_run_id, seeds, seed_base
+                        process_window,
+                        window,
+                        calibration_run_id,
+                        seeds,
+                        seed_base,
+                        regime_transitions,
                     ): window
                     for window in pending
                 }

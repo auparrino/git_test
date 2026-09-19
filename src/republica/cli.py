@@ -246,6 +246,15 @@ def run(
             "endogenos. 'democracy': el pais nunca sale de democracia. Requiere --country.",
         ),
     ] = "auto",
+    regime_transitions: Annotated[
+        bool,
+        typer.Option(
+            "--regime-transitions/--no-regime-transitions",
+            help="Transiciones de regimen endogenas (ADR 015): hazard mensual por "
+            "transicion, quinto modo 'restricted_democracy' y modo inicial sembrado de "
+            "politics/regimes.csv. Default: apagado. Requiere --country.",
+        ),
+    ] = False,
     historical_shocks: Annotated[
         bool,
         typer.Option(
@@ -336,7 +345,13 @@ def run(
             )
             return
         try:
-            pack = load_country_pack(country_id, start, months, regime_mode=regime_mode_opt)
+            pack = load_country_pack(
+                country_id,
+                start,
+                months,
+                regime_mode=regime_mode_opt,
+                regime_transitions=regime_transitions,
+            )
         except CountryPackError as exc:
             raise typer.BadParameter(str(exc)) from exc
         country = pack.country
@@ -2110,6 +2125,13 @@ def validate(
     plots: Annotated[
         bool, typer.Option("--plots/--no-plots", help="Graficos (requiere el extra `analysis`).")
     ] = True,
+    regime_transitions: Annotated[
+        bool,
+        typer.Option(
+            "--regime-transitions/--no-regime-transitions",
+            help="Transiciones de regimen endogenas (ADR 015). Default: apagado.",
+        ),
+    ] = False,
 ) -> None:
     """`republica validate` (A4, ADR 011 secc. 8): corre las tres pruebas de
     validacion historica (V1 1988-1990, V2 1998-2002, V3 2016-2023) con los
@@ -2145,6 +2167,7 @@ def validate(
         test_ids=test_ids,
         resamples=resamples,
         make_plots=plots,
+        regime_transitions=regime_transitions,
         progress=lambda msg: console.print(f"  [dim]{msg}[/dim]"),
     )
     table = Table(title="Validacion historica (A4, ADR 011 secc. 8)")

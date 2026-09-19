@@ -101,7 +101,6 @@ from republica.world.politics import step_politics
 from republica.world.provinces import ProvinceRecord, compute_provinces
 from republica.world.regime import (
     RegimeCalendar,
-    RegimeState,
     congress_active,
     elections_allowed,
     regime_effects_on_state,
@@ -1632,7 +1631,15 @@ def run(
 
     base_congress_enabled = sim.congress_enabled
     base_elections_enabled = sim.elections_enabled
-    regime_state = RegimeState() if regime_calendar is not None else None
+    # ADR 015: el modo/edad inicial del regimen y el flag del modelo de
+    # riesgo viajan DENTRO del `RegimeCalendar` (ver Notas de
+    # implementacion del ADR 015: `run()` ya tiene 17 parametros
+    # opcionales). Con los defaults del calendario esto es literalmente
+    # `RegimeState()`, igual que antes de ADR 015.
+    regime_state = regime_calendar.initial_regime_state() if regime_calendar is not None else None
+    regime_transition_coefficients = (
+        regime_calendar.resolved_coefficients() if regime_calendar is not None else None
+    )
     if macro_coefficients is not None:
         resolved_fx_regime = fx_regime or (
             bimonetary_coefficients.fx_regime_default
@@ -1717,7 +1724,14 @@ def run(
             assert regime_state is not None
             forced_coup = next_month in regime_calendar.forced_coup_months
             propensity = regime_calendar.coup_propensity.get(next_month, 0.0)
-            regime_result = step_regime(regime_state, sim.state, sim.rng, forced_coup, propensity)
+            regime_result = step_regime(
+                regime_state,
+                sim.state,
+                sim.rng,
+                forced_coup,
+                propensity,
+                transition_coefficients=regime_transition_coefficients,
+            )
             sim.state = regime_effects_on_state(sim.state, regime_result.repression)
             sim.congress_enabled = base_congress_enabled and congress_active(regime_result.mode)
             sim.elections_enabled = base_elections_enabled and elections_allowed(regime_result.mode)

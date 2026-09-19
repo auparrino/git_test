@@ -376,8 +376,16 @@ def _history_to_seed_run(seed: int, history: History, forced_ids: set[str]) -> S
     )
 
 
-def _load_pack(test: ValidationTest, months: int) -> CountryPack:
-    return load_country_pack("argentina", test.start, months, regime_mode="auto")
+def _load_pack(test: ValidationTest, months: int, regime_transitions: bool = False) -> CountryPack:
+    """`regime_transitions` (ADR 015, default `False`): prende el modelo de
+    riesgo endogeno del regimen. Apagado, el paquete sale identico a A4."""
+    return load_country_pack(
+        "argentina",
+        test.start,
+        months,
+        regime_mode="auto",
+        regime_transitions=regime_transitions,
+    )
 
 
 def run_test_arm(
@@ -960,6 +968,7 @@ def build_registration(
     calibration_run_id: str,
     seeds: int,
     v4_block_reasons: dict[str, str] | None = None,
+    regime_transitions: bool = False,
 ) -> dict:
     """El registro que se escribe ANTES de correr nada (hipotesis, shocks
     forzados pedidos vs. efectivamente aplicables, procedencia del estado
@@ -996,7 +1005,7 @@ def build_registration(
         if skip_reason is not None:
             entry["skipped_reason"] = skip_reason
         else:
-            pack = _load_pack(test, months)
+            pack = _load_pack(test, months, regime_transitions)
             entry["initial_state_provenance"] = initial_state_provenance(pack, test.start)
         entries.append(entry)
     return {
@@ -1006,6 +1015,10 @@ def build_registration(
         "calibration_run_id": calibration_run_id,
         "seeds": seeds,
         "months_cap": months_cap,
+        # ADR 015: queda REGISTRADO antes de correr si el modelo de riesgo
+        # endogeno del regimen estuvo prendido (cambia que puede pasar con
+        # `regime_mode` en las tres pruebas).
+        "regime_endogenous_transitions": regime_transitions,
         "arms": list(ARMS),
         "control_hypothesis": HYPOTHESES["C"],
         "control_metric": METRICS["C"],
@@ -1024,6 +1037,7 @@ def run_validation(
     test_ids: list[str] | None = None,
     resamples: int = 2000,
     make_plots: bool = True,
+    regime_transitions: bool = False,
     progress=None,
 ) -> dict:
     """Corre A4/A5 completo y escribe `registration.json`, `results.json`,
@@ -1041,7 +1055,7 @@ def run_validation(
     for test in requested:
         if test.test_id == "V4":
             months = min(test.months, months_cap) if months_cap else test.months
-            v4_pack = _load_pack(test, months)
+            v4_pack = _load_pack(test, months, regime_transitions)
             reason = _v4_block_reason(v4_pack)
             if reason is not None:
                 v4_block_reasons["V4"] = reason
@@ -1051,7 +1065,12 @@ def run_validation(
         tests.append(test)
 
     registration = build_registration(
-        requested, months_cap, calibration_run_id, seeds, v4_block_reasons
+        requested,
+        months_cap,
+        calibration_run_id,
+        seeds,
+        v4_block_reasons,
+        regime_transitions=regime_transitions,
     )
     (out_dir / "registration.json").write_text(
         json.dumps(registration, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -1062,7 +1081,7 @@ def run_validation(
     for test in tests:
         months = min(test.months, months_cap) if months_cap else test.months
         plan = resolve_forced_shocks(pack_dir, test, months)
-        pack = _load_pack(test, months)
+        pack = _load_pack(test, months, regime_transitions)
         t0 = time.perf_counter()
         runs_by_arm: dict[str, list[SeedRun]] = {}
         for arm in ARMS:
