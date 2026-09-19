@@ -228,6 +228,43 @@ cuando arranca en democracia. Lo que queda abierto, con números, en
 las ventanas que fallan son todas aquellas cuyo objetivo es la vuelta a la democracia, y ahí el
 límite no es el hazard sino que la corrida termina por `collapse` al mes 10–17.
 
+### Tercera ronda (ADR 015–017): qué se cerró y qué sigue roto
+
+Los cinco pendientes de la ronda anterior quedaron cerrados o con su mecanismo construido, y las tres
+corridas que los miden están en el repo (`a7_by_regime`, `a8_a7`, `b3_a7`; números completos en
+[`docs/CALIBRATION_LOG.md`](docs/CALIBRATION_LOG.md) y [`docs/PLAN_ARGENTINA.md`](docs/PLAN_ARGENTINA.md) §8).
+
+Lo que mejoró, medido contra la corrida anterior:
+
+| objetivo del backtest 1916–2022 | antes | ahora |
+|---|---:|---:|
+| Régimen | 72.5 % | **90.4 %** |
+| Crisis | 64.3 % | **72.6 %** |
+| Golpe (1916–1983) | 58.0 % | **65.9 %** |
+| Magnitud de la inflación | 30.4 % | 31.0 % |
+| Dirección de la inflación | 46.2 % | 46.0 % |
+
+Y la validación histórica pasa de 1 a 2 hipótesis cumplidas de 4. La cuarta (2019-12→2023) pasó de
+**no evaluable** —las 50 semillas colapsaban antes de que se celebrara la elección, así que la
+"derrota 0 %" de entonces no era un resultado sino un denominador vacío— a cumplida, con el
+oficialismo perdiendo en el 100 % de las semillas y ninguna terminando temprano.
+
+Lo que **no** mejoró, que importa igual o más:
+
+- **La hipótesis principal de ADR 017 falló.** Calibrar un vector por régimen cambiario en vez de uno
+  solo para 32 años no igualó a persistencia en inflación a 12 meses en **ninguno** de los tres grupos
+  (pedía 2 de 3), y quedó peor que el vector único. Partir el train en tres deja a cada grupo con un
+  tercio de los meses de arranque, y para el mecanismo de precios eso pesa más que la especificidad.
+- **La dirección de la inflación sigue en 46 %**, como en las tres calibraciones probadas, y Aurora
+  sin calibrar le gana. Acertar la magnitud sin acertar el signo del cambio es el límite más duro que
+  tiene el modelo, y ninguna ronda lo movió.
+- **La elección de 2023 se acierta en el 6 % de las semillas** contra el 94 % de la de 2019: el modelo
+  reproduce un oficialismo que pierde por deterioro económico, no uno que pierde ante un outsider.
+- **Solo el 6 % de las corridas llega a 96 meses sin colapsar**: el piso de legitimidad sostiene un
+  mandato, no dos seguidos.
+- La inflación 2016→2023 da 496 % contra 135 % real. Cambió el signo del error (antes subestimaba),
+  no su tamaño.
+
 ## Lo que viene
 
 - **Fase 9, lo que falta** ([`ADR_009`](docs/ADR_009_surrogate_ui.md), resultados en

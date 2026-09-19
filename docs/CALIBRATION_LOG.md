@@ -973,3 +973,126 @@ Criterio operativo y referencias en ADR 017 §6, fijados antes de correr. La cor
 ronda (`a7_quick_probe`: `--quick --by-regime --workers 2`, 40 evaluaciones por grupo, stride 12,
 100 s de pared) sirvió únicamente para verificar el pipeline de punta a punta y se borró de `data/`;
 con ese presupuesto sus números no significan nada y no se reportan.
+
+---
+
+## Corrida completa `a7_by_regime` + revalidación `a8_a7` + backtest `b3_a7` (cierre de la tercera ronda)
+
+Las tres corridas salen del mismo estado del repo: ADR 015 (transiciones de régimen endógenas),
+ADR 016 (piso de legitimidad democrática) y ADR 017 (calibración por régimen cambiario, exclusión
+de coeficientes legacy, guarda del modo anual) integrados, más la serie de tipo de cambio anual
+enlazada 1962–2012.
+
+### Calibración `a7_by_regime`
+
+`republica calibrate --country argentina --train 1992-01:2023-12 --holdout 1983-12:1991-12 --loss
+heavy --by-regime --budget-per-group 400 --stride 3 --workers 4 --seed 42`. **1242 evaluaciones,
+1336 s (22.3 min)**, tres grupos (`peg` 41 meses de arranque, `float` 54, `control` 29; `default` =
+`float`).
+
+**La hipótesis registrada en ADR 017 §6 NO se cumplió.** Pedía que el calibrado igualara o superara
+a persistencia en inflación a h=12 en al menos 2 de 3 grupos del train. Resultado: **0 de 3**.
+
+| grupo | calibrado | persistencia | veredicto |
+|---|---:|---:|---|
+| `peg` | 0.940 | 0.725 | pierde |
+| `float` | 1.054 | 0.678 | pierde |
+| `control` | 1.009 | 0.661 | pierde |
+
+Y es PEOR que el vector único de `a5b_macro` en esa celda (0.797). Partir el train en tres no mejoró
+la inflación: la empeoró. Lectura honesta: cada grupo se ajusta con un tercio de los meses de
+arranque, y para el mecanismo de precios eso pesa más que la ganancia de especificidad por régimen.
+
+Lo que sí mejoró en el train agregado, contra persistencia: **PBI** a h=6/12 (0.946/1.004 contra
+1.046/1.404), **desempleo** en todos los horizontes con dato (0.595 contra 0.636 a h=12) y **tipo de
+cambio** en todos (4.468 contra 5.017 a h=12).
+
+**El holdout ahora tiene tipo de cambio.** Es el efecto directo de la serie anual enlazada: antes las
+filas de `exchange_rate` del holdout decían "sin dato" para los cuatro brazos por igual. Con dato, el
+calibrado le gana a persistencia con claridad en los cuatro horizontes (h=12: **17.311 contra
+27.523**; h=6: 7.649 contra 14.399). En inflación del holdout sigue muy por detrás (8.459 contra
+4.005 a h=12), aunque le gana a Aurora sin calibrar (9.752).
+
+**La exclusión de coeficientes legacy hizo lo que prometía.** `rho_pi + c_e` queda en **0.910** —el
+valor de Aurora, sin tocar— en los tres grupos, contra **2.323** en `a5b_macro`. Ese 2.323 era un
+AR(1) de precios explosivo al que CMA-ES llegaba porque la función objetivo con macro activo nunca
+ejercitaba esos coeficientes: no recibían señal y derivaban libres. Es la causa raíz del
+`OverflowError` sistemático del modo anual documentado en ADR 014.
+
+### Revalidación `a8_a7` (V1–V4, 50 semillas, con ADR 015 y ADR 016 activos)
+
+50.3 s. **2 de 4 hipótesis CUMPLIDAS**, contra 1 de 4 en `a6_macro`.
+
+| prueba | hipótesis | calibrado | Aurora | veredicto |
+|---|---|---|---|---|
+| V1 | hiperinflación > 50 % desde 1988-06 | 0.0 % | 100.0 % | **NO CUMPLIDA** |
+| V2 | default/colapso > 50 % en 1998→2002 | 66.0 % [54, 80] | 32.0 % | **CUMPLIDA** |
+| V3 | inflación final > 80 % y aciertos 2019 y 2023 | 496.2 %; 94 % / 6 % | 1 605.6 %; 0 % / 0 % | **NO CUMPLIDA** |
+| V4 | derrota > 70 % e inflación final > 100 % desde 2019-12 | 383.4 %; **derrota 100 %** | 1 281.7 %; derrota 0 % | **CUMPLIDA** |
+
+**V4 pasa de no evaluable a cumplida.** En `a6_macro` las 50 semillas terminaban en `collapse` antes
+del mes 48 y la elección de fin de mandato no llegaba a celebrarse: la "derrota 0 %" de entonces no
+significaba que el oficialismo ganara, significaba que no había denominador. Ahora **0 de 50**
+terminan antes de los 48 meses y el oficialismo pierde en el 100 %. Es el efecto medido del piso de
+legitimidad de ADR 016.
+
+**V3 sigue sin cumplirse, y por una razón distinta a la de antes.** El acierto electoral de 2019 es
+94 % pero el de **2023 es 6 %**. El modelo reproduce bien un oficialismo que pierde por deterioro
+económico y mal uno que pierde ante un outsider; es el mismo cuello de botella del balotaje que
+diagnosticó ADR 013. La inflación 2016→2023 da 496.2 % mediana contra 135 % real: ahora
+**sobreestima** ~3.7×, donde `a5b_macro` subestimaba (47.5 %). Cambió el signo del error, no su
+tamaño. Y solo el 6 % de las semillas llega al mes 96 sin colapsar: el piso de legitimidad sostiene
+un mandato de cuatro años, no dos seguidos.
+
+**V1 sigue en 0 %**, igual que `a5b_macro`: con los coeficientes calibrados la hiperinflación de 1989
+no es alcanzable desde el estado real de 1988-06, aunque Aurora sin calibrar sí la produce (100 %).
+El mecanismo de ADR 012 existe y los tests lo ejercitan; lo que no lo alcanza es el punto del espacio
+de parámetros al que llega la calibración.
+
+### Backtest `b3_a7` (1916–2022, 321 ventanas, 30 semillas, 2 brazos)
+
+265 s (4.4 min) con 4 workers y transiciones de régimen activas. Contra `b1_a5b`:
+
+| objetivo | `b1_a5b` | `b3_a7` | Δ |
+|---|---:|---:|---:|
+| Dirección de la inflación | 46.2 % | 46.0 % | −0.2 pp |
+| Magnitud de la inflación | 30.4 % | 31.0 % | +0.6 pp |
+| **Régimen** | 72.5 % | **90.4 %** | **+17.9 pp** |
+| Elección | 52.6 % | 48.1 % | −4.5 pp |
+| **Crisis** | 64.3 % | **72.6 %** | **+8.3 pp** |
+| **Golpe (1916–1983)** | 58.0 % | **65.9 %** | **+7.9 pp** |
+
+**El brazo calibrado ya no pierde 1916–1960.** En `b1_a5b` las 135 ventanas de modo anual tenían el
+100 % de sus semillas calibradas descartadas por `OverflowError`, así que toda comparación
+"calibrado vs Aurora" de esa corrida era en realidad sobre 1961–2022. Ahora los dos brazos tienen las
+mismas 405 filas de modo anual. Advertencia que va con eso (ADR 017 §9.4): el modo anual corre
+**contra la guarda numérica** (`g_m` clampeado), así que tiene datos, no necesariamente evidencia.
+
+Por brazo, donde la calibración ayuda de verdad: **magnitud de la inflación** 40.5 % contra 21.5 % de
+Aurora, y **crisis** 81.3 % contra 63.9 %. Donde no: **dirección de la inflación**, 44.5 % contra
+47.4 % — Aurora sin calibrar le sigue ganando al signo del cambio, igual que en `b1_a5b`.
+
+Régimen por modo inicial, que es donde se ve ADR 015: golpe **100 %** (N=18), democracia restringida
+**100 %** (N=24), democracia 95.2 % (N=250), dictadura 68.1 % (N=72). Los dos primeros eran **0 %**.
+
+La dispersión entre semillas sigue prediciendo el error: **Spearman 0.414** (era 0.433). El modelo
+sabe cuándo no sabe, con la misma fuerza moderada de antes.
+
+### Qué queda, en orden de importancia
+
+1. **La dirección de la inflación no mejora con nada.** 46 % en las tres calibraciones probadas, y
+   Aurora sin calibrar le gana. Acertar la magnitud sin acertar el signo del cambio es el límite más
+   duro que tiene el modelo hoy, y ninguna de las tres rondas lo movió.
+2. **El horizonte largo sigue colapsando.** 6 % de las semillas llega a 96 meses. El piso de
+   legitimidad alcanza para un mandato, no para dos.
+3. **La elección de 2023 (outsider) se acierta 6 %** contra 94 % de la de 2019. El balotaje de
+   ADR 013 sigue sin resolverse.
+4. **Partir el train por régimen empeoró la inflación.** Si se vuelve a intentar, conviene probar
+   calibración jerárquica (un vector común más desvíos por régimen) antes que tres vectores
+   independientes con un tercio de los datos cada uno.
+5. **Nada de esto se corrió contra un LLM real todavía.** Toda la capa de IA sigue verificada solo
+   con backends falsos.
+
+Estos resultados describen el comportamiento de República Artificial calibrada con datos de
+Argentina; no son evidencia sobre lo que hubiera pasado.
+

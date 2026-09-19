@@ -137,3 +137,32 @@ cuello de botella del balotaje que diagnosticó el ADR 013 tiene número.
 
 Estos resultados describen el comportamiento de República Artificial calibrada con datos de
 Argentina; no son evidencia sobre lo que hubiera pasado.
+
+## 8. Estado al cierre de la tercera iteración (ADR 015–017) y qué sigue
+
+Las cinco filas de §7 quedaron cerradas o con su mecanismo construido, y las tres corridas que las
+miden (`a7_by_regime`, `a8_a7`, `b3_a7`) ya están en el repo. Detalle completo con números en
+`docs/CALIBRATION_LOG.md`, sección "Corrida completa `a7_by_regime`".
+
+| Pendiente de §7 | Cómo quedó |
+|---|---|
+| Holdout sin tipo de cambio antes de 1992 | **Resuelto.** Serie anual enlazada 1962–2012 (`PA.NUS.FCRF` del Banco Mundial, validada con cinco cruces). En el holdout el calibrado ahora le gana a persistencia en tipo de cambio (17.3 contra 27.5 a h=12), una celda que antes no existía |
+| Régimen 0 % al arrancar en golpe | **Resuelto (ADR 015).** La causa era que el motor nunca recibía el régimen inicial. Golpe y democracia restringida pasan de 0 % a 100 %; el objetivo régimen del backtest, de 72.5 % a 90.4 % |
+| Colapso antes de la elección de 2023 | **Resuelto (ADR 016).** 0 de 50 semillas terminan antes de los 48 meses (eran 50 de 50); V4 pasa de no evaluable a **CUMPLIDA**, con derrota del oficialismo en el 100 % |
+| Coeficientes legacy sin señal y desborde anual | **Resuelto (ADR 017).** `rho_pi + c_e` queda en 0.910 contra 2.323 antes; el brazo calibrado recupera las 405 filas de modo anual que perdía enteras. Con la advertencia de que ese tramo corre contra la guarda numérica |
+| El calibrado no supera a persistencia | **Mecanismo construido, hipótesis NO CUMPLIDA.** Calibrar por régimen no igualó a persistencia en inflación a h=12 en ningún grupo (0 de 3), y quedó peor que el vector único |
+
+### Qué sigue, en orden de importancia
+
+| Hallazgo de esta ronda | Qué sigue |
+|---|---|
+| La dirección de la inflación no mejora con ninguna calibración (46 % en las tres probadas, y Aurora sin calibrar le gana) | Es el límite más duro del modelo. Antes de seguir calibrando conviene entender por qué el signo del cambio es tan difícil: probar un objetivo que puntúe el signo explícitamente, no solo la RMSE del nivel |
+| Partir el train en tres empeoró la inflación (cada grupo se ajusta con un tercio de los meses) | Calibración jerárquica: un vector común más desvíos por régimen, en vez de tres vectores independientes |
+| Solo el 6 % de las semillas llega a 96 meses sin colapsar | El piso de legitimidad de ADR 016 sostiene un mandato, no dos seguidos. Revisar qué se satura entre el mes 48 y el 96 |
+| La elección de 2023 se acierta 6 % contra 94 % la de 2019 | El cuello de botella del balotaje (ADR 013) sigue abierto: el modelo reproduce un oficialismo que pierde por deterioro económico, no uno que pierde ante un outsider |
+| V1 sigue en 0 %: la hiperinflación de 1989 no es alcanzable con los coeficientes calibrados, aunque sí con Aurora sin calibrar | El mecanismo de ADR 012 existe y sus tests lo ejercitan; lo que no lo alcanza es el punto al que llega la calibración. Revisar los bounds de los coeficientes de expectativas |
+| La capa de IA nunca se corrió contra un LLM real | `scripts/fase4_ollama.sh` (o `.ps1` en Windows) desde una máquina con Ollama; el recolector deja las tablas listas |
+
+Estos resultados describen el comportamiento de República Artificial calibrada con datos de
+Argentina; no son evidencia sobre lo que hubiera pasado.
+
