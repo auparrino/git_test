@@ -40,12 +40,20 @@ class ActorDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     position: Literal["support", "oppose", "negotiate", "neutral"]
-    intensity: float = Field(ge=0.0, le=1.0)
+    # `description` viaja DENTRO del JSON Schema que se le manda al modelo
+    # (`format=ActorDecision.model_json_schema()`), asi que es el unico lugar
+    # del esquema donde se puede explicar un rango que la gramatica de Ollama
+    # no verifica (ver PROMPT_VERSION v4.2 en `ai/prompts.py`).
+    intensity: float = Field(
+        ge=0.0, le=1.0, description="Decimal entre 0 y 1 (0.75), no un porcentaje (75)."
+    )
     public_message: str = Field(default="", max_length=280)
     private_strategy: Literal["cooperate", "pressure", "wait", "escalate"]
     actions: list[ActionRequest] = Field(default_factory=list, max_length=3)
     requested_concession: ConcessionType | None = None
-    confidence: float = Field(ge=0.0, le=1.0)
+    confidence: float = Field(
+        ge=0.0, le=1.0, description="Decimal entre 0 y 1 (0.85), no un porcentaje (85)."
+    )
     reasoning: str = Field(default="", max_length=600)
     #: ADR 005 secc. 2/deliverable 4: como responderia el actor a un
     #: `COUNTER` del presidente sobre SU propio pedido de este mes (mismo

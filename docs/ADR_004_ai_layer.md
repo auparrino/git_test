@@ -89,7 +89,7 @@ Un `system` por rol y un `user` renderizado desde `Perception` con plantillas Ji
 - **System prompt por rol:** identidad (nombre, rol, provincia/partido), ideología en palabras
   (mapeo de los 4 ejes a frases), personalidad en palabras, y tres reglas: no inventar hechos que no
   estén en el mensaje, no prometer lo que el rol no puede ejecutar, dar una razón concreta.
-- Versionado: `PROMPT_VERSION = "v4.1"` en cada traza; cualquier cambio de plantilla lo incrementa (v4.1: REVIEW_002 hallazgo #7, texto de `_fmt_memories` sin memorias).
+- Versionado: `PROMPT_VERSION = "v4.2"` en cada traza; cualquier cambio de plantilla lo incrementa (v4.1: REVIEW_002 hallazgo #7, texto de `_fmt_memories` sin memorias. v4.2: rango explícito de `intensity`/`confidence`, ver abajo).
 
 ## 5. Visibilidad por rol (`engine/perception.py`, completa ADR 003 §3)
 
@@ -313,3 +313,26 @@ entorno ni red hacia él.
     bajo prueba solo en `--actor`, pero es lo que permite que las relaciones/consecuencias del actor
     comparado reaccionen igual en ambas corridas a lo que hacen los demás — comparar un actor aislado
     del resto del mundo sería menos representativo.
+
+## Nota de implementación — v4.2: el JSON Schema no alcanza para los rangos
+
+Primera corrida real contra un Ollama local (`qwen3:8b`, máquina del usuario, 10 llamadas): 2 de 10
+respuestas traían `"intensity": 75`. JSON bien formado, esquema violado, `parse_rate` 0.80 contra el
+umbral de 0.95 de la sección 8.
+
+El campo declara `ge=0.0, le=1.0` y el `model_json_schema()` que se le manda a Ollama incluye
+`"maximum": 1.0`. **No alcanza**: la gramática con la que Ollama (llama.cpp) restringe la salida
+verifica tipos y estructura, no rangos numéricos. Un `75` es un `number` válido para la gramática, y
+recién lo rechaza pydantic del lado nuestro, cuando ya se gastaron 16 segundos de inferencia.
+
+Dos cambios, los dos necesarios porque atacan lugares distintos del contexto del modelo:
+
+1. **`ai/prompts.py`**: una línea de `FORMATO DE LOS NUMEROS` en la instrucción final, diciendo que
+   van entre 0 y 1 como decimal y que 75 es inválido.
+2. **`ai/schemas.py`**: `description` en `intensity` y `confidence`. Las descripciones viajan DENTRO
+   del JSON Schema, así que las ve el modelo aunque no lea la instrucción.
+
+Regla general que deja este hallazgo: **todo rango numérico que el esquema restrinja tiene que estar
+escrito también en texto**, porque la gramática no lo va a hacer cumplir. Vale para cualquier campo
+con `ge`/`le` que se agregue en el futuro.
+

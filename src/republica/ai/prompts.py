@@ -21,8 +21,13 @@ from republica.engine.perception import Perception
 #: cualquier cambio de plantilla la incrementa. v4.1 (hallazgo #7 de
 #: REVIEW_002): corrige el texto de `_fmt_memories` sin memorias ("sin
 #: memorias todavia -- llega en una fase futura", desactualizado desde que
-#: Fase 6/ADR 006 agrego memoria de verdad).
-PROMPT_VERSION = "v4.1"
+#: Fase 6/ADR 006 agrego memoria de verdad). v4.2: explicita el RANGO de
+#: `intensity`/`confidence`. Medido con `qwen3:8b` en una maquina real: 2 de
+#: 10 respuestas traian `"intensity": 75` -- JSON bien formado, esquema
+#: violado, `parse_rate` 0.80. El `maximum: 1` del JSON Schema NO alcanza:
+#: la gramatica con que Ollama restringe la salida no verifica rangos
+#: numericos, solo tipos y estructura. Hay que decirlo en el texto.
+PROMPT_VERSION = "v4.2"
 
 ROLE_LABELS: dict[str, str] = {
     "president": "presidente/a",
@@ -291,5 +296,7 @@ def render_user(perception: Perception, allowed_actions: list[ActionType]) -> st
         "",
         "INSTRUCCION: respondé solo con el JSON del esquema (ActorDecision), "
         "sin texto adicional antes ni despues.",
+        "FORMATO DE LOS NUMEROS: `intensity` y `confidence` van entre 0 y 1 "
+        "como decimal (por ejemplo 0.75), NO como porcentaje (75 es invalido).",
     ]
     return "\n".join(sections)
