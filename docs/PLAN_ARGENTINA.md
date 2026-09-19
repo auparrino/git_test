@@ -126,7 +126,7 @@ por el bug del objetivo), A6 (V1–V4) y ADR 014 (backtest 1916–2022, `b1_a5b`
 | Desde 2019-12 el calibrado colapsa (100 %) antes de la elección de 2023 | Revisar la terminación por `collapse` y la recuperación §5 del ADR 012 con datos de aprobación reales (no hay serie) |
 | Brazo calibrado sin dato 1916–1960: los `Coefficients` legacy no reciben señal del objetivo macro y desbordan en modo anual | Excluirlos del vector cuando macro está activo, o dar al modo anual su propio grupo de coeficientes |
 | Régimen: 0 % de acierto cuando la ventana arranca en golpe o democracia restringida | El modelo persiste el régimen inicial; falta un mecanismo de transición endógeno (ADR 011 solo lo tiene por calendario) |
-| Holdout sin tipo de cambio mensual antes de 1992 | Serie anual/mensual 1960–1991 (script local o mirror), interpolada como se hizo con inflación |
+| Holdout sin tipo de cambio mensual antes de 1992 | **Resuelto** (2026-09-19): `exchange_rate_annual_linked.csv` 1962–2012 desde el indicador `PA.NUS.FCRF` del Banco Mundial vía mirror (SOURCES.md fuente 22, `trust` A), ya enlazado a través de las cuatro redenominaciones y validado con cinco cruces (`consistency.md` §14: monotonía 1962–1991 sin caídas, empalme con 1992-01 al 3.78 %, anual vs mensual 1992–2012 al 0.77 % medio). `RealData.fx_level()` la interpola geométricamente, no linealmente. Falta todavía: mensual real antes de 1992, y 1952–1961 sin dato. |
 | Fase 4 con Ollama y APIs oficiales: bloqueadas también desde la sesión en la nube | Correr `scripts/fase4_ollama.sh` y `scripts/fetch_argentina_local.py` desde una red sin proxy |
 
 Estos resultados describen el comportamiento de República Artificial calibrada con datos de

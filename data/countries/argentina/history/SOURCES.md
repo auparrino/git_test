@@ -590,6 +590,35 @@ pública, igual criterio que para `thomasriveros/BCRA_Data` en la fuente 10.
 
 ---
 
+### 22. `ronnywang/worldbank` — tipo de cambio oficial anual enlazado 1962-2012 (WDI `PA.NUS.FCRF`)
+
+- **Repo**: `https://github.com/ronnywang/worldbank` (el mismo mirror de la fuente 17)
+- **Archivo**: `WDI_bundle/parsed/PA.NUS.FCRF_WDI.csv`
+  (`https://raw.githubusercontent.com/ronnywang/worldbank/master/WDI_bundle/parsed/PA.NUS.FCRF_WDI.csv`)
+- **Origen declarado**: indicador `PA.NUS.FCRF` del World Development Indicators del Banco
+  Mundial, "Official exchange rate (LCU per US$, period average)"; el propio WDI declara como
+  fuente primaria el *International Financial Statistics* del FMI. El código de indicador
+  coincide exactamente con el pedido. `api.worldbank.org` responde 403 desde este entorno
+  (ver `coverage.md`), así que el mirror es la única copia alcanzable.
+- **Licencia**: no hay `LICENSE` en el repo; el dato de origen es World Bank Open Data (CC BY 4.0).
+- **Fecha de descarga**: 2026-09-19 (snapshot del repo: diciembre de 2013, igual que la fuente 17)
+- **sha256** (`PA.NUS.FCRF_WDI.csv`):
+  `df0101b206368fec61ab026087a3e441b92db746d58440c21d8c600f9b003b30`
+  (copia cruda commiteada en `history/raw/worldbank_mirror/`)
+- **Transformación**: fila `Country Code == "ARG"`, columnas de año no vacías (1962-2012; 1960 y
+  1961 vienen vacíos en este snapshot) → `exchange_rate_annual_linked.csv`, 51 filas, sin
+  ningún factor aplicado. **La serie del WDI ya viene enlazada** a la unidad vigente (peso
+  convertible de 1992 = ARS actual) a través de las cuatro redenominaciones (1970, 1983, 1985,
+  1992): por eso 1962 vale `1.4e-11` ARS/USD (≈ 140 pesos moneda nacional por dólar) y 1991
+  vale `0.9536` (≈ 9 536 australes por dólar). Reproducible con
+  `scripts/build_argentina_fx_linked.py`, que además imprime los cinco cruces de
+  `consistency.md` sección 14.
+- **source_id**: `wb_fcrf_mirror`
+- **trust**: A (indicador oficial del Banco Mundial con código exacto declarado y origen FMI;
+  la limitación es la cobertura del snapshot —termina en 2012— y que 1960-1961 no tienen dato,
+  no el origen). Cierra el hueco 1952-1991 que la fuente 16 no pudo cubrir por el artefacto de
+  escala de Clio Infra; 1952-1961 sigue sin dato.
+
 ## Resumen de `trust` por serie tidy
 
 | Archivo | `source_id` | trust | Período |
@@ -616,6 +645,7 @@ pública, igual criterio que para `thomasriveros/BCRA_Data` en la fuente 10.
 | `exchange_rate_parallel_monthly_linked.csv` | `ahierro_dolar_blue` / `diloretot_dolar_blue` | B | 2008–2026 |
 | `inflation_cpi_annual_linked.csv` | `forexcenturies_clio_cpi` / `wb_inflation_cpi` | B / A | 1915–2023 |
 | `exchange_rate_annual.csv` | `forexcenturies_clio_fx` | B | 1879–1951 |
+| `exchange_rate_annual_linked.csv` | `wb_fcrf_mirror` | A | 1962–2012 |
 | `gdp_deflator_annual.csv` | `wb_gdp_deflator_mirror` | A | 1961–2006 |
 | `inflation_cpi_monthly_linked.csv` | `bcra_data_inflacion_mensual` / `jmtelechea_ipc_nacional` | A / B | 1943-03–2026-08 |
 | `poverty_linked.csv` | `argendata_cedlas_isa_pobreza_nacional` / `diloretot_tasa_pobreza` | B / A | 2001-05–2026-01 |
@@ -629,8 +659,10 @@ pública, igual criterio que para `thomasriveros/BCRA_Data` en la fuente 10.
 No se generaron (ver `coverage.md` → Faltantes): `inflation_deflator_annual.csv` (reemplazado
 por `gdp_deflator_annual.csv`, ver fuente 17; la extensión 2007+ sigue pendiente, la API del
 Banco Mundial da 403 también desde la sesión del 2026-09-15 y el único candidato en mirror se
-descartó, fuente 21), tipo de cambio 1810–1878 y 1952–1991 (ver fuente 16 — el hueco 1952–1991
-es un artefacto de escala en la fuente disponible, no una fuente no buscada), desocupación EPH
+descartó, fuente 21), tipo de cambio 1810–1878 y 1952–1961 (ver fuente 16 — el hueco
+era 1952–1991 por un artefacto de escala en Clio Infra; la fuente 22 lo cerró desde 1962 con el
+indicador `PA.NUS.FCRF` del Banco Mundial, ya enlazado a través de las redenominaciones, así que
+lo que resta sin dato anual es 1952–1961), desocupación EPH
 puntual 1974–2002 (solo se consiguió el modelado OIT 1991+, fuente 20), tasa de política
 monetaria oficial del BCRA (fuente 18: no está en el mirror), desglose de deuda pública (MECON,
 403). `inflation_cpi_monthly_linked.csv` **sí** se generó en la pasada del 2026-09-15 (fuente
