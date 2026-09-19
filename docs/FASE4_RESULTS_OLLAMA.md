@@ -7,8 +7,10 @@ esto (sesión remota, ver "Entorno y bloqueo") no se pudieron bajar los pesos de
 ningún número inventado ni simulado con `fake:*` presentado como resultado LLM.
 
 Para completar las columnas pendientes en una máquina con Ollama alcanza con un comando (ver
-"Cómo completar este documento"): `scripts/fase4_ollama.sh` corre todo el plan en orden y deja las
-salidas en `simulations/fase4_logs/`.
+"Cómo completar este documento"): `scripts/fase4_ollama.sh` corre todo el plan en orden, deja las
+salidas en `simulations/fase4_logs/` y termina con `scripts/fase4_collect_results.py`, que arma
+`simulations/fase4_logs/RESULTADOS.md` con todas las tablas de este documento y de
+`FASE4_BENCH_OLLAMA.md` listas para pegar.
 
 ## Entorno y bloqueo
 

@@ -107,6 +107,16 @@ class OllamaBackend:
         self.model = model
         host = host or os.environ.get("OLLAMA_HOST") or "http://localhost:11434"
         self.host = host.rstrip("/")
+        # `REPUBLICA_OLLAMA_TIMEOUT` (segundos) permite subir el timeout de
+        # 60 s del ADR 004 sin tocar codigo cuando el modelo corre en CPU
+        # (un 8B sin GPU puede tardar mas de un minuto por decision, ver
+        # `docs/OLLAMA_SETUP.md`). Solo se lee si el caller dejo el default.
+        env_timeout = os.environ.get("REPUBLICA_OLLAMA_TIMEOUT")
+        if timeout == DEFAULT_TIMEOUT_SECONDS and env_timeout:
+            try:
+                timeout = float(env_timeout)
+            except ValueError:
+                pass
         self.timeout = timeout
         self.num_predict = num_predict
 

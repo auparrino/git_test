@@ -19,3 +19,14 @@
 7. Todo el plan de Fase 4 de una vez (bench por rol, Aurora y Argentina 2019-12 con LLM y por reglas,
    evals, comparación de trazas): `MODEL=qwen3:8b ./scripts/fase4_ollama.sh`; salidas en
    `simulations/fase4_logs/`, tablas para `docs/FASE4_BENCH_OLLAMA.md` y `docs/FASE4_RESULTS_OLLAMA.md`.
+   El último paso del script (`collect`) corre `scripts/fase4_collect_results.py`, que junta todos los
+   logs en `simulations/fase4_logs/RESULTADOS.md` con las tablas en el orden de esos dos documentos:
+   lo que hay que hacer después es pegar ese archivo (o sus secciones) en los docs y commitear.
+   El script elige solo la mejor calibración disponible de `data/countries/argentina/calibration/`
+   (`CALIBRATION=<run_id>` la fuerza).
+8. Timeout por decisión: `OllamaBackend` usa 60 s (ADR 004). Si el modelo corre en CPU y aparecen
+   `URLError`/timeout, `REPUBLICA_OLLAMA_TIMEOUT=180` (segundos) lo sube sin tocar código; el script
+   de Fase 4 ya exporta 120 por default.
+9. Windows: el script es bash (`time`, `tee`); correrlo desde WSL o Git Bash con Ollama nativo de
+   Windows corriendo (`OLLAMA_HOST=http://localhost:11434` se ve desde WSL2 si Ollama escucha en
+   `0.0.0.0`; si no, `setx OLLAMA_HOST 0.0.0.0` en Windows y reiniciar Ollama).

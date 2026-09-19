@@ -10,6 +10,9 @@
 #   MODEL=qwen3:4b ./scripts/fase4_ollama.sh            # maquina chica
 #   STEPS=bench ./scripts/fase4_ollama.sh               # solo el paso 2
 #   STEPS="aurora argentina" ./scripts/fase4_ollama.sh  # solo corridas
+#   CALIBRATION=a5b_macro ./scripts/fase4_ollama.sh     # forzar una calibracion
+#   REPUBLICA_OLLAMA_TIMEOUT=180 ./scripts/fase4_ollama.sh  # CPU lenta
+#   En Windows: correrlo desde WSL o Git Bash (usa bash, time, tee).
 #
 # Requisitos: `ollama serve` corriendo (OLLAMA_HOST si no es localhost:11434),
 # `ollama pull $MODEL`, `uv sync --all-extras`.
@@ -21,20 +24,28 @@ BRAIN="llm:ollama:${MODEL}"
 SEED="${SEED:-7}"
 MONTHS="${MONTHS:-48}"
 N_BENCH="${N_BENCH:-50}"
-STEPS="${STEPS:-bench aurora argentina evals compare}"
+STEPS="${STEPS:-bench aurora argentina evals compare collect}"
 LOGS=simulations/fase4_logs
 mkdir -p simulations "$LOGS"
 
-# `--calibration a5_macro` solo si la calibracion existe (paso 4 del plan).
+# `--calibration <id>`: la mejor calibracion disponible en el repo, en orden
+# de preferencia (ver docs/CALIBRATION_LOG.md); CALIBRATION=<id> la fuerza.
 CALIB=()
-if [[ -f data/countries/argentina/calibration/a5_macro/coefficients.json ]]; then
-  CALIB=(--calibration a5_macro)
-fi
+for cand in "${CALIBRATION:-}" a7_by_regime a5b_macro a5_macro a3_main; do
+  if [[ -n "$cand" && -f "data/countries/argentina/calibration/$cand/coefficients.json" ]]; then
+    CALIB=(--calibration "$cand")
+    break
+  fi
+done
+
+# Timeout por decision del backend Ollama (segundos). 60 s es el literal del
+# ADR 004; en CPU sin GPU un 8B puede necesitar mas: REPUBLICA_OLLAMA_TIMEOUT=180.
+export REPUBLICA_OLLAMA_TIMEOUT="${REPUBLICA_OLLAMA_TIMEOUT:-120}"
 
 log() { printf '\n[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 has_step() { [[ " $STEPS " == *" $1 "* ]]; }
 
-log "modelo=$MODEL brain=$BRAIN seed=$SEED meses=$MONTHS"
+log "modelo=$MODEL brain=$BRAIN seed=$SEED meses=$MONTHS calibracion=${CALIB[*]:-ninguna} timeout=${REPUBLICA_OLLAMA_TIMEOUT}s"
 { uname -a; nproc; free -g | head -2; (nvidia-smi --query-gpu=name,memory.total --format=csv 2>/dev/null || true); ollama --version; } \
   > "$LOGS/hardware.txt" 2>&1 || true
 ollama show "$MODEL" > "$LOGS/model_${MODEL//[:\/]/_}.txt" 2>&1 || true
@@ -88,4 +99,9 @@ if has_step compare; then
     --out "$LOGS/compare_ar_2019.md"
 fi
 
-log "listo: ver $LOGS/"
+if has_step collect; then
+  log "recolectando resultados en $LOGS/RESULTADOS.md"
+  uv run python scripts/fase4_collect_results.py --logs "$LOGS" --model "$MODEL"
+fi
+
+log "listo: ver $LOGS/ (resumen en $LOGS/RESULTADOS.md)"
