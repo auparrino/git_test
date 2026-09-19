@@ -857,7 +857,20 @@ def inflation_persistence(calibration_run_id: str = "a3_main") -> dict[str, floa
     out["aurora_total"] = out["aurora_rho_pi"] + out["aurora_c_e"]
     path = CALIBRATION_ROOT / calibration_run_id / "coefficients.json"
     if path.exists():
-        cal = json.loads(path.read_text(encoding="utf-8"))["coefficients"]
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        # ADR 017: una calibracion `--by-regime` no tiene una clave
+        # `coefficients` unica sino un vector por grupo. Se reporta el del
+        # grupo `default` (el de mas meses de arranque), que es el que usa
+        # una corrida sin `start`; los demas van aparte, abajo. Formato
+        # viejo (`a3_main`/`a5_macro`/`a5b_macro`): un solo vector.
+        if "by_regime" in raw:
+            cal = raw["default"]["coefficients"]
+            out["calibrated_group"] = raw.get("default_group", "default")
+            for group, entry in sorted(raw["by_regime"].items()):
+                rho, c_e = entry["coefficients"]["rho_pi"], entry["coefficients"]["c_e"]
+                out[f"calibrated_total_{group}"] = rho + c_e
+        else:
+            cal = raw["coefficients"]
         out["calibrated_rho_pi"] = cal["rho_pi"]
         out["calibrated_c_e"] = cal["c_e"]
         out["calibrated_total"] = cal["rho_pi"] + cal["c_e"]
