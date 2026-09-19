@@ -261,3 +261,81 @@ def test_exchange_rate_parallel_linked_overlap_within_5_percent() -> None:
         f"salto dic-2010 -> ene-2011 de {pct_diff:.2f}% en el dolar blue, "
         "mayor al 5% esperado para un mes calendario sin devaluacion grande registrada"
     )
+
+
+# ---------------------------------------------------------------------------
+# `exchange_rate_annual_linked.csv` (SOURCES.md fuente 22, WDI `PA.NUS.FCRF`):
+# cierra el pendiente "holdout sin tipo de cambio mensual antes de 1992" de
+# `docs/PLAN_ARGENTINA.md` seccion 7. Los cuatro tests de abajo son los cruces
+# de `consistency.md` seccion 14 que se pueden verificar sin re-descargar nada
+# (el script `scripts/build_argentina_fx_linked.py` corre los cinco).
+# ---------------------------------------------------------------------------
+
+FX_LINKED = "exchange_rate_annual_linked.csv"
+
+
+def _fx_linked_by_year() -> dict[int, float]:
+    path = HISTORY_DIR / FX_LINKED
+    if not path.is_file():
+        pytest.skip(f"{FX_LINKED} no existe")
+    return {int(r["date"][:4]): float(r["value"]) for r in _read_rows(path)}
+
+
+def test_fx_linked_covers_the_holdout_window() -> None:
+    """El holdout de la calibracion (`1983-12:1991-12`, ADR 012 secc. 6) tiene
+    que quedar cubierto: ese era el pendiente."""
+    fx = _fx_linked_by_year()
+    faltantes = [y for y in range(1983, 1993) if y not in fx]
+    assert not faltantes, f"sin dato de tipo de cambio para {faltantes} (holdout 1983-1991)"
+
+
+def test_fx_linked_is_monotonic_through_the_redenominations() -> None:
+    """Cruce (a) de `consistency.md` seccion 14: el peso se deprecio todos los
+    años de 1962 a 1991, asi que una caida año a año delataria un factor de
+    redenominacion mal aplicado (1970, 1983, 1985, 1992)."""
+    fx = _fx_linked_by_year()
+    caidas = [
+        (y, fx[y - 1], fx[y])
+        for y in sorted(fx)
+        if y <= 1991 and (y - 1) in fx and fx[y] < fx[y - 1]
+    ]
+    assert not caidas, f"caidas año a año en el tramo enlazado: {caidas}"
+
+
+def test_fx_linked_splices_with_the_monthly_series() -> None:
+    """Cruce (c): el valor anual de 1991 y el mensual de 1992-01 tienen que
+    estar en la misma unidad (pesos convertibles), con menos de 10% de
+    diferencia -- el promedio de 1991 contra el punto de enero de 1992."""
+    fx = _fx_linked_by_year()
+    monthly_path = HISTORY_DIR / "exchange_rate_official_monthly.csv"
+    if not monthly_path.is_file():
+        pytest.skip("exchange_rate_official_monthly.csv no existe")
+    monthly = {r["date"]: float(r["value"]) for r in _read_rows(monthly_path)}
+    jan_92 = monthly.get("1992-01-01")
+    assert jan_92 is not None and 1991 in fx
+    pct = abs(fx[1991] - jan_92) / jan_92 * 100
+    assert pct < 10, (
+        f"empalme 1991 ({fx[1991]:.4f}) vs 1992-01 ({jan_92:.4f}) con {pct:.2f}% de "
+        "diferencia: posible cruce de unidad"
+    )
+
+
+def test_fx_linked_order_of_magnitude_matches_accumulated_inflation() -> None:
+    """Cruce (e): entre 1962 y 1991 los precios y el tipo de cambio tienen que
+    crecer ordenes de magnitud comparables (la brecha son la inflacion de
+    EE.UU. del periodo y la apreciacion real, no un error de unidad)."""
+    import math
+
+    fx = _fx_linked_by_year()
+    infl_path = HISTORY_DIR / "inflation_cpi_annual_linked.csv"
+    if not infl_path.is_file():
+        pytest.skip("inflation_cpi_annual_linked.csv no existe")
+    infl = {int(r["date"][:4]): float(r["value"]) for r in _read_rows(infl_path)}
+    if not all(y in infl for y in range(1963, 1992)):
+        pytest.skip("inflation_cpi_annual_linked.csv no cubre 1963-1991 completo")
+    log10_cpi = sum(math.log10(1 + infl[y] / 100) for y in range(1963, 1992))
+    log10_fx = math.log10(fx[1991] / fx[1962])
+    assert abs(log10_cpi - log10_fx) < 2, (
+        f"precios x10^{log10_cpi:.2f} vs tipo de cambio x10^{log10_fx:.2f} 1962-1991: "
+        "brecha mayor a 2 ordenes de magnitud, revisar unidades"
+    )

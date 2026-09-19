@@ -124,6 +124,43 @@ def fetch_exchange_rate_annual_pre1992():
     _write_tidy(OUT_DIR / "exchange_rate_annual.csv", rows)
 
 
+def fetch_exchange_rate_fcrf_annual():
+    """Tipo de cambio oficial anual, pesos convertibles por USD, ya enlazado
+    por el Banco Mundial a través de las redenominaciones de 1970/1983/1985/
+    1992 (`PA.NUS.FCRF`, "Official exchange rate, LCU per US$, period
+    average", origen IMF IFS). Desde 2026-09-19 el tramo 1962-2012 ya está
+    en `exchange_rate_annual_linked.csv` vía el mirror `ronnywang/worldbank`
+    (`SOURCES.md` fuente 22, `scripts/build_argentina_fx_linked.py`); esta
+    función pega contra la API oficial para (a) verificar ese tramo contra el
+    dato vigente y (b) traer lo que el mirror de 2013 no tiene: 1960-1961
+    (vacíos también en el snapshot) y 2013+. Escribe a un archivo APARTE
+    (`exchange_rate_annual_wb_api.csv`, `source_id=wb_fcrf_api`) para no
+    pisar la serie reproducible desde el mirror; si se decide reemplazarla,
+    documentar el hash del JSON en `SOURCES.md` primero.
+    """
+    import requests
+
+    url = WB_API.format(code="PA.NUS.FCRF")
+    r = requests.get(url, timeout=30)
+    r.raise_for_status()
+    data = r.json()
+    rows = []
+    for entry in data[1]:
+        if entry.get("value") is None:
+            continue
+        year = int(entry["date"])
+        rows.append(
+            (
+                f"{year:04d}-01-01",
+                float(entry["value"]),
+                "ARS (pesos convertibles) por USD, promedio anual, tipo de cambio oficial "
+                "(World Bank PA.NUS.FCRF, origen IMF IFS, API oficial)",
+                "wb_fcrf_api",
+            )
+        )
+    _write_tidy(OUT_DIR / "exchange_rate_annual_wb_api.csv", rows)
+
+
 def fetch_unemployment_pre2003():
     """Desocupación EPH puntual 1974-2003 (la serie continua de datos.gob.ar
     usada en unemployment.csv arranca en 2003, cuando la EPH pasa a ser
@@ -246,6 +283,7 @@ def fetch_eph_puntual_1974_2003() -> None:
 SERIES = {
     "inflation_deflator_annual": fetch_inflation_deflator_annual,
     "exchange_rate_annual": fetch_exchange_rate_annual_pre1992,
+    "exchange_rate_fcrf_annual": fetch_exchange_rate_fcrf_annual,
     "unemployment_pre2003": fetch_unemployment_pre2003,
     "public_debt_breakdown": fetch_public_debt_breakdown,
     "bcra_monetarias": fetch_bcra_monetarias,

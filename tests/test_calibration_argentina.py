@@ -345,3 +345,54 @@ def test_identifiability_recovers_half_of_perturbed_coefficients() -> None:
         f"solo {moved_toward_truth}/{len(perturbations)} coeficientes se movieron "
         ">= 20% del perturbado hacia la verdad"
     )
+
+
+# ---------------------------------------------------------------------------
+# Fallback de tipo de cambio anual para el holdout (`RealData.fx_level`,
+# SOURCES.md fuente 22). Antes de esta serie, `fx_log()` devolvia `None` en
+# TODO el holdout `1983-12:1991-12` y el termino `exchange_rate` del objetivo
+# quedaba sin puntuar ahi (docs/CALIBRATION_LOG.md, "Pendiente").
+# ---------------------------------------------------------------------------
+
+
+def test_fx_log_has_data_across_the_holdout() -> None:
+    """El pendiente concreto: `fx_log` tiene que devolver un numero en los
+    meses del holdout, no `None` (la serie mensual arranca en 1992-01)."""
+    from republica.calibration.objective import RealData
+
+    real = RealData.load()
+    for y, m in ((1985, 6), (1988, 6), (1989, 7), (1991, 12)):
+        assert real.fx_log(y, m) is not None, f"sin tipo de cambio para {y}-{m:02d}"
+
+
+def test_fx_level_prefers_the_exact_monthly_value() -> None:
+    """Desde 1992-01 la referencia sigue siendo la serie MENSUAL del BCRA: el
+    fallback anual no debe pisarla."""
+    from republica.calibration.objective import RealData
+
+    real = RealData.load()
+    exact = real.fx_official.get((1992, 1))
+    if exact is None:
+        pytest.skip("exchange_rate_official_monthly.csv no cubre 1992-01")
+    assert real.fx_level(1992, 1) == exact
+
+
+def test_fx_level_interpolates_geometrically_within_a_year() -> None:
+    """La interpolacion entre dos promedios anuales es GEOMETRICA (sobre
+    `log`), no lineal: con 1989 (x48 en un año) una interpolacion lineal
+    concentraria casi toda la depreciacion en los ultimos meses. Se verifica
+    que el punto medio del año este por debajo del promedio aritmetico de los
+    dos extremos, que es la firma de una media geometrica."""
+    import math
+
+    from republica.calibration.objective import RealData
+
+    real = RealData.load()
+    a = real.fx_level(1989, 1)
+    b = real.fx_level(1990, 1)
+    mid = real.fx_level(1989, 7)
+    if a is None or b is None or mid is None:
+        pytest.skip("sin dato anual de tipo de cambio para 1989-1990")
+    assert a < mid < b
+    assert mid < (a + b) / 2
+    assert math.isclose(math.log(mid), (math.log(a) + math.log(b)) / 2, rel_tol=0.1)

@@ -46,6 +46,16 @@ Reglas de interpolacion (documentadas aca, ADR 011 secc. 7 / tarea A3 punto 1):
   `consumer_confidence`/`protest_level`/`inequality`/`crime_perception`**:
   siempre `assumed` (igual que en A2, ver el script: son indices sin
   anclaje real posible o sin serie descargada -- no cambia con el mes).
+  `exchange_rate` sigue `assumed = 100` aunque desde 2026-09-19 exista
+  `exchange_rate_annual_linked.csv` (1962+, ARS por USD): `world/economy.py`
+  solo lo mueve multiplicativamente (`exchange_rate * (1 + de/100)`) y el
+  objetivo compara CAMBIOS logaritmicos contra el propio nivel inicial del
+  modelo (`calibration/objective.py`, `fx0_model`), asi que el nivel inicial
+  no cambia ninguna trayectoria; cargar `6e-5` (australes de 1985 en ARS)
+  como "indice" solo desconectaria la escala base 100 de Aurora sin ganar
+  fidelidad. La regla `rule_exchange_rate_index` deja igual constancia del
+  nivel real de referencia en el `note` (procedencia), para que el estado
+  inicial diga de donde saldria el ancla si algun dia el motor la usara.
 """
 
 from __future__ import annotations
@@ -375,6 +385,48 @@ def rule_assumed(default: float, why: str) -> dict[str, Any]:
     return {"value": default, "assumed": True, "note": why}
 
 
+def rule_exchange_rate_index(
+    y: int, m: int, monthly: list[Row], annual: list[Row], default: float
+) -> dict[str, Any]:
+    """`exchange_rate` del estado inicial: SIEMPRE `assumed = 100` (indice
+    de nivel de Aurora, ver docstring del modulo), pero con el nivel real
+    de referencia (ARS por USD) y su procedencia en el `note`, tomado de la
+    misma cadena que usa `calibration/objective.py::RealData.fx_level`:
+    `exchange_rate_official_monthly.csv` (mes exacto, 1992-01+) y, si no,
+    `exchange_rate_annual_linked.csv` (promedio anual, 1962+) interpolado
+    geometricamente. Sin dato en ninguna de las dos, el `note` lo dice."""
+    why = (
+        "indice de nivel (base=100), no un tipo de cambio literal (multiples monedas "
+        "1810-2023); el motor solo lo mueve multiplicativamente y el objetivo compara "
+        "cambios log, asi que el nivel inicial no altera la trayectoria."
+    )
+    exact = _exact(monthly, y, m)
+    if exact is not None:
+        v, sid = exact
+        ref = (
+            f"nivel real de referencia {v:.6g} ARS/USD "
+            f"(exchange_rate_official_monthly.csv, {sid}, mes exacto)."
+        )
+        return {"value": default, "assumed": True, "note": f"{why} {ref}"}
+    import math
+
+    log_rows = [(ry, rm, math.log(v), sid) for ry, rm, v, sid in annual if v > 0]
+    hit = interpolate_annual(log_rows, y, m)
+    if hit is not None:
+        log_v, note = hit
+        ref = (
+            f"nivel real de referencia {math.exp(log_v):.6g} ARS/USD "
+            f"(exchange_rate_annual_linked.csv, {note}, interpolacion geometrica "
+            "del promedio anual)."
+        )
+        return {"value": default, "assumed": True, "note": f"{why} {ref}"}
+    return {
+        "value": default,
+        "assumed": True,
+        "note": f"{why} Sin nivel real de referencia para {y}-{m:02d} en history/.",
+    }
+
+
 def initial_state_for(date: str) -> dict[str, dict[str, Any]]:
     """Las 20 variables de `WorldState` (+ `inflation_lag1`) para `date`
     (`YYYY-MM`), con `source`/`proxy`/`assumed` por variable (mismo
@@ -401,6 +453,8 @@ def initial_state_for(date: str) -> dict[str, dict[str, Any]]:
     emae = load_series("emae_monthly")
     fiscal = load_series("fiscal_balance")
     poverty = load_series("poverty")
+    fx_monthly = load_series("exchange_rate_official_monthly")
+    fx_annual = load_series("exchange_rate_annual_linked")
     v2x_libdem = load_vdem_field("v2x_libdem")
     v2x_civlib = load_vdem_field("v2x_civlib")
 
@@ -411,10 +465,8 @@ def initial_state_for(date: str) -> dict[str, dict[str, Any]]:
             aurora["real_wage"],
             "indice de nivel (base=100 en Aurora), sin esa base en real_wage.csv.",
         ),
-        "exchange_rate": rule_assumed(
-            aurora["exchange_rate"],
-            "indice de nivel (base=100), no un tipo de cambio literal (multiples monedas "
-            "1810-2023).",
+        "exchange_rate": rule_exchange_rate_index(
+            y, m, fx_monthly, fx_annual, aurora["exchange_rate"]
         ),
         "gdp_growth": rule_gdp_growth(y, m, emae, gdp_pc, gdp_usd, aurora["gdp_growth"]),
         "inflation": inflation_entry,

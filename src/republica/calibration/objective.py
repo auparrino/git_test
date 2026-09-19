@@ -168,6 +168,16 @@ class RealData:
     unemployment: dict[tuple[int, int], float] = field(default_factory=dict)
     reserves: dict[tuple[int, int], float] = field(default_factory=dict)
     fx_official: dict[tuple[int, int], float] = field(default_factory=dict)
+    #: Cierre del pendiente "holdout sin tipo de cambio mensual antes de
+    #: 1992" (PLAN_ARGENTINA secc. 7): `exchange_rate_official_monthly.csv`
+    #: arranca en 1992-01, asi que `fx_log()` devolvia `None` en TODO el
+    #: holdout `1983-12:1991-12` y el termino `exchange_rate` del objetivo
+    #: quedaba sin puntuar ahi. Filas `(year, month, value, source_id)` de
+    #: `exchange_rate_annual_linked.csv` (WDI `PA.NUS.FCRF`, promedio anual
+    #: en pesos convertibles, 1962+, SOURCES.md fuente 22), usadas SOLO
+    #: cuando falta el mes exacto (`fx_level()` abajo), mismo patron que
+    #: `inflation_annual_rows`.
+    fx_annual_rows: list[tuple[int, int, float, str]] = field(default_factory=list)
     emae: dict[tuple[int, int], float] = field(default_factory=dict)
     gdp_pc_by_year: dict[int, float] = field(default_factory=dict)
     regimes_by_year: dict[int, str] = field(default_factory=dict)
@@ -197,6 +207,7 @@ class RealData:
             unemployment=as_dict("unemployment"),
             reserves=as_dict("reserves_monthly"),
             fx_official=as_dict("exchange_rate_official_monthly"),
+            fx_annual_rows=load_series("exchange_rate_annual_linked"),
             emae=as_dict("emae_monthly"),
             gdp_pc_by_year=_annual_by_year_plain(gdp_pc_rows),
             regimes_by_year=regimes,
@@ -246,14 +257,44 @@ class RealData:
             return self.gdp_growth(y, m)
         raise ValueError(var)
 
+    def fx_level(self, y: int, m: int) -> float | None:
+        """Tipo de cambio oficial (ARS por USD) del mes: `fx_official` (mes
+        exacto, 1992-01+) con fallback a la serie ANUAL enlazada
+        (`fx_annual_rows`, 1962+) interpolada con el MISMO `interpolate_annual`
+        que `inflation()` / `initial_states.py::rule_inflation`, pero sobre
+        `log(valor)` (interpolacion geometrica): el objetivo consume esta
+        serie como CAMBIO LOGARITMICO y entre 1962 y 1991 el nivel crece 11
+        ordenes de magnitud (1989: x48 en un año) -- una interpolacion lineal
+        en niveles concentraria casi toda la depreciacion de un año en sus
+        ultimos meses. Convencion heredada de A0: el promedio anual esta
+        fechado `YYYY-01-01` y se trata como el valor vigente al 1 de enero
+        (corrimiento de ~6 meses, documentado en `CALIBRATION_LOG.md`). Sin
+        fallback (antes de esta serie) devolvia `None` para todo el holdout
+        `1983-12:1991-12`."""
+        exact = self.fx_official.get((y, m))
+        if exact is not None and exact > 0:
+            return exact
+        log_rows = [(ry, rm, math.log(v), sid) for ry, rm, v, sid in self.fx_annual_rows if v > 0]
+        hit = interpolate_annual(log_rows, y, m)
+        if hit is None:
+            return None
+        log_value, _note = hit
+        return math.exp(log_value)
+
     def fx_log(self, y: int, m: int) -> float | None:
-        v = self.fx_official.get((y, m))
+        v = self.fx_level(y, m)
         if v is None or v <= 0:
             return None
         return math.log(v)
 
     def std(self, var: str) -> float:
         if var == "exchange_rate":
+            # Igual que `inflation` mas abajo: el `sigma` queda anclado a la
+            # serie MENSUAL real (1992-01+, mes exacto), no a la anual
+            # interpolada de `fx_level()` -- los cambios log mensuales de una
+            # interpolacion geometrica de dos promedios anuales son 12 valores
+            # identicos por año (ruido cero), mezclarlos correria la escala
+            # de normalizacion (y 1989-1990 la haria explotar).
             series = sorted(self.fx_official)
             changes = []
             for y, m in series:
@@ -511,7 +552,7 @@ def score_start_month(
             if var == "exchange_rate":
                 if fx0_real is None:
                     continue
-                real_now = real.fx_official.get((ty, tm))
+                real_now = real.fx_level(ty, tm)
                 if real_now is None or real_now <= 0:
                     continue
                 real_target = math.log(real_now) - fx0_real

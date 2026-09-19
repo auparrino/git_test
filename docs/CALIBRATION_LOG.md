@@ -710,3 +710,68 @@ regime peg` no tenía ningún efecto.
 cargó y corrió correctamente. Lo que falta es un modelo que sobreviva más allá del colapso
 institucional temprano para poder medir la hipótesis electoral en absoluto; eso es un problema del
 mecanismo de recuperación/colapso (ADR 012 secc. 5), no de la integración de partidos.
+
+---
+
+## Serie de tipo de cambio anual enlazada 1962–2012 (cierre del pendiente del holdout)
+
+**El pendiente.** La corrida `a5b_macro` dejó anotado: "serie de tipo de cambio 1983-1991
+(oficial o 'dólar bolsa' de la época; `exchange_rate_annual.csv` actual termina en 1951,
+`exchange_rate_parallel_monthly_linked.csv` arranca en 2008, ninguna de las dos cubre el
+holdout) — si aparece, aplicar el mismo patrón de `RealData.inflation()`". En los hechos:
+`RealData.fx_log()` devolvía `None` para **todo** el holdout `1983-12:1991-12`, así que el
+término `exchange_rate` del objetivo quedaba sin puntuar ahí para los cuatro brazos por igual
+(calibrado, persistencia, Aurora y `a3_main`) — el mismo patrón de falla silenciosa que el
+segundo bug de `a5_macro`, y por la misma causa.
+
+**La fuente.** `PA.NUS.FCRF` del World Development Indicators del Banco Mundial ("Official
+exchange rate, LCU per US$, period average"; origen declarado: IMF International Financial
+Statistics), vía el mirror `ronnywang/worldbank` — el mismo repo de la fuente 17, única copia
+alcanzable con `api.worldbank.org` respondiendo 403. Cobertura 1962–2012 (1960 y 1961 vienen
+vacíos para Argentina en ese snapshot de diciembre de 2013). Detalle en `history/SOURCES.md`
+fuente 22, `trust` A. La serie **ya viene enlazada** por el propio WDI a través de las cuatro
+redenominaciones (1970, 1983, 1985, 1992): no se le aplicó ningún factor, y eso se verificó en
+vez de asumirse.
+
+**Los cruces** (`consistency.md` sección 14, reproducibles con
+`uv run python scripts/build_argentina_fx_linked.py`):
+
+| cruce | resultado |
+|---|---|
+| Monotonía 1962–1991 (el peso se depreció todos los años) | ninguna caída año a año |
+| Empalme: anual 1991 (0.9536) vs mensual 1992-01 (0.9910) | 3.78 % (umbral 10 %) |
+| Empalme: anual 1992 (0.9906) vs mensual 1992-01 | 0.04 % |
+| Anual vs promedio de la mensual, 1992–2012 (n=21) | 0.77 % medio, 6.20 % máximo (2002) |
+| Precios vs tipo de cambio 1962→1991 | ×10^11.66 vs ×10^11.04, brecha factor 4.2 |
+
+La monotonía es el cruce que más importa: cualquier factor de redenominación mal aplicado habría
+producido un salto hacia abajo, y no hay ninguno. La brecha contra la inflación acumulada (un
+factor 4.2 en 29 años) es del orden esperable por la inflación de Estados Unidos del período más
+apreciación real; un error de unidad habría dado varios órdenes de magnitud.
+
+**El código.** `RealData.fx_level()` (nuevo) resuelve el nivel: mes exacto de
+`exchange_rate_official_monthly.csv` desde 1992-01 y, si no hay, la serie anual interpolada. La
+interpolación es **geométrica** (sobre `log`), a diferencia de la de inflación: entre 1962 y 1991
+el nivel crece once órdenes de magnitud (1989 solo multiplica por 48), y una interpolación lineal
+en niveles concentraría casi toda la depreciación de un año en sus últimos meses. `fx_log()` pasa
+a usarla; `std("exchange_rate")` **no**: el `sigma` de normalización queda anclado a la serie
+mensual real, por la misma razón por la que el de inflación lo está (los cambios mensuales de una
+interpolación de dos promedios anuales son doce valores idénticos por año, ruido cero, y mezclarlos
+correría la escala — con 1989–1990 la haría explotar).
+
+**Lo que NO cambió, deliberadamente.** El `exchange_rate` del estado inicial sigue siendo
+`assumed = 100`: `world/economy.py` solo lo mueve multiplicativamente y el objetivo compara
+cambios logarítmicos contra el propio nivel inicial del modelo, así que el nivel inicial no altera
+ninguna trayectoria; cargar `6e-5` (australes de 1985 expresados en ARS) como "índice"
+desconectaría la escala base 100 de Aurora sin ganar fidelidad. La regla nueva
+`rule_exchange_rate_index` sí deja el nivel real de referencia y su procedencia en el `note` del
+estado inicial, para que quede registrado de dónde saldría el ancla si algún día el motor la usara.
+
+**Lo que sigue faltando.** Mensual antes de 1992 no existe: esta serie es anual e interpolada, con
+el corrimiento de ~6 meses que arrastra la convención de A0 (el promedio anual se fecha
+`YYYY-01-01` y se trata como el valor vigente al 1 de enero, igual que la inflación anual). El
+snapshot termina en 2012 y 1952–1961 sigue sin dato. **Este cierre no se midió todavía contra una
+recalibración**: habilita el término cambiario en el holdout, no mejora ningún número por sí solo.
+La próxima corrida completa es la que va a decir si el holdout con dato cambiario cambia la
+lectura de `a5b_macro`.
+

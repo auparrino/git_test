@@ -299,3 +299,46 @@ argendata están en **dólares** (ARG 1960 `pib_corriente = 1.59e10`, escala de 
 corrientes), así que el cociente es un deflactor en dólares (≈ tipo de cambio real), no el
 deflactor en moneda local que pide el indicador. No se usó; el hueco 2007+ del deflactor sigue
 en `coverage.md`.
+
+---
+
+## Pasada del 2026-09-19 (sección 14)
+
+## 14. Tipo de cambio oficial anual enlazado (WDI `PA.NUS.FCRF`, fuente 22)
+
+Cinco cruces, todos impresos por `uv run python scripts/build_argentina_fx_linked.py` (se
+reproducen con ese comando; ninguno se usó para ajustar la serie, solo para validarla).
+
+**(a) Monotonía 1962-1991.** Ninguna caída año a año en el tramo enlazado hacia atrás. Era la
+prueba más exigente para detectar un factor de redenominación mal aplicado: el peso argentino se
+depreció todos los años de ese período, así que cualquier salto hacia abajo habría delatado un
+cruce de unidad. No hay ninguno.
+
+**(b) Moneda de cada época.** Multiplicando por el factor legal acumulado de cada redenominación
+(1 peso convertible = 10 000 australes = 10⁷ pesos argentinos = 10¹¹ pesos ley = 10¹³ m$n), los
+valores caen en el orden de magnitud correcto para cada época: 1962 ≈ 140 m$n/USD, 1991 ≈ 9 536
+australes/USD. Confirma que la serie del WDI viene enlazada y que no hay que aplicarle nada.
+
+**(c) Empalme con la serie mensual en 1992-01.** WDI 1991 = 0.9536 vs
+`exchange_rate_official_monthly.csv` 1992-01 = 0.9910 → **3.78 %** de diferencia (umbral 10 %).
+Es la diferencia esperable entre el promedio de 1991 y el dato puntual de enero de 1992 bajo
+convertibilidad. El dato anual de 1992 (0.9906) contra el mismo mes da **0.04 %**.
+
+**(d) Anual vs promedio de la mensual, 1992-2012 (n = 21).** Diferencia porcentual absoluta
+media **0.77 %**, máxima **6.20 %** en 2002 (WDI 3.0633 vs media de fin de mes 3.2658). La
+discrepancia de 2002 es la esperable: es el año de la salida de la convertibilidad, donde el
+promedio de promedios mensuales (convención del FMI) y el promedio de datos de fin de mes
+(convención de la serie del BCRA) divergen más.
+
+**(e) Orden de magnitud contra la inflación acumulada 1962→1991.** Precios ×10^11.66
+(`inflation_cpi_annual_linked.csv`, producto de 1+π) contra tipo de cambio ×10^11.04 (WDI):
+brecha de 10^0.62, un factor 4.2 en 29 años. Es consistente: parte es la inflación de Estados
+Unidos del período (el dólar también perdió poder adquisitivo) y parte apreciación real del peso.
+Una brecha de ese tamaño descarta un error de unidad, que habría dado varios órdenes de magnitud.
+
+**Limitación declarada.** El snapshot del mirror es de diciembre de 2013, así que la serie
+termina en 2012 y no tiene revisiones posteriores; 1960 y 1961 vienen vacíos para Argentina.
+Desde 1992 la referencia del paquete sigue siendo la mensual del BCRA: el tramo anual 1992-2012
+se conserva solo para estos cruces y para que la interpolación tenga el año siguiente disponible
+en 1991.
+
