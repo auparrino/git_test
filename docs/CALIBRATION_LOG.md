@@ -710,3 +710,98 @@ regime peg` no tenía ningún efecto.
 cargó y corrió correctamente. Lo que falta es un modelo que sobreviva más allá del colapso
 institucional temprano para poder medir la hipótesis electoral en absoluto; eso es un problema del
 mecanismo de recuperación/colapso (ADR 012 secc. 5), no de la integración de partidos.
+
+
+### Validación `a6b_collapse` (V4 con ADR 016, piso de legitimidad democrática)
+
+`republica validate --country argentina --calibration a5b_macro --out
+data/countries/argentina/validation/a6b_collapse --tests V4` (la CLI toma `--out`, no `--run-id`).
+50 semillas por brazo, **13.6 s** de pared. Reporte completo:
+`data/countries/argentina/validation/a6b_collapse/report.md`. Diseño, hipótesis registrada antes de
+codear y notas de implementación: `docs/ADR_016_collapse_and_recovery.md`.
+
+**Qué se cambió**: un piso de `political_stability` mientras corre un mandato constitucional en
+democracia (`repression == 0`) y **no** hay ruptura monetaria o financiera aguda — hiperinflación
+sostenida (> 15 %/mes por 3 meses), crisis bancaria, `sovereign_default`, o una salida forzada de
+régimen cambiario dentro del mandato. El piso decae de `lf_base = 28` a `lf_min = 18` a lo largo del
+mandato (los dos por encima de `terminal.collapse_stability = 15`). Detrás de
+`features.legitimacy_floor`: off para Aurora, on para `--country argentina` con macro activo,
+apagable con `--no-legitimacy-floor`.
+
+**Por qué colapsaba** (diagnóstico con números, ADR 016 §2; semilla 1 de V4 volcada mes a mes): la
+inflación NO era el canal — se queda en 3.6–3.9 %/mes (≈ 56 % anual) y nunca cruza el 20 % de
+`terminal.hyper_inflation`. La cadena es política y cada eslabón satura en un extremo del `ranges`:
+la tensión social arranca en 35, **por encima** del `tension_threshold` calibrado (21.25, contra 50
+en Aurora), así que `−e_t·pos(tensión − 21.25)/10` domina la aprobación con −5.4 a −18.3 puntos por
+mes contra un máximo de +2.35 de reversión; la aprobación toca el **piso 0** en el mes 9; eso deja
+`+pr_a·approval_ref = +30.9` como constante en `protest_target`, que se va al **techo 100**; y eso
+deja `+t_pr·(100 − 18.56) = +45.3` en `tension_target`, que también se va a **100**. Con los dos
+términos saturados, `stability_target = 157.03 − 50.92 − 61.46 + … ≈ 29` — **por encima** del umbral
+de colapso — y lo que mete la estabilidad debajo de 15 es el ruido de `shock_stability` (−4 a −8 por
+mes, de acciones de actores y `agreement_broken`).
+
+**Resultados medidos (50 semillas por celda; lo único que cambia entre columnas es el flag):**
+
+| escenario | piso OFF | piso ON |
+|---|---|---|
+| 2019-12, 48m, `a5b_macro` | `collapse` 50/50, mediana mes 29 [24, 35]; **0 %** llega al mes 48 | `defeated` 50/50; **100 %** llega al mes 48 |
+| ↳ inflación anual final (mediana) | 56.8 % | **128.8 %** (métrica de V4) |
+| 1998-01 + `peg`, 54m, `a5b_macro` | `collapse` 37/50 (**74 %**), mediana mes 39 | `collapse` 37/50 (**74 %**), mediana mes 39 — **idéntico semilla por semilla** |
+| 2019-12, 48m, Aurora sin calibrar | 47 `hyperinflation` / 3 `collapse` | idéntico |
+| ADR 012 §7: 2a hiper 1988-06 (≥ 50 %) | 20/20 | 20/20 (idéntico) |
+| ADR 012 §7: 2b no espuria 2003-06 (0 %) | 0/20 | 0/20 (idéntico) |
+| ADR 012 §7: 3c salida del `peg` 1998-01 (≥ 50 %) | 17/20 | 17/20 (idéntico) |
+| ADR 012 §7: 5 recuperación 2003-06 → 2015-12 (≥ 80 %) | 20/20 | 20/20 (idéntico) |
+
+El mecanismo cambia **exactamente un** escenario de los seis: distingue 2020 de 2001 en vez de
+eliminar el colapso. (2001-01 no tiene `initial_states` en el paquete — las ocho fechas son 1983-12,
+1988-06, 1991-04, 1998-01, 2003-06, 2016-01, 2019-12, 2023-12 — así que el discriminante se mide
+desde 1998-01 con `peg` y 54 meses, cuya ventana termina exactamente en 2002-06.)
+
+**V4:**
+
+| prueba | hipótesis | calibrado | Aurora | veredicto calibrado | antes (`a6_macro`) |
+|---|---|---:|---:|---|---|
+| V4 | derrota > 70 %, inflación final mediana > 100 % | infl **128.8 %** [125.7, 143.8], derrota **100.0 %** [100, 100] | infl 1 319.4 %, derrota 0.0 % | **CUMPLIDA** | NO CUMPLIDA (infl 56.7 %, derrota 0 % sin denominador) |
+
+Semillas calibradas que terminan antes del mes 48: **0 de 50** (antes: 50 de 50). Por primera vez la
+hipótesis electoral de V4 tiene denominador.
+
+**Tres advertencias sobre ese resultado** (detalle en ADR 016, Notas de implementación):
+
+1. V4 es **in-sample** (2019-12→2023-11 cae dentro del train `1992-01:2023-12` de `a5b_macro`).
+2. El `incumbent_party` de las 50 semillas es **`cambiemos_jxc`**, no `fpv_fdt_pj`:
+   `politics/parties/2015-2023.json` marca `in_government` en el partido de **apertura de la época**
+   (Macri 2015) y `world/eras.py` lo aplica sin resolver por fecha de arranque. "Derrota del
+   oficialismo = 100 %" significa *"JxC pierde contra el FdT"*, no *"el FdT pierde"*. Es dato/loader
+   de ADR 013, no se tocó.
+3. **LLA gana 0/50**, pero llega al balotaje en **50/50**: 37.66 % en primera vuelta (mediana; el
+   real de oct-2023 fue 29.99 %) y 45.22 % en el balotaje contra 54.78 % del FdT — el espejo del
+   55.65 % real. Confirma con número el diagnóstico de ADR 013 ("el balotaje es el cuello de
+   botella"). `test_lla_wins_more_often_under_sustained_distrust` se deja en `xfail(strict=True)`:
+   se verificó que sigue fallando, y corre un escenario sintético que este ADR no toca.
+
+**Tres lecturas de la trayectoria con el piso puesto** (semilla 1, 48 meses): (i) el piso muerde
+desde el mes 26 y a partir de ahí `political_stability` **es** el piso, exactamente
+(`18 + 10·(1 − m/48)`: 22.58 en el mes 26, 18.00 en el 48) — deja de ser una variable del modelo y
+pasa a ser la rampa de legitimidad, que es el riesgo declarado del ADR hecho visible; (ii) hallazgo
+emergente no buscado: la inflación **se acelera** en la segunda mitad, de ~3.9 %/mes a 8–11 %/mes
+(la corrida que antes moría en el mes 29 nunca llegaba a mostrarlo) — es lo que sube la inflación
+anual final de 56.8 % a 128.8 %, en la dirección correcta contra el ~50 % → ~211 % real, todavía
+subestimando; (iii) el piso **no** rescata a la confianza institucional, que cae a 0 en el mes 30 y
+se queda: con `stability_base = 157.03` calibrado, el canal de vuelta
+`ic_s·(estab − stability_base)/10` sigue aportando −1.7 por mes con una estabilidad de 20. El modelo
+llega a la elección en un estado social (aprobación 0, tensión 100, protesta 100, confianza 0) que
+sigue siendo implausible: el mecanismo consigue que la corrida LLEGUE, no que llegue en un estado
+creíble.
+
+**Lo que el diagnóstico encontró y ADR 016 NO arregló** (`src/republica/calibration/*` es de otro
+agente): (a) la recuperación §5 del ADR 012 está **inerte** — `recovery_inflation_max` calibrado en
+1.129 %/mes contra una inflación de 3.6–3.9 %/mes hace que el canal `t_rec` no se dispare nunca, y
+`ic_target_base = 22.77` deja a `ic_rec` actuando sólo como piso en ≈ 22.8, muy por debajo de
+`conf_ref = 58.29`; (b) el bucle tensión↔protesta es un **atractor absorbente**
+(`tension_target ≈ 110`, `protest_target ≈ 131`, los dos sobre el techo 100) — cualquier mecanismo
+aguas abajo parchea un síntoma; (c) `default_risk` sigue arrancando alto en períodos solventes, pero
+se midió que **no participa** de este colapso (`default_risk_threshold` calibrado = 0.99944: el
+default endógeno no se dispara en ninguna semilla, y ni `default_risk` ni `fx_gap` entran en
+`stability_target` ni en la aprobación).

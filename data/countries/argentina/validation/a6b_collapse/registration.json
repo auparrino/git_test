@@ -1,0 +1,124 @@
+{
+  "adr": "ADR 011 secc. 8 (A4) / ADR 012 secc. 6 (A5, V4)",
+  "registered_before_running": true,
+  "country": "argentina",
+  "calibration_run_id": "a5b_macro",
+  "seeds": 50,
+  "months_cap": null,
+  "arms": [
+    "calibrated",
+    "aurora"
+  ],
+  "control_hypothesis": "Aurora sin calibrar falla al menos una de las tres",
+  "control_metric": "la diferencia con el calibrado es el \"valor\" de la calibración",
+  "honesty_sentence": "Estos resultados describen el comportamiento de República Artificial calibrada con datos de Argentina; no son evidencia sobre lo que hubiera pasado.",
+  "tests": [
+    {
+      "test_id": "V4",
+      "title": "V4 2019-12→2023-12: ¿pierde el oficialismo con partidos argentinos?",
+      "hypothesis": "el oficialismo pierde en > 70 % de semillas y la inflación anual final mediana supera 100 %",
+      "metric": "fracción de semillas con derrota electoral, inflación anual final mediana",
+      "adr_forced_shocks": "pandemia 2020, sequía 2023, FMI 2022 (todos exógenos)",
+      "start": "2019-12",
+      "months": 48,
+      "months_adr": 48,
+      "fx_regime": null,
+      "forced_shocks_requested": [
+        {
+          "shock_id": "epidemic",
+          "label": "pandemia 2020",
+          "window": "2020-01:2020-12",
+          "matched": [
+            {
+              "shock_id": "epidemic",
+              "date": "2020-03",
+              "month_index": 4,
+              "title": "Pandemia de COVID-19 / ASPO",
+              "duration_months": "24"
+            }
+          ]
+        },
+        {
+          "shock_id": "drought",
+          "label": "sequía 2023",
+          "window": "2023-01:2023-12",
+          "matched": [
+            {
+              "shock_id": "drought",
+              "date": "2023-01",
+              "month_index": 38,
+              "title": "Sequía histórica de la campaña 2022/2023",
+              "duration_months": "12"
+            }
+          ]
+        },
+        {
+          "shock_id": "imf_program",
+          "label": "FMI 2022",
+          "window": "2022-01:2022-12",
+          "matched": [
+            {
+              "shock_id": "imf_program",
+              "date": "2022-03",
+              "month_index": 28,
+              "title": "Acuerdo de Facilidades Extendidas con el FMI (2022)",
+              "duration_months": "30"
+            }
+          ]
+        }
+      ],
+      "forced_shocks_applied": {
+        "4": [
+          "epidemic"
+        ],
+        "28": [
+          "imf_program"
+        ],
+        "38": [
+          "drought"
+        ]
+      },
+      "forced_shocks_excluded_endogenous": [],
+      "sample_declaration": "IN-SAMPLE: 2019-12..2023-11 cae dentro del train de la calibracion (1992-01:2023-12) -- el modelo VIO estos datos al calibrarse; esta prueba no mide generalizacion.",
+      "random_shocks_enabled": true,
+      "skipped": false,
+      "initial_state_provenance": {
+        "counts": {
+          "source": 11,
+          "proxy": 1,
+          "assumed": 9
+        },
+        "variables": {
+          "source": [
+            "fiscal_balance",
+            "gdp_growth",
+            "inflation",
+            "inflation_lag1",
+            "institutional_confidence",
+            "interest_rate",
+            "political_stability",
+            "poverty",
+            "public_debt",
+            "reserves",
+            "unemployment"
+          ],
+          "proxy": [
+            "government_approval"
+          ],
+          "assumed": [
+            "congress_support",
+            "consumer_confidence",
+            "crime_perception",
+            "exchange_rate",
+            "gdp",
+            "inequality",
+            "protest_level",
+            "real_wage",
+            "social_tension"
+          ]
+        },
+        "n_variables": 21
+      }
+    }
+  ]
+}

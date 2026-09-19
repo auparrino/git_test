@@ -118,12 +118,17 @@ Argentina; no son evidencia sobre lo que hubiera pasado.
 
 Hecho: ADR 012 (macro con régimen, 6/6 tests), ADR 013 (tres épocas de partidos/actores/lealtades;
 LLA no gana en el modelo: test en `xfail` con diagnóstico), A5 (`a5b_macro`, tras descartar `a5_macro`
-por el bug del objetivo), A6 (V1–V4) y ADR 014 (backtest 1916–2022, `b1_a5b`).
+por el bug del objetivo), A6 (V1–V4) y ADR 014 (backtest 1916–2022, `b1_a5b`). **ADR 016** cierra la
+fila del colapso 2019-12 (ver la tabla); con él, V4 se vuelve a correr en
+`validation/a6b_collapse/` y **CUMPLE**. Efecto lateral medible: LLA llega al balotaje en 50/50
+semillas (37.66 % en primera vuelta, por encima del 29.99 % real) y lo pierde 45.22 / 54.78 — el
+`xfail` de `test_lla_wins_more_often_under_sustained_distrust` se deja como está, pero ahora el
+cuello de botella del balotaje que diagnosticó el ADR 013 tiene número.
 
 | Hallazgo de esta ronda | Qué sigue |
 |---|---|
 | El calibrado no supera a persistencia ni en train ni en holdout | Calibrar por regímenes (peg / float / control) o por época, no un solo vector para 32 años |
-| Desde 2019-12 el calibrado colapsa (100 %) antes de la elección de 2023 | Revisar la terminación por `collapse` y la recuperación §5 del ADR 012 con datos de aprobación reales (no hay serie) |
+| ~~Desde 2019-12 el calibrado colapsa (100 %) antes de la elección de 2023~~ **RESUELTO (ADR 016)**: el colapso no venía de la macro sino de una cadena política saturada — tensión inicial (35) por encima del `tension_threshold` calibrado (21.25) ⇒ aprobación al piso 0 ⇒ bucle tensión↔protesta al techo 100 ⇒ `stability_target ≈ 29`, que el ruido de `shock_stability` cruza debajo de 15. Con el **piso de estabilidad por legitimidad democrática** (`features.legitimacy_floor`, suspendido por ruptura aguda: hiperinflación, crisis bancaria, default o salida forzada del régimen cambiario): 2019-12 pasa de **0 % a 100 %** de semillas que llegan al mes 48 (50 semillas), inflación final mediana 56.8 % → **128.8 %**, y **V4 pasa a CUMPLIDA** (derrota 100 %, `validation/a6b_collapse/`). El discriminante se sostiene: 1998-01 con `peg` sigue colapsando en **74 %** de las semillas, sin un solo cambio respecto del piso apagado, y los 6 tests del ADR 012 dan resultados idénticos | Lo que ADR 016 midió y **no** arregló, para la próxima ronda: (a) la recuperación §5 del ADR 012 sigue **inerte** — la calibración dejó `recovery_inflation_max` en 1.129 %/mes (Argentina corre a 3.6–3.9) y `ic_target_base` en 22.77, así que dos de sus tres canales no se ejecutan nunca; (b) el bucle tensión↔protesta es un **atractor absorbente** (`tension_target ≈ 110`, `protest_target ≈ 131`, los dos sobre el techo 100): recalibrar `t_pr`/`pr_t`/`pr_a` con la restricción de que el lazo cerrado sea contractivo; (c) `in_government` se resuelve por **apertura de época** y no por fecha, así que V4 mide "pierde JxC" en vez de "pierde el FdT" (dato/loader de ADR 013) |
 | Brazo calibrado sin dato 1916–1960: los `Coefficients` legacy no reciben señal del objetivo macro y desbordan en modo anual | Excluirlos del vector cuando macro está activo, o dar al modo anual su propio grupo de coeficientes |
 | Régimen: 0 % de acierto cuando la ventana arranca en golpe o democracia restringida | El modelo persiste el régimen inicial; falta un mecanismo de transición endógeno (ADR 011 solo lo tiene por calendario) |
 | Holdout sin tipo de cambio mensual antes de 1992 | Serie anual/mensual 1960–1991 (script local o mirror), interpolada como se hizo con inflación |

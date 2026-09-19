@@ -289,6 +289,53 @@ def _sigmoid(x: float) -> float:
     return z / (1.0 + z)
 
 
+#: Alias de `float` usado SOLO por los campos `lf_*` de ADR 016. Es un
+#: `float` en todo sentido salvo uno: `calibration/parameters.py::
+#: MACRO_TUNABLE` arma el vector de CMA-ES con
+#: `[name for name, f in MacroCoefficients.__dataclass_fields__.items()
+#: if f.type in ("float", float)]`, y con `from __future__ import
+#: annotations` ese `f.type` es la CADENA de la anotacion. Anotar los `lf_*`
+#: con este alias los deja fuera del vector calibrable a proposito: son
+#: parametros ESTRUCTURALES (la afirmacion historica de ADR 016 secc. 3 --
+#: dos salidas anticipadas en diez mandatos, las dos con ruptura monetaria),
+#: no grados de libertad para ajustar contra series. Calibrarlos convertiria
+#: la hipotesis del ADR en un parametro ajustado hasta que de, que es
+#: justamente lo que prohibe `PLAN_ARGENTINA.md` secc. 0 regla 3. Ademas
+#: mantiene `MACRO_TUNABLE` en 58 campos, sin tocar `calibration/*` (de otro
+#: agente).
+StructuralFloat = float
+
+#: Campos de ADR 016: estructurales, nunca calibrados (ver `StructuralFloat`).
+#: `calibration/run.py::load_calibrated_country` reconstruye
+#: `MacroCoefficients(**raw["macro"])` desde un `coefficients.json` que no
+#: los trae (las calibraciones existentes, `a5b_macro` incluida, guardan 60
+#: claves y ninguna `lf_*`), asi que una calibracion cargada se quedaria con
+#: los DEFAULTS de esta clase en vez de los valores de
+#: `country.json -> macro.coefficients`. `merge_structural_coefficients`
+#: repara eso en los dos lugares que combinan una calibracion con un paquete
+#: (`cli.py` y `validation/argentina.py::run_test_arm`).
+LEGITIMACY_FIELDS = (
+    "lf_base",
+    "lf_min",
+    "lf_rupture_inflation",
+    "lf_rupture_months",
+    "lf_exit_window_months",
+)
+
+
+def merge_structural_coefficients(
+    calibrated: MacroCoefficients, pack: MacroCoefficients
+) -> MacroCoefficients:
+    """Devuelve `calibrated` con los campos ESTRUCTURALES de ADR 016
+    (`LEGITIMACY_FIELDS`) tomados de `pack` (los de
+    `country.json -> macro.coefficients`). Ver `LEGITIMACY_FIELDS` para el
+    porque: sin esto, `--calibration <run_id>` ignoraria en silencio los
+    `lf_*` del paquete de pais."""
+    from dataclasses import replace
+
+    return replace(calibrated, **{name: getattr(pack, name) for name in LEGITIMACY_FIELDS})
+
+
 @dataclass(frozen=True)
 class MacroCoefficients:
     """`country.json -> macro -> coefficients` (ADR 012). Todos los valores
@@ -411,6 +458,38 @@ class MacroCoefficients:
     recovery_inflation_max: float = 3.0
     recovery_unemployment_max: float = 10.0
     e_rev_sentiment_k: float = 10.0
+
+    # -- ADR 016 secc. 3: piso de estabilidad por legitimidad democratica --
+    # Solo los lee `world/events.py::legitimacy_stability_floor`, y solo
+    # corren con `features.legitimacy_floor` prendido (default OFF: un pais
+    # que no declara el feature no siente ninguno de estos campos).
+    #: Piso de `political_stability` al INICIO del mandato, en una democracia
+    #: (`repression == 0`) sin ruptura aguda. Por encima de
+    #: `terminal.collapse_stability` (15 en Argentina): un gobierno recien
+    #: electo no tiene salida anticipada por impopularidad.
+    lf_base: StructuralFloat = 28.0
+    #: Piso al FINAL del mandato (la legitimidad de origen se gasta). Sigue
+    #: por encima de `collapse_stability`: mientras el mandato corre y no hay
+    #: ruptura, la salida anticipada no esta disponible -- el poder
+    #: discriminante del mecanismo vive en la definicion de ruptura, no aca
+    #: (ADR 016 secc. 3, "riesgo declarado").
+    lf_min: StructuralFloat = 18.0
+    #: Inflacion mensual (%) a partir de la cual el mes cuenta como
+    #: "regimen hiperinflacionario" para la compuerta de ruptura. 15 %/mes
+    #: son ~435 % anuales: 1989 (tres digitos mensuales) califica; 2019-2023
+    #: (maximo ~13 %/mes hasta 2023-11) no.
+    lf_rupture_inflation: StructuralFloat = 15.0
+    #: Meses consecutivos por encima de `lf_rupture_inflation` para que la
+    #: ruptura hiperinflacionaria se considere activa (mismo criterio de
+    #: persistencia que `terminal.hyper_months`).
+    lf_rupture_months: int = 3
+    #: Meses, contados desde un `fx_regime_exit` forzado (ADR 012 secc. 3),
+    #: durante los cuales el piso queda suspendido. El default (600) es
+    #: deliberadamente mayor que cualquier mandato: en la practica significa
+    #: "por el resto del mandato en curso" -- el gobierno que rompio el
+    #: regimen monetario (De la Rua, enero de 2002) no puede invocar su
+    #: legitimidad de origen. El contador se reinicia en cada eleccion.
+    lf_exit_window_months: int = 600
 
     @classmethod
     def from_dict(cls, raw: dict | None) -> MacroCoefficients:
