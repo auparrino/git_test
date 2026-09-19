@@ -49,6 +49,34 @@
    se ve en `localhost:11434` solo si Ollama escucha en `0.0.0.0` (`setx OLLAMA_HOST 0.0.0.0` en
    Windows y reiniciar el servicio), y conviene exportar `OLLAMA_HOST` antes de correr.
 
+## Cuánto tarda (y por qué parece colgado)
+
+Cada decisión de un actor es una llamada al modelo con un prompt de 700–800 tokens. En CPU sin
+placa de video, un modelo de 8 mil millones de parámetros tarda del orden de **30 a 90 segundos por
+llamada**, y la primera suma la carga de 5 GB a memoria. `bench-parse --n 50` son 50 llamadas: una
+hora larga por rol, cuatro roles.
+
+Desde la versión con progreso, cada llamada imprime una línea a stderr con su latencia y el
+acumulado, así que se ve que avanza (`REPUBLICA_OLLAMA_PROGRESS=0` lo apaga). Si no aparece ninguna
+línea en varios minutos, recién ahí hay algo mal.
+
+**Para una primera pasada, no corras el plan completo.** Empezá chico y medí tu máquina:
+
+```powershell
+.\scripts\fase4_ollama.ps1 -Steps bench -NBench 5
+```
+
+Cinco llamadas por rol alcanzan para saber si el modelo respeta el esquema JSON, que es lo único
+que decide si tiene sentido seguir. Con la latencia media que imprime, multiplicá para estimar el
+plan completo antes de lanzarlo.
+
+Si da demasiado lento:
+
+- `-Model qwen3:4b` es del orden de tres veces más rápido y suele alcanzar para el parseo.
+- Una placa de video cambia el orden de magnitud: de minutos a segundos por llamada.
+- Las dos corridas de 48 meses (`-Steps aurora,argentina`) son cientos de llamadas cada una. Con
+  CPU sola, conviene bajarlas con `-Months 12` y decirlo al reportar los números.
+
 ## Si algo falla
 
 `republica` traduce un Ollama inalcanzable a un mensaje con los cuatro chequeos a hacer, en vez de

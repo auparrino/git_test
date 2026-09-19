@@ -22,6 +22,7 @@ import hashlib
 import json
 import os
 import random
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -39,6 +40,18 @@ DEFAULT_TIMEOUT_SECONDS = 60.0
 
 #: Reintentos en error de parseo (ADR 004 secc. 2, literal: "Reintento x2").
 MAX_PARSE_RETRIES = 2
+
+#: Progreso por llamada a stderr (`REPUBLICA_OLLAMA_PROGRESS=0` lo apaga).
+#: Sin esto, `bench-parse`/`run` con un modelo en CPU se quedan callados
+#: varios minutos por decision y parecen colgados -- fue lo primero que se
+#: reporto al correr la Fase 4 en una maquina propia. Va a stderr para no
+#: ensuciar la salida que parsea `scripts/fase4_collect_results.py`.
+PROGRESS_ENV = "REPUBLICA_OLLAMA_PROGRESS"
+
+
+def _progress_enabled() -> bool:
+    return os.environ.get(PROGRESS_ENV, "1").strip().lower() not in ("0", "false", "no")
+
 
 #: `num_predict` de Ollama: tope de tokens de salida. No esta especificado
 #: en el ADR (solo pide que `options` incluya `temperature`/`seed`/
@@ -133,6 +146,9 @@ class OllamaBackend:
                 pass
         self.timeout = timeout
         self.num_predict = num_predict
+        #: Llamadas hechas y segundos acumulados, solo para el progreso.
+        self._calls = 0
+        self._elapsed_s = 0.0
 
     def _post(self, payload: dict[str, Any]) -> tuple[dict[str, Any], float]:
         body = json.dumps(payload).encode("utf-8")
@@ -149,6 +165,17 @@ class OllamaBackend:
         except (urllib.error.URLError, OSError) as exc:  # incluye HTTPError y timeouts
             raise OllamaUnavailableError(self.host, exc) from exc
         latency_ms = (time.perf_counter() - t0) * 1000.0
+        self._calls += 1
+        self._elapsed_s += latency_ms / 1000.0
+        if _progress_enabled():
+            total = self._elapsed_s
+            print(
+                f"[ollama] llamada {self._calls}: {latency_ms / 1000.0:.1f}s "
+                f"(acumulado {int(total // 60)}m {total % 60:04.1f}s, "
+                f"promedio {total / self._calls:.1f}s)",
+                file=sys.stderr,
+                flush=True,
+            )
         return json.loads(raw), latency_ms
 
     def complete(
