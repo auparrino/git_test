@@ -1246,6 +1246,28 @@ def bench_parse(
         console.print("[green]OK[/green] parse_rate por encima del umbral de Fase 4 (0.95).")
     else:
         console.print("[yellow]AVISO[/yellow] parse_rate por debajo del umbral de Fase 4 (0.95).")
+        # Sin esto, un `parse_rate` bajo no dice NADA sobre que arreglar: los
+        # dos modos de falla (`actors/llm_based.py`) piden cosas distintas.
+        # JSON invalido suele ser truncamiento (subir `num_predict`) o texto
+        # fuera del esquema (un modelo que razona en voz alta); "ActorDecision
+        # invalida" es JSON bien formado que no respeta el esquema, y ahi el
+        # mensaje de pydantic dice exactamente que campo.
+        fallidas = [t for t in traces if t.parse_error is not None]
+        console.print(f"\n[bold]Respuestas que fallaron[/bold] ({len(fallidas)} de {len(traces)}):")
+        for trace in fallidas[:5]:
+            raw = (trace.raw_response or "").strip()
+            corte = " [...]" if len(raw) > 400 else ""
+            console.print(f"\n  [dim]mes {trace.month}[/dim] {trace.parse_error}")
+            console.print(f"  tokens de respuesta: {trace.tokens.get('completion', 0)}")
+            console.print(f"  texto crudo: {raw[:400]!r}{corte}")
+        if len(fallidas) > 5:
+            console.print(f"\n  ... y {len(fallidas) - 5} mas.")
+        console.print(
+            "\n[dim]Si el texto crudo esta cortado a la mitad, subi el tope de tokens con "
+            "REPUBLICA_OLLAMA_NUM_PREDICT (ej. 1500). Si trae razonamiento antes del JSON, el "
+            "modelo esta ignorando think=false: probá otro modelo. Si dice 'ActorDecision "
+            "invalida', el JSON esta bien formado pero le falta o le sobra un campo.[/dim]"
+        )
 
 
 _POSITION_ACTION_TYPES = {
