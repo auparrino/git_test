@@ -66,12 +66,20 @@ FISICA (documentadas en `TIGHTER_BOUNDS_REASON`, mismo dict):
 - `exit_banking_crisis_p`: PROBABILIDAD de que la salida de un `peg`
   dispare `banking_crisis` (ADR 012 secc. 3, columna "Salida"). Se acota a
   `[0, 1]`.
+
+ADR 017 secc. 1 corrige el grupo `"coefficients"` en modo macro: se
+EXCLUYEN los 8 campos que solo lee el motor legacy `step_economy` (ver
+`MACRO_UNUSED_LEGACY_COEFFICIENTS`), porque con `features.macro_regime`
+prendido la simulacion nunca los usa y CMA-ES los dejaba en cualquier lado
+-- `rho_pi = 2.298` en `a5b_macro`, que despues desbordaba el modo anual.
+Vector de modo macro: 89 (`Coefficients`) + 58 (`MacroCoefficients`) = 147.
 """
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from functools import lru_cache
 
 from republica.world.bimonetary import BimonetaryCoefficients
 from republica.world.config import DEFAULT_DATA_DIR, Coefficients
@@ -102,6 +110,44 @@ BIMONETARY_TUNABLE = (
 #: `Coefficients.model_fields`/`BIMONETARY_TUNABLE` de arriba.
 MACRO_TUNABLE = tuple(
     name for name, f in MacroCoefficients.__dataclass_fields__.items() if f.type in ("float", float)
+)
+
+#: ADR 017 secc. 1: coeficientes de `Coefficients` que el motor LEGACY
+#: (`world/economy.py::step_economy`) lee y el motor MACRO
+#: (`step_macro_economy`) NO. Lista obtenida comparando las referencias
+#: `coeff.<campo>` del cuerpo de las dos funciones (`step_economy` lee 44
+#: campos, `step_macro_economy` 36, y los 36 son un subconjunto de los 44),
+#: y verificada contra el resto del motor: ningun otro modulo
+#: (`society.py`/`politics.py`/`elections.py`/`perception.py`) los lee, asi
+#: que con `features.macro_regime` prendido estos 8 NO TOCAN la simulacion
+#: y, por lo tanto, no cambian la funcion objetivo ni una decima.
+#:
+#: Consecuencia medida en `a5b_macro` (ver el hallazgo de `docs/
+#: ADR_014_rolling_backtest.md`): CMA-ES los movio libre (solo los frenaba
+#: la L2 debil de `lambda_reg=0.01`) hasta `rho_pi = 2.298` -- un AR(1) de
+#: precios con coeficiente 2.3, explosivo por construccion. Eso no importa
+#: en modo mensual con macro (nunca se ejecuta `step_economy`) pero rompe
+#: `world/annual.py`, que usa SIEMPRE el motor legacy: las 135 ventanas
+#: anuales 1916-1960 del backtest `b1_a5b` perdieron el 100 % de sus
+#: semillas calibradas por `OverflowError` en `(1 + g_m/100)**12`.
+#:
+#: Cada uno, y de que bloque legacy es:
+#: - `rho_pi`, `c_e`, `c_r`, `c_g`, `c_f`: ecuacion de precios legacy
+#:   (secc. 4.3 del spec), reemplazada entera por ADR 012 secc. 2.
+#: - `k_w`: canal salarial legacy (4.4). `k_tb`: balanza comercial legacy
+#:   (4.5). `k_conf`: confianza institucional legacy (4.6).
+#: Los 36 que SI comparten los dos motores (`a_*`, `b_*`, `p_*`, `w_*`,
+#: `d_*`, `f_*`, `k_k`, ...) se QUEDAN en el vector: la calibracion con
+#: macro les da senal real.
+MACRO_UNUSED_LEGACY_COEFFICIENTS = (
+    "rho_pi",
+    "c_e",
+    "c_r",
+    "c_g",
+    "c_f",
+    "k_w",
+    "k_tb",
+    "k_conf",
 )
 
 TIGHTER_BOUNDS_REASON: dict[str, str] = {
@@ -169,6 +215,25 @@ class Parameter:
 def load_aurora_coefficients() -> dict[str, float]:
     raw = json.loads(ARGENTINA_COUNTRY_JSON.read_text(encoding="utf-8"))
     return dict(raw["coefficients"])
+
+
+@lru_cache(maxsize=1)
+def excluded_legacy_values() -> dict[str, float]:
+    """Valor FIJO de cada coeficiente de `MACRO_UNUSED_LEGACY_COEFFICIENTS`
+    (ADR 017 secc. 1): el de Aurora en el `country.json` del paquete
+    (mismo `aurora_value` que tendrian si siguieran en el vector). Se
+    aplica sobre el `base` en `coefficients_from_vector` cuando el vector
+    es de modo macro, para que el `coefficients.json` de la corrida (y la
+    simulacion misma) traigan estos 8 en un valor sensato en vez de en lo
+    que haya quedado en `base` -- `calibration/run.py` usa
+    `load_country().coefficients` (Aurora generico) como `base`, no el
+    `country.json` de Argentina.
+
+    Cacheado (`lru_cache`): se llama una vez por evaluacion de candidato en
+    cada worker y leer el JSON cada vez seria caro sin ninguna razon (el
+    archivo no cambia durante una corrida)."""
+    aurora = load_aurora_coefficients()
+    return {name: aurora[name] for name in MACRO_UNUSED_LEGACY_COEFFICIENTS}
 
 
 def load_aurora_bimonetary() -> dict[str, float]:
@@ -242,15 +307,23 @@ def build_parameter_space(include_macro: bool = False) -> list[Parameter]:
     `BIMONETARY_TUNABLE`), orden `Coefficients.model_fields` seguido de
     `BIMONETARY_TUNABLE`.
 
-    `include_macro=True` (A5, ADR 012 secc. 6): 97 de `Coefficients` +
-    `MACRO_TUNABLE` (54) -- SIN `BIMONETARY_TUNABLE`: `engine/simulation.py
-    ::run` desactiva el canal bimonetario viejo en cuanto hay
-    `macro_coefficients` (ver Notas de implementacion del ADR 012), asi que
-    tunear esos 10 coeficientes en modo macro gastaria presupuesto de
-    CMA-ES en dimensiones sin ningun efecto sobre la simulacion."""
+    `include_macro=True` (A5, ADR 012 secc. 6; revisado por ADR 017 secc. 1):
+    89 de `Coefficients` + `MACRO_TUNABLE` (58) = 147 -- SIN
+    `BIMONETARY_TUNABLE` (`engine/simulation.py::run` desactiva el canal
+    bimonetario viejo en cuanto hay `macro_coefficients`, ver Notas de
+    implementacion del ADR 012, asi que tunear esos 10 coeficientes en modo
+    macro gastaria presupuesto de CMA-ES en dimensiones sin ningun efecto
+    sobre la simulacion) y SIN los 8 de
+    `MACRO_UNUSED_LEGACY_COEFFICIENTS` (mismo argumento, medido: con macro
+    activo la simulacion nunca llama a `step_economy`, asi que esos 8 no
+    cambian la perdida y CMA-ES los deja en cualquier lado -- ver el
+    comentario de esa constante)."""
     aurora_coeff = load_aurora_coefficients()
     params: list[Parameter] = []
+    excluded = set(MACRO_UNUSED_LEGACY_COEFFICIENTS) if include_macro else set()
     for name in Coefficients.model_fields:
+        if name in excluded:
+            continue
         value = aurora_coeff[name]
         lo, hi = _default_bounds(value)
         params.append(Parameter(name=name, group="coefficients", aurora_value=value, lo=lo, hi=hi))
@@ -295,11 +368,21 @@ def coefficients_from_vector(
     params: list[Parameter], x: list[float], base: Coefficients
 ) -> Coefficients:
     """`x` en las unidades NATIVAS de cada parametro (no `[0,1]`; para eso
-    usar `Parameter.from_unit` antes)."""
+    usar `Parameter.from_unit` antes).
+
+    ADR 017 secc. 1: si `params` es un espacio de modo MACRO (tiene grupo
+    `"macro"`), los 8 de `MACRO_UNUSED_LEGACY_COEFFICIENTS` -- que ya no
+    estan en el vector -- se fijan explicitamente en el valor de Aurora del
+    paquete (`excluded_legacy_values()`) en vez de heredar lo que traiga
+    `base`. Asi el `Coefficients` resultante (el que se simula Y el que se
+    escribe en `coefficients.json`) queda completo y en una zona sensata
+    para el motor legacy de `world/annual.py`, que SI los lee."""
     updates = {}
     for p, v in zip(params, x, strict=True):
         if p.group == "coefficients":
             updates[p.name] = p.clip(v)
+    if any(p.group == "macro" for p in params):
+        updates.update(excluded_legacy_values())
     return base.model_copy(update=updates) if updates else base
 
 
@@ -340,6 +423,11 @@ def write_parameters_yaml(params: list[Parameter], out_path) -> None:
         "# Espacio de parametros de la calibracion (A3, ADR 011 secc. 7).",
         "# Generado por republica.calibration.parameters.build_parameter_space -- no editar a",
         "# mano: se re-escribe solo, al principio de cada `republica calibrate`.",
+        "#",
+        "# ADR 017 secc. 1: en modo macro (grupo `macro` presente) NO aparecen aca los 8",
+        "# coeficientes que solo lee el motor legacy `step_economy` (rho_pi, c_e, c_r, c_g,",
+        "# c_f, k_w, k_tb, k_conf): la funcion objetivo con macro activo nunca los ejercita,",
+        "# asi que quedan FIJOS en el valor de Aurora en vez de en el vector de CMA-ES.",
         "parameters:",
     ]
     for p in params:

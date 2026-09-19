@@ -113,11 +113,23 @@ def step_economy(
     shocks: ShockAggregate,
     structure: Structure,
     coeff: Coefficients,
+    g_m_clamp: tuple[float, float] | None = None,
 ) -> tuple[WorldState, Aux]:
     """Secciones 4.1 a 4.8, en orden. Devuelve el estado con el bloque
     economico actualizado (el resto de los campos queda igual que `state`,
     listo para que `step_society`/`step_politics` los completen) y `Aux`.
-    """
+
+    `g_m_clamp` (ADR 017 secc. 2, default `None` = comportamiento de
+    siempre, byte a byte): cota `(lo, hi)` para `g_m` (4.1) ANTES de
+    calcular `(1 + g_m/100)**12`. La usa SOLO `world/annual.py`, que aplica
+    esta funcion 12 veces por turno-año sin clampear el estado entre
+    sub-pasos y por lo tanto puede llegar a un `g_m` que desborda el
+    `float` en esa potencia (hallazgo de `docs/ADR_014_rolling_backtest.md`
+    con los coeficientes de `a5b_macro`). La POLITICA (que rango es
+    "fisico", cuantos clampeos hubo) vive entera en `world/annual.py`:
+    aca solo se recibe una cota que por default no existe. `Aux.g_m`
+    devuelve el valor YA clampeado, que es como `world/annual.py` detecta
+    que la guarda actuo."""
     interest_rate_new = policy.interest_rate_target
 
     r_real = interest_rate_new - 12.0 * state.inflation
@@ -139,6 +151,8 @@ def step_economy(
         - coeff.a_t * pos(state.social_tension - coeff.tension_threshold) / 100.0
         + shocks.term("shock_gdp")
     )
+    if g_m_clamp is not None:
+        g_m = clamp(g_m, g_m_clamp[0], g_m_clamp[1])
     demand_gap = g_m - structure.g_trend
     gdp_new = state.gdp * (1.0 + g_m / 100.0)
     annualized = ((1.0 + g_m / 100.0) ** 12 - 1.0) * 100.0

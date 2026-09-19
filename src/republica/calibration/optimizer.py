@@ -120,6 +120,7 @@ class ParallelEvaluator:
         workers: int,
         base_macro: MacroCoefficients | None = None,
         loss: str = "rmse",
+        weights: dict[str, float] | None = None,
     ):
         self.pool = pool
         self.dates = dates
@@ -132,6 +133,10 @@ class ParallelEvaluator:
         #: corre con `step_macro_economy` (ver `_worker_score`).
         self.base_macro = base_macro
         self.loss = loss
+        #: ADR 017 secc. 5: pesos por variable del objetivo (`None` =
+        #: todos 1.0 = el escalar de siempre). Solo afectan el escalar que
+        #: minimiza CMA-ES, no las metricas del reporte.
+        self.weights = weights
 
     def evaluate_population(
         self,
@@ -162,7 +167,9 @@ class ParallelEvaluator:
         out = []
         for i, x in enumerate(xs):
             metrics = aggregate_scores(per_candidate[i], real)
-            scalar = scalar_objective(metrics, self.params, x, lambda_reg, loss=self.loss)
+            scalar = scalar_objective(
+                metrics, self.params, x, lambda_reg, loss=self.loss, weights=self.weights
+            )
             out.append(EvalResult(x=x, scalar=scalar, metrics=metrics))
         return out
 
@@ -190,9 +197,50 @@ class ParallelEvaluator:
         scalar = (
             float("nan")
             if persistence
-            else scalar_objective(metrics, self.params, x, lambda_reg, loss=self.loss)
+            else scalar_objective(
+                metrics, self.params, x, lambda_reg, loss=self.loss, weights=self.weights
+            )
         )
         return EvalResult(x=x, scalar=scalar, metrics=metrics)
+
+    def evaluate_mixed(
+        self,
+        x_by_date: dict[str, list[float]],
+        base_coeff: Coefficients,
+        base_bimon: BimonetaryCoefficients,
+        seed: int = 0,
+    ) -> dict[str, float]:
+        """ADR 017 secc. 4 (tabla AGREGADA de una corrida `--by-regime`):
+        cada mes de arranque se puntua con el vector de SU grupo
+        (`x_by_date`) y todos los `MonthScore` se agregan juntos, como si
+        fueran de un unico brazo. Devuelve solo las metricas: no hay un
+        escalar unico que tenga sentido (la regularizacion L2 es por vector
+        y acá hay tres), igual que en `evaluate_raw`.
+
+        Las fechas que no esten en `x_by_date` se saltean (no deberia pasar:
+        `calibration/run.py` arma el dict con las MISMAS fechas)."""
+        tasks = [
+            (
+                date,
+                x_by_date[date],
+                self.params,
+                base_coeff,
+                base_bimon,
+                self.base_macro,
+                False,
+                seed,
+            )
+            for date in self.dates
+            if date in x_by_date
+        ]
+        raw = (
+            self.pool.map(_worker_score, tasks)
+            if self.pool is not None
+            else [_worker_score(t) for t in tasks]
+        )
+        scores = [r[1] for r in raw]
+        real = RealData.load()
+        return aggregate_scores(scores, real)
 
     def evaluate_raw(
         self,

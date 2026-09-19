@@ -399,3 +399,186 @@ def test_load_calibrated_country_macro_is_none_for_calibration_without_macro(
         assert macro is None
     finally:
         shutil.rmtree(run_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# ADR 017 secc. 1: los `Coefficients` legacy sin senal quedan FUERA del
+# vector cuando macro esta activo, y fijos en el valor de Aurora.
+# ---------------------------------------------------------------------------
+
+
+def test_parameter_space_with_macro_excludes_legacy_coefficients_without_signal() -> None:
+    """Los 8 coeficientes que `step_economy` lee y `step_macro_economy` NO
+    (ADR 017 secc. 1) no pueden estar en el vector de CMA-ES cuando se
+    calibra con macro: la funcion objetivo nunca los ejercita, asi que
+    CMA-ES los mueve libre (`rho_pi = 2.298` en `a5b_macro`) y despues
+    revientan el modo anual, que SI usa el motor legacy."""
+    from republica.calibration.parameters import MACRO_UNUSED_LEGACY_COEFFICIENTS
+    from republica.world.config import Coefficients
+
+    # OJO: se comparan solo los nombres del grupo `"coefficients"`.
+    # `MacroCoefficients` tambien tiene un campo `rho_pi` (ADR 012 secc. 2,
+    # la persistencia de la ecuacion de precios NUEVA), que SI se calibra:
+    # mirar los nombres del vector entero confundiria los dos.
+    with_macro = {
+        p.name for p in build_parameter_space(include_macro=True) if p.group == "coefficients"
+    }
+    without_macro = {
+        p.name for p in build_parameter_space(include_macro=False) if p.group == "coefficients"
+    }
+
+    assert set(MACRO_UNUSED_LEGACY_COEFFICIENTS) == {
+        "rho_pi",
+        "c_e",
+        "c_r",
+        "c_g",
+        "c_f",
+        "k_w",
+        "k_tb",
+        "k_conf",
+    }
+    # Nombres CONCRETOS fuera (no solo "los de la constante"): si alguien
+    # cambia la constante sin pensar, este assert lo frena.
+    for name in ("rho_pi", "c_e", "c_r", "c_g", "c_f", "k_w", "k_tb", "k_conf"):
+        assert name not in with_macro, name
+        assert name in without_macro, name
+    # Los que AMBOS motores leen se quedan (tienen senal real del objetivo).
+    for name in ("a_r", "a_f", "b_res", "b_conf", "p_i", "p_u", "w_idx", "d_g", "k_k"):
+        assert name in with_macro, name
+
+    coeff_params = [
+        p for p in build_parameter_space(include_macro=True) if p.group == "coefficients"
+    ]
+    assert len(coeff_params) == len(Coefficients.model_fields) - 8
+
+
+def test_macro_vector_fixes_excluded_legacy_coefficients_at_aurora_value() -> None:
+    """Los 8 excluidos no quedan "en lo que traiga el base": se fijan
+    explicitamente en el valor de Aurora del paquete (ADR 017 secc. 1), asi
+    que el `coefficients.json` de una calibracion macro sigue siendo un
+    objeto completo que `world/annual.py` puede usar sin desbordar."""
+    from republica.calibration.parameters import (
+        MACRO_UNUSED_LEGACY_COEFFICIENTS,
+        coefficients_from_vector,
+        excluded_legacy_values,
+    )
+    from republica.world.config import load_country
+
+    params = build_parameter_space(include_macro=True)
+    # `base` con los 8 en un valor absurdo: el resultado tiene que
+    # ignorarlo y poner el de Aurora igual.
+    base = load_country().coefficients.model_copy(
+        update={name: 99.0 for name in MACRO_UNUSED_LEGACY_COEFFICIENTS}
+    )
+    x = [p.aurora_value for p in params]
+    coeff = coefficients_from_vector(params, x, base)
+    aurora = excluded_legacy_values()
+    for name in MACRO_UNUSED_LEGACY_COEFFICIENTS:
+        assert getattr(coeff, name) == pytest.approx(aurora[name]), name
+        assert getattr(coeff, name) != 99.0
+
+
+# ---------------------------------------------------------------------------
+# ADR 017 secc. 2: guarda numerica del modo anual.
+# ---------------------------------------------------------------------------
+
+
+def test_annual_mode_clamps_g_m_instead_of_overflowing_and_counts_it() -> None:
+    """Con el `rho_pi = 2.298` que quedo grabado en `a5b_macro`, el modo
+    anual tiraba `OverflowError` en `(1 + g_m/100)**12` (hallazgo de ADR
+    014: 4050 de 4050 semillas calibradas descartadas en 1916-1960). Con la
+    guarda de ADR 017 secc. 2 la corrida termina y el contador de clampeos
+    lo dice."""
+    from republica.engine.policy import PassivePolicy
+    from republica.world.annual import G_M_PHYSICAL_RANGE, load_annual_regime, run_annual
+    from republica.world.countries import country_pack_dir, load_country_pack_annual
+
+    country = load_country_pack_annual("argentina", 1920, 5)
+    regimes = load_annual_regime(country_pack_dir("argentina") / "politics" / "regimes.csv")
+    policy = PassivePolicy(
+        country.default_policy,
+        country.structure.r_neutral,
+        country.policy_ranges["interest_rate_target"],
+    )
+
+    # Aurora: nada que clampear.
+    clean = run_annual(
+        seed=1,
+        years=5,
+        country=country,
+        policy_rule=policy,
+        start_year=1920,
+        annual_regime=regimes,
+    )
+    assert clean.g_m_clamped == 0
+    assert all(r.g_m_clamped == 0 for r in clean.records)
+
+    # `rho_pi` explosivo (el valor real de `a5b_macro`): antes de ADR 017
+    # esto era un `OverflowError`.
+    explosive = country.model_copy(
+        update={"coefficients": country.coefficients.model_copy(update={"rho_pi": 2.298})}
+    )
+    history = run_annual(
+        seed=1,
+        years=5,
+        country=explosive,
+        policy_rule=policy,
+        start_year=1920,
+        annual_regime=regimes,
+    )
+    assert history.g_m_clamped > 0
+    assert history.g_m_clamped == sum(r.g_m_clamped for r in history.records)
+    # El contador esta en el JSONL (no es silencioso).
+    assert f'"g_m_clamped": {history.g_m_clamped}' in history.to_jsonl()
+    assert G_M_PHYSICAL_RANGE == (-50.0, 50.0)
+
+
+def test_step_economy_without_clamp_is_byte_identical() -> None:
+    """El clamp es OPCIONAL: sin `g_m_clamp` (el modo mensual) `step_economy`
+    devuelve exactamente lo mismo que con una cota que no muerde -- el
+    camino de siempre no cambia."""
+    from republica.world.config import load_country
+    from republica.world.economy import step_economy
+    from republica.world.events import ShockAggregate
+
+    c = load_country()
+    args = (
+        c.initial_state,
+        c.exogenous,
+        c.exogenous,
+        c.default_policy,
+        ShockAggregate(),
+        c.structure,
+        c.coefficients,
+    )
+    s_plain, aux_plain = step_economy(*args)
+    s_clamped, aux_clamped = step_economy(*args, g_m_clamp=(-50.0, 50.0))
+    assert s_plain == s_clamped
+    assert aux_plain == aux_clamped
+
+
+# ---------------------------------------------------------------------------
+# ADR 017 secc. 5: `--weights`.
+# ---------------------------------------------------------------------------
+
+
+def test_objective_weights_default_is_unchanged_and_a_weight_changes_the_scalar() -> None:
+    from republica.calibration.objective import HORIZONS, VARIABLES, scalar_objective
+
+    params = build_parameter_space(include_macro=True)
+    x = [p.aurora_value for p in params]
+    metrics = {f"{v}_h{h}": 1.0 + i * 0.1 for i, v in enumerate(VARIABLES) for h in HORIZONS}
+
+    base = scalar_objective(metrics, params, x, lambda_reg=0.0)
+    ones = scalar_objective(metrics, params, x, lambda_reg=0.0, weights={v: 1.0 for v in VARIABLES})
+    assert base == pytest.approx(ones)
+
+    doubled = scalar_objective(metrics, params, x, lambda_reg=0.0, weights={"inflation": 2.0})
+    inflation_term = sum(metrics[f"inflation_h{h}"] for h in HORIZONS)
+    assert doubled == pytest.approx(base + inflation_term)
+
+    zeroed = scalar_objective(metrics, params, x, lambda_reg=0.0, weights={"inflation": 0.0})
+    assert zeroed == pytest.approx(base - inflation_term)
+
+    with pytest.raises(ValueError):
+        scalar_objective(metrics, params, x, lambda_reg=0.0, weights={"no_existe": 2.0})

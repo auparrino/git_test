@@ -510,3 +510,33 @@ def fx_regime_for(pack_dir: Path, start: str) -> str:
             if row["date_from"] <= start <= row["date_to"]:
                 return row["fx_regime"]
     return "float"
+
+
+#: ADR 017 secc. 3.1: los 4 valores de `fx_regimes.csv` agrupados en los 3
+#: grupos con los que se calibra por regimen (`republica calibrate
+#: --by-regime`). `crawl` va con `peg` porque el MOTOR ya los trata juntos:
+#: `world/economy.py::step_macro_economy` tiene una sola rama
+#: `elif fx_regime in ("crawl", "peg")` (mini-devaluacion administrada y
+#: paridad fija son el mismo mecanismo de defensa con reservas, con `crawl`
+#: deslizando la paridad) -- calibrarlos por separado seria calibrar dos
+#: vectores para una unica rama de codigo. Ademas, en el train
+#: `1992-01:2023-12` no hay NINGUN mes de arranque `crawl` (la banda del
+#: paquete es 1983-12:1991-03, entera en el holdout), asi que un grupo
+#: `crawl` propio se quedaria sin datos.
+FX_REGIME_GROUP_MAP: dict[str, str] = {
+    "peg": "peg",
+    "crawl": "peg",
+    "float": "float",
+    "control": "control",
+}
+
+#: Orden fijo de los grupos (determinismo del reporte y del `coefficients.
+#: json`), no un orden de importancia.
+FX_REGIME_GROUPS: tuple[str, ...] = ("peg", "float", "control")
+
+
+def fx_regime_group(fx_regime: str) -> str:
+    """Grupo de calibracion de un `fx_regime` (ver `FX_REGIME_GROUP_MAP`).
+    Un regimen desconocido cae en `"float"`, que es el default del propio
+    `fx_regime_for` cuando no encuentra la fecha en la tabla."""
+    return FX_REGIME_GROUP_MAP.get(fx_regime, "float")

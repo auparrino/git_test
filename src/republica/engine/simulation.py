@@ -47,7 +47,7 @@ from republica.world.cohorts import (
     step_cohorts,
     weighted_perceived_inflation,
 )
-from republica.world.config import Country, load_country
+from republica.world.config import Coefficients, Country, load_country
 from republica.world.economy import (
     DEFAULT_X0_M0_USD_M,
     MacroCoefficients,
@@ -441,6 +441,23 @@ class Simulation:
     #: cambios al camino con el flag apagado.
     macro_coefficients: MacroCoefficients | None = None
     macro_state: MacroState | None = None
+    #: ADR 017 secc. 3.6 (`republica calibrate --by-regime`, default `None`
+    #: = comportamiento de siempre): `{grupo de regimen cambiario:
+    #: (Coefficients, MacroCoefficients | None)}`. Con esto puesto,
+    #: `advance_month` cambia de vector EN CALIENTE cuando el regimen
+    #: SIMULADO (`macro_state.fx_regime`) pasa a otro grupo -- tipicamente
+    #: una salida forzada de un `peg` por reservas (`fx_regime_exit`, ADR
+    #: 012 secc. 3), donde seguir con el vector `peg` seria usar
+    #: coeficientes calibrados para una rama de `step_macro_economy` que ya
+    #: no se ejecuta. NO sigue el calendario de `fx_regimes.csv` (el motor
+    #: tampoco: ver `world/countries.py::fx_regime_for` y el costo
+    #: declarado en ADR 017 secc. 3.6).
+    coefficients_by_fx_regime: dict[str, tuple[Coefficients, MacroCoefficients | None]] | None = (
+        None
+    )
+    #: Grupo cuyo vector esta activo ahora mismo (`None` hasta el primer
+    #: mes con `coefficients_by_fx_regime`).
+    active_fx_regime_group: str | None = None
 
 
 def new_simulation(
@@ -718,11 +735,48 @@ def compute_months_to_election(
     return max(total_months - month + 1, 0)
 
 
+def _swap_fx_regime_vector(sim: Simulation) -> str | None:
+    """ADR 017 secc. 3.6: si la corrida trae un vector calibrado POR GRUPO
+    de regimen cambiario y el regimen SIMULADO cambio de grupo desde el mes
+    pasado, reemplaza `sim.country.coefficients`/`sim.macro_coefficients`
+    por los del grupo nuevo. Devuelve el grupo nuevo (para dejar el evento
+    `fx_vector_switch:<grupo>` en el `MonthRecord`) o `None` si no hubo
+    cambio.
+
+    El cambio se evalua al EMPEZAR el mes, asi que una salida de regimen
+    que ocurre dentro del mes `m` (`fx_regime_exit`, resuelta por
+    `step_macro_economy` al final de ese mes) mueve el vector recien en el
+    mes `m+1`: el mes de la salida se corre entero con el vector del
+    regimen viejo. Es deliberado (no hay forma de saber a principio de mes
+    que la salida va a pasar) y no se considera un problema: el vector es
+    un conjunto de coeficientes, no un estado."""
+    if sim.coefficients_by_fx_regime is None or sim.macro_state is None:
+        return None
+    from republica.world.countries import fx_regime_group
+
+    group = fx_regime_group(sim.macro_state.fx_regime)
+    if group == sim.active_fx_regime_group:
+        return None
+    entry = sim.coefficients_by_fx_regime.get(group)
+    if entry is None:
+        # Grupo sin vector propio en esta calibracion: se sigue con el que
+        # esta puesto (el `default` que eligio el llamador), sin evento.
+        return None
+    coeff, macro_coeff = entry
+    sim.country = sim.country.model_copy(update={"coefficients": coeff})
+    if macro_coeff is not None:
+        sim.macro_coefficients = macro_coeff
+    first = sim.active_fx_regime_group is None
+    sim.active_fx_regime_group = group
+    return None if first else group
+
+
 def advance_month(sim: Simulation) -> MonthRecord:
     """Avanza un mes siguiendo el orden de la seccion 7. Muta `sim` y devuelve
     el `MonthRecord` (ya agregado a `sim.records`)."""
     sim.month += 1
     month = sim.month
+    fx_vector_switch = _swap_fx_regime_vector(sim)
     country = sim.country
     coeff = country.coefficients
     # Calculada temprano (hallazgo #12 de REVIEW_001): antes solo se
@@ -1308,6 +1362,10 @@ def advance_month(sim: Simulation) -> MonthRecord:
 
     # 8. eventos endogenos y fin de partida
     events: list[str] = list(agreement_events) + macro_events
+    if fx_vector_switch is not None:
+        # ADR 017 secc. 3.6: queda registrado en el JSONL que a partir de
+        # este mes la corrida usa OTRO vector calibrado.
+        events.append(f"fx_vector_switch:{fx_vector_switch}")
     clamped, pending, dev_event = check_forced_devaluation(
         clamped, month, country.terminal, sim.tracker
     )
@@ -1477,6 +1535,8 @@ def run(
     macro_x0: float | None = None,
     macro_m0: float | None = None,
     macro_external_debt_usd_init: float | None = None,
+    coefficients_by_fx_regime: dict[str, tuple[Coefficients, MacroCoefficients | None]]
+    | None = None,
 ) -> History:
     """Corre `months` meses (o hasta un fin de partida temprano) y devuelve
     la `History`.
@@ -1531,7 +1591,17 @@ def run(
     deuda externa inicial; sin pasarlo, `bimonetary_coefficients.
     external_debt_usd_init_pct_gdp` convertido a USD via `macro_x0` (o
     `DEFAULT_X0_M0_USD_M`) si hay `bimonetary_coefficients`, si no un
-    default fijo documentado abajo."""
+    default fijo documentado abajo.
+
+    `coefficients_by_fx_regime` (ADR 017 secc. 3.6, default `None` = cero
+    cambios en el camino de siempre): `{grupo de regimen cambiario:
+    (Coefficients, MacroCoefficients | None)}` de una calibracion
+    `republica calibrate --by-regime`. Con esto puesto, la corrida cambia
+    de vector EN CALIENTE cuando el regimen SIMULADO pasa a otro grupo (ver
+    `_swap_fx_regime_vector`) y deja el evento `fx_vector_switch:<grupo>`
+    en el `MonthRecord` de ese mes. Solo tiene efecto con `macro_
+    coefficients` (sin `macro_state` no hay regimen cambiario simulado que
+    seguir)."""
     sim = new_simulation(
         seed,
         policy_rule,
@@ -1614,6 +1684,14 @@ def run(
             x0=macro_x0 if macro_x0 is not None else DEFAULT_X0_M0_USD_M,
             m0=macro_m0 if macro_m0 is not None else DEFAULT_X0_M0_USD_M,
         )
+        # ADR 017 secc. 3.6: los vectores por grupo de regimen cambiario
+        # (si los hay) se guardan en `sim` para que `advance_month` pueda
+        # cambiarlos en caliente. El PRIMER mes fija el grupo del regimen
+        # inicial sin emitir evento (`_swap_fx_regime_vector`): el llamador
+        # ya eligio el vector de arranque con `load_calibrated_country(
+        # start=...)`, esto solo lo deja consistente si el regimen inicial
+        # resuelto por `run()` no coincide con el que uso el llamador.
+        sim.coefficients_by_fx_regime = coefficients_by_fx_regime
     external_state = (
         init_external_state(bimonetary_coefficients, fx_regime)
         if bimonetary_coefficients is not None and macro_coefficients is None

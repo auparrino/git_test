@@ -1,6 +1,11 @@
 # Espacio de parametros de la calibracion (A3, ADR 011 secc. 7).
 # Generado por republica.calibration.parameters.build_parameter_space -- no editar a
 # mano: se re-escribe solo, al principio de cada `republica calibrate`.
+#
+# ADR 017 secc. 1: en modo macro (grupo `macro` presente) NO aparecen aca los 8
+# coeficientes que solo lee el motor legacy `step_economy` (rho_pi, c_e, c_r, c_g,
+# c_f, k_w, k_tb, k_conf): la funcion objetivo con macro activo nunca los ejercita,
+# asi que quedan FIJOS en el valor de Aurora en vez de en el vector de CMA-ES.
 parameters:
   - name: a_r
     group: coefficients
@@ -72,31 +77,6 @@ parameters:
     aurora_value: 150.0
     lo: 50.0
     hi: 450.0
-  - name: rho_pi
-    group: coefficients
-    aurora_value: 0.85
-    lo: 0.2833333333333333
-    hi: 2.55
-  - name: c_e
-    group: coefficients
-    aurora_value: 0.06
-    lo: 0.02
-    hi: 0.18
-  - name: c_g
-    group: coefficients
-    aurora_value: 0.5
-    lo: 0.16666666666666666
-    hi: 1.5
-  - name: c_f
-    group: coefficients
-    aurora_value: 0.12
-    lo: 0.04
-    hi: 0.36
-  - name: c_r
-    group: coefficients
-    aurora_value: 1.0
-    lo: 0.3333333333333333
-    hi: 3.0
   - name: d_g
     group: coefficients
     aurora_value: 0.6
@@ -147,26 +127,11 @@ parameters:
     aurora_value: 0.05
     lo: 0.016666666666666666
     hi: 0.15000000000000002
-  - name: k_tb
-    group: coefficients
-    aurora_value: 20.0
-    lo: 6.666666666666667
-    hi: 60.0
-  - name: k_w
-    group: coefficients
-    aurora_value: 10.0
-    lo: 3.3333333333333335
-    hi: 30.0
   - name: k_k
     group: coefficients
     aurora_value: 15.0
     lo: 5.0
     hi: 45.0
-  - name: k_conf
-    group: coefficients
-    aurora_value: 10.0
-    lo: 3.3333333333333335
-    hi: 30.0
   - name: p_u
     group: coefficients
     aurora_value: 0.8

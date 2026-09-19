@@ -427,15 +427,26 @@ def run_test_arm(
     bimonetary = pack.bimonetary_coefficients
     macro_active = country.features.get("macro_regime", False)
     macro = pack.macro_coefficients if macro_active else None
+    coefficients_by_fx_regime = None
     if arm == "calibrated":
-        from republica.calibration.run import load_calibrated_country
+        from republica.calibration.run import (
+            load_calibrated_country,
+            load_calibrated_vectors_by_group,
+        )
 
+        # ADR 017 secc. 3.5: con una calibracion `--by-regime`, el vector se
+        # elige por el `fx_regime` real de la fecha de arranque de la
+        # prueba; con el formato viejo el `start` se ignora y sale el unico
+        # vector, igual que siempre.
         coeff, bimonetary, calibrated_macro = load_calibrated_country(
-            "argentina", calibration_run_id
+            "argentina", calibration_run_id, start=test.start
         )
         country = country.model_copy(update={"coefficients": coeff})
         if macro_active and calibrated_macro is not None:
             macro = calibrated_macro
+        # ADR 017 secc. 3.6: cambio de vector en caliente si el regimen
+        # simulado sale de su grupo (`None` con el formato viejo).
+        coefficients_by_fx_regime = load_calibrated_vectors_by_group(calibration_run_id)
     if test.fx_regime:
         bimonetary = dc_replace(bimonetary, fx_regime_default=test.fx_regime)
     resolved_fx_regime = test.fx_regime or pack.fx_regime_auto
@@ -488,6 +499,7 @@ def run_test_arm(
             macro_x0=pack.macro_x0 if macro is not None else None,
             macro_m0=pack.macro_m0 if macro is not None else None,
             fx_regime=resolved_fx_regime if macro is not None else test.fx_regime,
+            coefficients_by_fx_regime=coefficients_by_fx_regime,
         )
         runs.append(_history_to_seed_run(seed, history, forced_ids))
     return runs

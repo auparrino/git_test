@@ -396,3 +396,316 @@ def test_fx_level_interpolates_geometrically_within_a_year() -> None:
     assert a < mid < b
     assert mid < (a + b) / 2
     assert math.isclose(math.log(mid), (math.log(a) + math.log(b)) / 2, rel_tol=0.1)
+
+
+# ---------------------------------------------------------------------------
+# ADR 017 secc. 3: calibracion por regimen cambiario.
+# ---------------------------------------------------------------------------
+
+
+def _write_by_regime_calibration(run_id: str) -> Path:
+    """`coefficients.json` del formato NUEVO (ADR 017 secc. 3.4) con tres
+    grupos distinguibles por un valor centinela en `w_adapt`."""
+    from republica.world.bimonetary import BimonetaryCoefficients
+    from republica.world.countries import FX_REGIME_GROUP_MAP
+    from republica.world.economy import MacroCoefficients
+
+    run_dir = CALIBRATION_ROOT / run_id
+    if run_dir.exists():
+        import shutil
+
+        shutil.rmtree(run_dir)
+    run_dir.mkdir(parents=True)
+    base_coeff = load_country().coefficients
+    base_bimon = BimonetaryCoefficients()
+    bimon_dict = {n: getattr(base_bimon, n) for n in base_bimon.__dataclass_fields__}
+    base_macro = MacroCoefficients()
+
+    def payload(sentinel: float) -> dict:
+        macro = {n: getattr(base_macro, n) for n in base_macro.__dataclass_fields__}
+        macro["w_adapt"] = sentinel
+        return {
+            "coefficients": base_coeff.model_copy(update={"a_r": sentinel}).model_dump(),
+            "bimonetary": bimon_dict,
+            "macro": macro,
+        }
+
+    sentinels = {"peg": 0.11, "float": 0.22, "control": 0.33}
+    raw = {
+        "run_id": run_id,
+        "country_id": "argentina",
+        "by_regime_groups": ["peg", "float", "control"],
+        "default_group": "float",
+        "regime_group_map": dict(FX_REGIME_GROUP_MAP),
+        "n_start_months_by_group": {"peg": 41, "float": 54, "control": 29},
+        "by_regime": {g: payload(v) for g, v in sentinels.items()},
+        "default": payload(sentinels["float"]),
+    }
+    (run_dir / "coefficients.json").write_text(json.dumps(raw), encoding="utf-8")
+    return run_dir
+
+
+def test_fx_regime_groups_map_crawl_to_peg() -> None:
+    """ADR 017 secc. 3.1: `crawl` va con `peg` porque
+    `step_macro_economy` los trata en la MISMA rama."""
+    from republica.world.countries import FX_REGIME_GROUPS, fx_regime_group
+
+    assert fx_regime_group("crawl") == "peg"
+    assert fx_regime_group("peg") == "peg"
+    assert fx_regime_group("float") == "float"
+    assert fx_regime_group("control") == "control"
+    # Un regimen desconocido cae en el mismo default que `fx_regime_for`.
+    assert fx_regime_group("lo_que_sea") == "float"
+    assert FX_REGIME_GROUPS == ("peg", "float", "control")
+
+
+def test_group_start_months_partition_of_the_real_train_window() -> None:
+    """La distribucion que documenta ADR 017 secc. 3.2 (stride 3, h=12):
+    train 1992-01:2023-12 -> 124 meses (float 54, peg 41, control 29);
+    holdout 1983-12:1991-12 -> 29 meses, TODOS `crawl` -> grupo `peg`."""
+    from republica.calibration.run import group_start_months
+
+    train = start_months("1992-01", "2023-12", horizon=12, stride=3)
+    groups = group_start_months("argentina", train)
+    assert len(train) == 124
+    assert {g: len(d) for g, d in groups.items()} == {"peg": 41, "float": 54, "control": 29}
+    # Orden fijo (determinismo del reporte y del coefficients.json).
+    assert list(groups) == ["peg", "float", "control"]
+
+    holdout = start_months("1983-12", "1991-12", horizon=12, stride=3)
+    groups_h = group_start_months("argentina", holdout)
+    assert len(holdout) == 29
+    assert {g: len(d) for g, d in groups_h.items()} == {"peg": 29}
+
+
+def test_load_calibrated_country_reads_old_single_vector_format() -> None:
+    """Compatibilidad hacia atras (ADR 017 secc. 3.4): un
+    `coefficients.json` del formato VIEJO (un solo vector en la raiz) se
+    sigue leyendo igual, y el `start` se ignora."""
+    import shutil
+
+    from republica.world.bimonetary import BimonetaryCoefficients
+
+    run_id = "pytest-old-format-single-vector"
+    run_dir = CALIBRATION_ROOT / run_id
+    shutil.rmtree(run_dir, ignore_errors=True)
+    run_dir.mkdir(parents=True)
+    try:
+        base_bimon = BimonetaryCoefficients()
+        raw = {
+            "run_id": run_id,
+            "country_id": "argentina",
+            "coefficients": load_country()
+            .coefficients.model_copy(update={"a_r": 0.77})
+            .model_dump(),
+            "bimonetary": {n: getattr(base_bimon, n) for n in base_bimon.__dataclass_fields__},
+        }
+        (run_dir / "coefficients.json").write_text(json.dumps(raw), encoding="utf-8")
+        for start in (None, "1998-01", "2005-01", "2013-01"):
+            coeff, _bimon, macro = load_calibrated_country("argentina", run_id, start=start)
+            assert coeff.a_r == pytest.approx(0.77)
+            assert macro is None
+    finally:
+        shutil.rmtree(run_dir, ignore_errors=True)
+
+
+@pytest.mark.parametrize(
+    ("start", "expected_group", "sentinel"),
+    [
+        ("1998-01", "peg", 0.11),  # convertibilidad
+        ("2005-01", "float", 0.22),  # post-convertibilidad
+        ("2013-01", "control", 0.33),  # cepo
+        ("1988-06", "peg", 0.11),  # `crawl` -> grupo `peg`
+        (None, "float", 0.22),  # sin `start` -> `default`
+    ],
+)
+def test_load_calibrated_country_picks_the_vector_of_the_fx_regime_of_start(
+    start: str | None, expected_group: str, sentinel: float
+) -> None:
+    """ADR 017 secc. 3.5: la fecha de `--start` decide el vector."""
+    import shutil
+
+    from republica.calibration.run import calibration_vector_for, load_calibration_json
+
+    run_id = "pytest-by-regime-selection"
+    _write_by_regime_calibration(run_id)
+    try:
+        coeff, _bimon, macro = load_calibrated_country("argentina", run_id, start=start)
+        assert coeff.a_r == pytest.approx(sentinel)
+        assert macro is not None
+        assert macro.w_adapt == pytest.approx(sentinel)
+        _payload, why = calibration_vector_for("argentina", load_calibration_json(run_id), start)
+        if start is None:
+            assert "default" in why
+        else:
+            assert expected_group in why
+    finally:
+        shutil.rmtree(CALIBRATION_ROOT / run_id, ignore_errors=True)
+
+
+def test_load_calibrated_vectors_by_group_is_none_for_old_format_and_a_dict_for_new() -> None:
+    """Lo que `engine/simulation.py::run(coefficients_by_fx_regime=...)`
+    consume para el cambio de vector en caliente (ADR 017 secc. 3.6)."""
+    import shutil
+
+    from republica.calibration.run import load_calibrated_vectors_by_group
+
+    assert load_calibrated_vectors_by_group("a5b_macro") is None
+
+    run_id = "pytest-by-regime-vectors"
+    _write_by_regime_calibration(run_id)
+    try:
+        by_group = load_calibrated_vectors_by_group(run_id)
+        assert by_group is not None
+        assert set(by_group) == {"peg", "float", "control"}
+        for group, (coeff, macro) in by_group.items():
+            assert macro is not None
+            assert coeff.a_r == pytest.approx(macro.w_adapt), group
+    finally:
+        shutil.rmtree(CALIBRATION_ROOT / run_id, ignore_errors=True)
+
+
+def test_run_swaps_vector_when_the_simulated_fx_regime_leaves_its_group() -> None:
+    """ADR 017 secc. 3.6: si el regimen simulado sale de su grupo
+    (`fx_regime_exit`, salida forzada de un `peg` por reservas), la corrida
+    pasa al vector del grupo nuevo y lo registra como evento
+    `fx_vector_switch:<grupo>`.
+
+    Los tres grupos llevan a proposito LOS MISMOS coeficientes (los del
+    paquete): asi la trayectoria es identica a la de una corrida sin
+    `coefficients_by_fx_regime` y lo unico que se esta probando es el
+    MECANISMO de cambio (cuando se dispara y que evento deja), no un efecto
+    de los coeficientes sobre la dinamica."""
+    from republica.engine.simulation import run as run_simulation
+    from republica.world.countries import load_country_pack
+
+    pack = load_country_pack("argentina", "1998-01", 54)
+    by_group = {
+        g: (pack.country.coefficients, pack.macro_coefficients) for g in ("peg", "float", "control")
+    }
+    history = run_simulation(
+        seed=1,
+        months=54,
+        country=pack.country,
+        actors_enabled=True,
+        regime_calendar=pack.regime_calendar,
+        macro_coefficients=pack.macro_coefficients,
+        macro_x0=pack.macro_x0,
+        macro_m0=pack.macro_m0,
+        fx_regime="peg",
+        coefficients_by_fx_regime=by_group,
+    )
+    exit_months = [r.month_index for r in history.records if "fx_regime_exit" in r.events]
+    switches = [
+        (r.month_index, e)
+        for r in history.records
+        for e in r.events
+        if e.startswith("fx_vector_switch:")
+    ]
+    assert exit_months, "esta corrida deberia forzar la salida del peg"
+    assert switches
+    switch_month, switch_event = switches[0]
+    assert switch_event == "fx_vector_switch:float"
+    # El cambio ocurre el mes SIGUIENTE a la salida: el regimen nuevo se
+    # resuelve al final del mes de la salida, y el vector se evalua al
+    # EMPEZAR cada mes (documentado en `_swap_fx_regime_vector`).
+    assert switch_month == exit_months[0] + 1
+    # El mes 1 NO emite evento (fija el grupo inicial en silencio).
+    assert switch_month > 1
+
+
+def test_run_without_by_regime_vectors_never_switches() -> None:
+    """Sin `coefficients_by_fx_regime` (el camino de siempre) no aparece
+    ningun `fx_vector_switch` aunque el regimen simulado cambie."""
+    from republica.engine.simulation import run as run_simulation
+    from republica.world.countries import load_country_pack
+
+    pack = load_country_pack("argentina", "1998-01", 24)
+    history = run_simulation(
+        seed=1,
+        months=24,
+        country=pack.country,
+        actors_enabled=True,
+        regime_calendar=pack.regime_calendar,
+        macro_coefficients=pack.macro_coefficients,
+        macro_x0=pack.macro_x0,
+        macro_m0=pack.macro_m0,
+        fx_regime="peg",
+    )
+    events = [e for r in history.records for e in r.events]
+    assert not [e for e in events if e.startswith("fx_vector_switch:")]
+
+
+def test_by_regime_calibration_runs_end_to_end_and_writes_the_new_format() -> None:
+    """ADR 017: `--by-regime` de punta a punta sobre una ventana chiquita
+    que cruza la salida de la convertibilidad, asi caen al menos dos grupos
+    (`peg` y `float`). Verifica la estructura del `coefficients.json` nuevo,
+    que `default` sea el grupo con MAS meses de arranque, que los 8
+    coeficientes legacy excluidos queden en el valor de Aurora, y que el
+    reporte traiga las secciones por grupo Y las agregadas."""
+    import shutil
+
+    from republica.calibration.parameters import (
+        MACRO_UNUSED_LEGACY_COEFFICIENTS,
+        excluded_legacy_values,
+    )
+
+    run_id = "pytest-by-regime-e2e"
+    run_dir = CALIBRATION_ROOT / run_id
+    shutil.rmtree(run_dir, ignore_errors=True)
+    cfg = CalibrationRunConfig(
+        country_id="argentina",
+        run_id=run_id,
+        train_start="1999-01",
+        train_end="2004-12",
+        holdout_start="2016-01",
+        holdout_end="2016-12",
+        budget=4,
+        stride=12,
+        lambda_reg=0.01,
+        workers=2,
+        seed=1,
+        by_regime=True,
+        budget_per_group=4,
+    )
+    try:
+        out_dir = run_calibration(cfg)
+        raw = json.loads((out_dir / "coefficients.json").read_text(encoding="utf-8"))
+
+        assert "by_regime" in raw
+        assert "coefficients" not in raw  # formato NUEVO: nada en la raiz
+        assert set(raw["by_regime"]) == set(raw["by_regime_groups"])
+        assert {"peg", "float"} <= set(raw["by_regime_groups"])
+        # `default` = copia del vector del grupo con mas meses de train.
+        n_by_group = raw["n_start_months_by_group"]
+        biggest = max(n_by_group, key=lambda g: n_by_group[g])
+        assert raw["default_group"] == biggest
+        assert raw["default"] == raw["by_regime"][biggest]
+        assert raw["regime_group_map"]["crawl"] == "peg"
+
+        aurora = excluded_legacy_values()
+        for group, payload in raw["by_regime"].items():
+            assert len(payload["coefficients"]) == 97
+            assert "macro" in payload
+            for name in MACRO_UNUSED_LEGACY_COEFFICIENTS:
+                assert payload["coefficients"][name] == pytest.approx(aurora[name]), (group, name)
+
+        report = (out_dir / "report.md").read_text(encoding="utf-8")
+        assert "Por grupo de regimen cambiario" in report
+        assert "Grupo `peg` -- Train" in report
+        assert "Grupo `peg` -- Holdout" in report
+        assert "AGREGADO" in report
+        assert "no son evidencia sobre lo que hubiera pasado" in report
+        for group in raw["by_regime_groups"]:
+            assert (out_dir / f"history_{group}.csv").exists()
+
+        # El vector se elige por la fecha, y se puede cambiar en caliente.
+        from republica.calibration.run import load_calibrated_vectors_by_group
+
+        peg_coeff, _b, _m = load_calibrated_country("argentina", run_id, start="1999-01")
+        float_coeff, _b2, _m2 = load_calibrated_country("argentina", run_id, start="2005-01")
+        assert peg_coeff.model_dump() == raw["by_regime"]["peg"]["coefficients"]
+        assert float_coeff.model_dump() == raw["by_regime"]["float"]["coefficients"]
+        assert set(load_calibrated_vectors_by_group(run_id)) == set(raw["by_regime_groups"])
+    finally:
+        shutil.rmtree(run_dir, ignore_errors=True)
