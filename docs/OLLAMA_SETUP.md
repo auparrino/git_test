@@ -48,3 +48,25 @@
    La alternativa es correr el `.sh` desde WSL o Git Bash, con Ollama nativo de Windows: desde WSL2
    se ve en `localhost:11434` solo si Ollama escucha en `0.0.0.0` (`setx OLLAMA_HOST 0.0.0.0` en
    Windows y reiniciar el servicio), y conviene exportar `OLLAMA_HOST` antes de correr.
+
+## Si algo falla
+
+`republica` traduce un Ollama inalcanzable a un mensaje con los cuatro chequeos a hacer, en vez de
+un traceback. Si aun así el error no se entiende, corré el paso suelto para ver la salida completa:
+
+```powershell
+uv run republica bench-parse --brain llm:ollama:qwen3:8b --n 2 --role governor --seed 7
+```
+
+Causas habituales, en orden de frecuencia:
+
+| Síntoma | Causa | Qué hacer |
+|---|---|---|
+| "Connection refused" | El servicio no está levantado | `ollama list` en otra terminal; si falla, abrí la app de Ollama o corré `ollama serve` |
+| "Connection refused" con el servicio andando | Escucha en otra dirección | `$env:OLLAMA_HOST = "http://127.0.0.1:11434"` antes de correr |
+| "timed out" | Modelo grande en CPU | `.\scripts\fase4_ollama.ps1 -TimeoutSeconds 300`, o usá `qwen3:4b` |
+| `parse_rate` por debajo de 0.95 | El modelo no respeta el esquema JSON | Probá un modelo más grande, o subí `num_predict` en `ai/backends.py` |
+
+En Windows, el script no corta el script ante cualquier línea de stderr: los fallos reales se
+detectan por el código de salida y te dicen en qué archivo quedó la salida completa.
+

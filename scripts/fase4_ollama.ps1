@@ -29,7 +29,12 @@ param(
     [string]$Calibration = ""
 )
 
-$ErrorActionPreference = "Stop"
+# `Continue`, no `Stop`: con `Stop`, CUALQUIER linea que un comando nativo
+# escriba en stderr (un traceback, un warning de Python, una barra de
+# progreso) se convierte en `NativeCommandError` y PowerShell corta el script
+# mostrando SOLO la primera linea -- justo la parte inutil del error. Los
+# fallos reales se detectan por `$LASTEXITCODE` en `Invoke-Logged`.
+$ErrorActionPreference = "Continue"
 
 # Ubicarse en la raiz del repo (este script vive en scripts/).
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -72,11 +77,21 @@ function Invoke-Logged([string]$LogFile, [string[]]$UvArgs) {
     # archivo se escriba despues con codificacion explicita: `Tee-Object
     # -FilePath` no acepta `-Encoding` en Windows PowerShell 5.1 y guardaria
     # UTF-16, que el recolector no lee bien.
-    & uv run @UvArgs 2>&1 | Tee-Object -Variable captured | Out-Host
+    # `ForEach-Object { "$_" }` fuerza cada registro de error de un comando
+    # nativo a texto plano ANTES del Tee: sin eso, PowerShell los renderiza
+    # como `ErrorRecord` y el log guarda el objeto, no el mensaje.
+    & uv run @UvArgs 2>&1 | ForEach-Object { "$_" } | Tee-Object -Variable captured | Out-Host
+    $code = $LASTEXITCODE
     $elapsed = (Get-Date) - $started
     $line = "real {0}m{1:F3}s" -f [int]$elapsed.TotalMinutes, ($elapsed.TotalSeconds % 60)
     ($captured + $line) | Out-File -FilePath $LogFile -Encoding utf8
     Write-Host $line
+    if ($code -ne 0) {
+        Write-Host ""
+        Write-Host "El paso fallo (codigo $code). Salida completa en: $LogFile" -ForegroundColor Red
+        Write-Host "Si dice 'No se pudo conectar con Ollama', arranca el servicio y volve a correr." -ForegroundColor Red
+        exit $code
+    }
 }
 
 $calibLabel = if ($calibArgs.Count -gt 0) { $calibArgs[1] } else { "ninguna" }

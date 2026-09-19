@@ -2307,5 +2307,36 @@ def country_info(
         console.print(f"  constitutions.csv: {cons_text}")
 
 
+def main() -> None:
+    """Punto de entrada de la consola (`[project.scripts] republica`).
+
+    Envuelve `app()` para convertir un Ollama inalcanzable en un mensaje
+    accionable en vez de un traceback: es el error mas comun al correr la
+    Fase 4 en una maquina propia (servicio caido, `OLLAMA_HOST` apuntando a
+    otro lado, o el modelo todavia cargando en memoria)."""
+    from republica.ai.backends import OllamaUnavailableError
+
+    try:
+        app()
+    except OllamaUnavailableError as exc:
+        console.print(f"[red]No se pudo conectar con Ollama[/red] en {exc.host}.")
+        console.print(f"  Causa: {exc.cause}")
+        console.print("  Revisa, en este orden:")
+        console.print("    1. Que el servicio este corriendo: `ollama list` desde otra terminal.")
+        console.print(
+            "    2. Si Ollama escucha en otro host/puerto, exportar OLLAMA_HOST "
+            "(ej. http://127.0.0.1:11434)."
+        )
+        console.print(
+            "    3. Si el modelo es grande y la maquina lenta, subir el timeout: "
+            "REPUBLICA_OLLAMA_TIMEOUT=300 (segundos)."
+        )
+        console.print("    4. Sin Ollama a mano, `--brain fake:rules` corre la misma tuberia.")
+        # `SystemExit`, no `typer.Exit`: aca ya estamos FUERA del contexto de
+        # la app de typer (que es quien traduce `typer.Exit` a un codigo de
+        # salida), asi que un `typer.Exit` se veria como un traceback mas.
+        raise SystemExit(1) from None
+
+
 if __name__ == "__main__":
-    app()
+    main()

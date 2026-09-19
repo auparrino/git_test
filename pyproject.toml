@@ -49,7 +49,7 @@ core = ["numpy>=1.26"]
 calibration = ["cma>=3.3"]
 
 [project.scripts]
-republica = "republica.cli:app"
+republica = "republica.cli:main"
 
 [dependency-groups]
 dev = [

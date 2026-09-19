@@ -47,6 +47,20 @@ MAX_PARSE_RETRIES = 2
 DEFAULT_NUM_PREDICT = 800
 
 
+class OllamaUnavailableError(RuntimeError):
+    """No se pudo hablar con el servidor de Ollama.
+
+    Se levanta en lugar del `URLError`/`HTTPError` crudo de `urllib` para que
+    la CLI pueda imprimir un mensaje accionable (host, causa y que revisar)
+    en vez de un traceback de 40 lineas, que es lo que el usuario ve cuando
+    Ollama no esta levantado o escucha en otra direccion."""
+
+    def __init__(self, host: str, cause: BaseException) -> None:
+        self.host = host
+        self.cause = cause
+        super().__init__(f"No se pudo conectar con Ollama en {host}: {cause}")
+
+
 @dataclass
 class LLMResult:
     """ADR 004 secc. 2, literal."""
@@ -129,8 +143,11 @@ class OllamaBackend:
             method="POST",
         )
         t0 = time.perf_counter()
-        with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310
-            raw = response.read().decode("utf-8")
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310
+                raw = response.read().decode("utf-8")
+        except (urllib.error.URLError, OSError) as exc:  # incluye HTTPError y timeouts
+            raise OllamaUnavailableError(self.host, exc) from exc
         latency_ms = (time.perf_counter() - t0) * 1000.0
         return json.loads(raw), latency_ms
 

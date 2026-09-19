@@ -493,3 +493,18 @@ def test_cli_run_with_brain_flag_produces_trace_lines(tmp_path) -> None:
     lines = out.read_text(encoding="utf-8").splitlines()
     kinds = [json.loads(line).get("kind") for line in lines[:-1]]
     assert "trace" in kinds
+
+
+def test_ollama_backend_raises_a_typed_error_when_the_server_is_unreachable() -> None:
+    """Un Ollama caido tiene que dar `OllamaUnavailableError` (que la CLI
+    traduce a un mensaje accionable) y no un `URLError` crudo, que se veia
+    como un traceback de 40 lineas -- el error mas comun al correr la Fase 4
+    en una maquina propia."""
+    from republica.ai.backends import OllamaBackend, OllamaUnavailableError
+
+    # Puerto cerrado a proposito: 9 es `discard`, nunca hay un Ollama ahi.
+    backend = OllamaBackend("modelo-inexistente", host="http://127.0.0.1:9", timeout=2.0)
+    with pytest.raises(OllamaUnavailableError) as excinfo:
+        backend.complete(system="s", user="u", schema={"type": "object"}, temperature=0.0, seed=1)
+    assert "127.0.0.1:9" in str(excinfo.value)
+    assert excinfo.value.host == "http://127.0.0.1:9"
