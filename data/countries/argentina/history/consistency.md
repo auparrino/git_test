@@ -342,3 +342,30 @@ Desde 1992 la referencia del paquete sigue siendo la mensual del BCRA: el tramo 
 se conserva solo para estos cruces y para que la interpolación tenga el año siguiente disponible
 en 1991.
 
+## 15. Comercio exterior anual (WDI `NE.EXP/IMP.GNFS.CD`, fuente 23)
+
+Tres cruces, impresos por `uv run python scripts/build_argentina_trade.py`.
+
+**(a) Contra el proxy que reemplazan.** `X0`/`M0` usaban `0.18 · PIB / 12`. Cuánto sobreestimaba:
+
+| año | importaciones reales (USD M/mes) | proxy | factor |
+|---|---:|---:|---:|
+| 1991 | 960.9 | 2 845.8 | **2.96×** |
+| 1998 | 3 222.3 | 4 484.2 | 1.39× |
+| 2003 | 1 589.1 | 1 913.8 | 1.20× |
+| 2010 | 5 654.0 | 6 354.4 | 1.12× |
+
+El error es mayor cuanto más cerrada estaba la economía. 1991 es el peor caso y es justamente el
+arranque de la convertibilidad, donde `R_min` decide si el peg sobrevive.
+
+**(b) Signo de la balanza comercial contra episodios conocidos.** 1991 superávit (+3.03 bn), 1998
+déficit (−7.53 bn, el año previo a la recesión), 2003 superávit (+14.54 bn, post-devaluación), 2009
+superávit (+16.43 bn). Los cuatro coinciden con lo esperado.
+
+**(c) Apertura, (X+M)/PIB.** 13.8 % en 1991, 23.3 % en 1998, 41.3 % en 2003, 34.9 % en 2010. Todos
+dentro del rango plausible para Argentina, con el salto esperable tras la devaluación de 2002.
+
+**Limitación.** El snapshot termina en 2012: para 2013 en adelante se usa el año más cercano
+disponible, así que `X0`/`M0` de una corrida que arranca en 2019 salen de 2012 ajustados sólo por
+las elasticidades del modelo, no por dato real.
+

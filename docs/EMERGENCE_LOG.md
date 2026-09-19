@@ -71,3 +71,64 @@ el mismo mecanismo hiperinflaciona en el mes 9 desde 1983 y nunca desde 1988. El
 primera pista concreta y es barato de verificar. Ninguno de los dos se ve desde las validaciones
 V1–V4, que puntúan un arranque cada una; una sonda de este tipo debería correr en cada ronda.
 
+### Seguimiento: el proxy de importaciones hacía salir la convertibilidad en el mes 1
+
+Siguiendo el punto 1 de la sonda, se trazó mes a mes la corrida que más se aleja de la historia:
+1991-04, donde el modelo colapsa en el mes 25 y la realidad tuvo una década de convertibilidad.
+
+**La cascada, con números.** En el **mes 1** —abril de 1991, el mes en que la convertibilidad
+empezó— se disparan a la vez `fx_regime_exit` y `banking_crisis`. A partir de ahí:
+
+| mes | aprobación | estabilidad | confianza inst. | tensión | protesta |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 52.9 | 82.9 | 56.2 | 35.7 | 24.9 |
+| 3 | 11.1 | 72.0 | 42.6 | 76.8 | 63.3 |
+| 5 | **0.00** | 63.9 | 31.2 | **100.0** | 89.0 |
+| 12 | 0.00 | 29.1 | **0.00** | 100.0 | 100.0 |
+| 21 | 0.00 | 5.8 | 0.00 | 100.0 | 100.0 | → `collapse` |
+
+Cuatro variables saturan contra su cota entre los meses 5 y 12 y se quedan ahí. Lo decisivo: en los
+meses 15 a 21 **las reservas se recuperan** (3 019 → 8 389 USD M), la inflación se mantiene plana en
+8–9 % y el desempleo en 8.3 %. La economía se estabiliza y el país colapsa igual, porque el bloque
+político ya está clavado en el piso y no tiene término de recuperación que lo despegue.
+
+**La causa raíz.** `R_min`, el piso de reservas que fuerza la salida de un `peg`, son tres meses de
+importaciones. Las importaciones salían del proxy `0.18 · PIB / 12` que ADR 012 §4 dejó como
+provisorio ("se leen del estado inicial real cuando existen"), y que nunca se reemplazó:
+
+| | valor |
+|---|---:|
+| Importaciones 1991 según el proxy | 2 850 USD M/mes |
+| Importaciones 1991 reales (WDI) | **961** USD M/mes |
+| `R_min` con el proxy | 8 550 USD M |
+| Reservas reales de abril de 1991 | 7 844 USD M |
+| `R_min` con el dato real | **2 883** USD M |
+
+El peg salía en el mes 1 porque el modelo creía que Argentina importaba tres veces más de lo que
+importaba. No era un coeficiente mal calibrado: era un dato que faltaba.
+
+**Corregido** con `exports_annual_usd.csv`/`imports_annual_usd.csv` (SOURCES.md fuente 23, `trust`
+A, tres cruces en `consistency.md` §15). Efecto medido, misma sonda, 15 semillas:
+
+| arranque | antes (mes de fin) | después | de | real |
+|---|---:|---:|---:|---|
+| 1983-12 | 9 | 7 | 72 | hiperinflación en el mes 66 |
+| 1991-04 | 25 | 30 | 120 | estable |
+| 1998-01 | 44 | 41 | 60 | default en el mes 47 |
+| 2003-06 | 59 | **105** | 150 | crecimiento |
+| 2015-12 | (no corría) | **48 completos, `defeated` 15/15** | 48 | derrota del oficialismo |
+| 2019-12 | 47, `hyperinflation` 12/15 | 48, `defeated` 7 / `hyper` 8 | 48 | derrota |
+
+En 1991 el peg ya no sale en el mes 1: aguanta tres meses y la aprobación **sube** de 53 a 73 antes
+de que el régimen cambie. 2003-06 casi duplica su horizonte. 2015-12 acierta el resultado electoral
+real en las 15 semillas. 2019-12 más que duplica las semillas que terminan en derrota del
+oficialismo en vez de en hiperinflación.
+
+**Lo que este arreglo NO toca, y sigue siendo el problema principal.** 1983-12 hiperinflaciona en el
+mes 7 (peor que antes) contra el mes 66 real, y 1991-04 sigue colapsando en el mes 30 contra 120. La
+saturación del punto 2 sigue intacta: una vez que aprobación, tensión, protesta y confianza tocan
+sus cotas, no hay fuerza que las devuelva. El piso de legitimidad de ADR 016 sostiene
+`political_stability`, pero no a las cuatro variables que la empujan. **Ese es el próximo trabajo, y
+no es calibrar: es darle a esas cuatro un término de recuperación, como ADR 012 §5 hizo con
+`institutional_confidence` y `social_tension` pero midiéndolo contra episodios reales.**
+

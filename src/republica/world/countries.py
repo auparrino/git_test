@@ -472,6 +472,28 @@ def historical_exogenous_series(
     return out
 
 
+def _annual_usd_musd(pack_dir: Path, nombre: str, year: int) -> float | None:
+    """Valor ANUAL en USD millones de `history/<nombre>` para `year`, o el
+    año mas cercano dentro de la serie (mismo criterio que el resto del
+    modulo). `None` si el archivo no existe o esta vacio."""
+    import csv as _csv
+
+    path = pack_dir / "history" / nombre
+    if not path.exists():
+        return None
+    by_year: dict[int, float] = {}
+    with path.open(encoding="utf-8", newline="") as fh:
+        for row in _csv.DictReader(fh):
+            try:
+                by_year[int(row["date"][:4])] = float(row["value"])
+            except (KeyError, ValueError):
+                continue
+    if not by_year:
+        return None
+    elegido = year if year in by_year else min(by_year, key=lambda yy: abs(yy - year))
+    return by_year[elegido] / 1.0e6
+
+
 def x0_m0_from_gdp_usd(pack_dir: Path, start: str, x0_m0_pct_gdp: float) -> tuple[float, float]:
     """`X0`/`M0` (ADR 012 secc. 4, USD M/mes) para `start`: `x0_m0_pct_gdp
     · gdp_usd(start_year) / 12`, con `gdp_usd` de `history/gdp_usd.csv` (en
@@ -486,10 +508,26 @@ def x0_m0_from_gdp_usd(pack_dir: Path, start: str, x0_m0_pct_gdp: float) -> tupl
     ninguna serie de PIB en USD)."""
     import csv as _csv
 
+    start_year = int(start.split("-")[0])
+
+    # Dato REAL primero (`exports_annual_usd.csv`/`imports_annual_usd.csv`,
+    # WDI NE.EXP/IMP.GNFS.CD via mirror, SOURCES.md fuente 23). El proxy de
+    # abajo sobreestimaba las importaciones de 1991 por un factor de 3, y
+    # como `R_min` (el piso de reservas que fuerza la salida de un `peg`) son
+    # 3 meses de importaciones, la convertibilidad salia en el mes 1 --
+    # encontrado con la sonda exploratoria de `docs/EMERGENCE_LOG.md`. Se
+    # exige que las DOS series tengan el año: mezclar exportaciones reales
+    # con importaciones del proxy daria un saldo comercial sin sentido.
+    reales = (
+        _annual_usd_musd(pack_dir, "exports_annual_usd.csv", start_year),
+        _annual_usd_musd(pack_dir, "imports_annual_usd.csv", start_year),
+    )
+    if reales[0] is not None and reales[1] is not None:
+        return reales[0] / 12.0, reales[1] / 12.0
+
     p = pack_dir / "history" / "gdp_usd.csv"
     if not p.exists():
         return DEFAULT_X0_M0_USD_M, DEFAULT_X0_M0_USD_M
-    start_year = int(start.split("-")[0])
     by_year: dict[int, float] = {}
     with p.open(encoding="utf-8", newline="") as fh:
         for row in _csv.DictReader(fh):

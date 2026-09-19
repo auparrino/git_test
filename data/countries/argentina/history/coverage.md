@@ -30,6 +30,8 @@ noviembre puede figurar `parcial` aunque el mes exista.
 | `inflation_cpi_annual_linked.csv` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | parcial | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | parcial |
 | `exchange_rate_annual.csv` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | parcial | parcial | parcial | parcial | parcial | ✓ | ✓ | ✓ | parcial | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | `exchange_rate_annual_linked.csv` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | parcial | ✗ |
+| `exports_annual_usd.csv` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | parcial | ✗ |
+| `imports_annual_usd.csv` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | parcial | ✗ |
 | `gdp_deflator_annual.csv` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ | parcial | ✗ | ✗ |
 | `inflation_cpi_monthly_linked.csv` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | parcial | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | parcial |
 | `poverty_linked.csv` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | parcial | parcial | parcial |

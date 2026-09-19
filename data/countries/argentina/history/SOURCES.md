@@ -619,6 +619,29 @@ pública, igual criterio que para `thomasriveros/BCRA_Data` en la fuente 10.
   no el origen). Cierra el hueco 1952-1991 que la fuente 16 no pudo cubrir por el artefacto de
   escala de Clio Infra; 1952-1961 sigue sin dato.
 
+### 23. `ronnywang/worldbank` — exportaciones e importaciones anuales 1962-2012 (WDI `NE.EXP/IMP.GNFS.CD`)
+
+- **Repo**: `https://github.com/ronnywang/worldbank` (el mismo mirror de las fuentes 17 y 22)
+- **Archivos**: `WDI_bundle/parsed/NE.EXP.GNFS.CD_WDI.csv` y `NE.IMP.GNFS.CD_WDI.csv`
+- **Origen declarado**: World Development Indicators del Banco Mundial, "Exports/Imports of goods
+  and services (current US$)". Códigos de indicador exactos.
+- **Licencia**: no hay `LICENSE` en el repo; el dato de origen es World Bank Open Data (CC BY 4.0).
+- **Fecha de descarga**: 2026-09-19 (snapshot del repo: diciembre de 2013)
+- **sha256**: exportaciones `914db11445b3e20a804a941ccb800cc39652840eb5c1e10261ab3c2af4f8d6fd`;
+  importaciones `3da7adea6ce58899176c3b6b143da5a393d7c9557091db3224a791f35ba05ddd`
+  (copias crudas commiteadas en `history/raw/worldbank_mirror/`)
+- **Transformación**: fila `Country Code == "ARG"`, columnas de año no vacías (1962-2012) →
+  `exports_annual_usd.csv` / `imports_annual_usd.csv`, 51 filas cada una, sin transformar.
+  Reproducible con `scripts/build_argentina_trade.py`, que imprime los tres cruces de
+  `consistency.md` sección 15.
+- **Para qué**: `X0`/`M0` del balance de pagos (ADR 012 §4), que hasta ahora usaban el proxy
+  `0.18 · PIB / 12`. Ese proxy sobreestimaba las importaciones de 1991 por un factor de 3, y como
+  `R_min` (el piso de reservas que fuerza la salida de un `peg`) son tres meses de importaciones,
+  la convertibilidad salía en el mes 1. Ver `docs/EMERGENCE_LOG.md`.
+- **source_id**: `wb_exports_mirror` / `wb_imports_mirror`
+- **trust**: A (indicador oficial con código exacto declarado; la limitación es la cobertura del
+  snapshot, que termina en 2012, no el origen)
+
 ## Resumen de `trust` por serie tidy
 
 | Archivo | `source_id` | trust | Período |
@@ -646,6 +669,8 @@ pública, igual criterio que para `thomasriveros/BCRA_Data` en la fuente 10.
 | `inflation_cpi_annual_linked.csv` | `forexcenturies_clio_cpi` / `wb_inflation_cpi` | B / A | 1915–2023 |
 | `exchange_rate_annual.csv` | `forexcenturies_clio_fx` | B | 1879–1951 |
 | `exchange_rate_annual_linked.csv` | `wb_fcrf_mirror` | A | 1962–2012 |
+| `exports_annual_usd.csv` | `wb_exports_mirror` | A | 1962–2012 |
+| `imports_annual_usd.csv` | `wb_imports_mirror` | A | 1962–2012 |
 | `gdp_deflator_annual.csv` | `wb_gdp_deflator_mirror` | A | 1961–2006 |
 | `inflation_cpi_monthly_linked.csv` | `bcra_data_inflacion_mensual` / `jmtelechea_ipc_nacional` | A / B | 1943-03–2026-08 |
 | `poverty_linked.csv` | `argendata_cedlas_isa_pobreza_nacional` / `diloretot_tasa_pobreza` | B / A | 2001-05–2026-01 |
