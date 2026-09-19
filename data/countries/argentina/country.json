@@ -287,7 +287,7 @@
     "notes": "Coeficientes de diseno (ADR 011 secc. 5), NO calibrados contra series reales (eso es A3, fuera de alcance de A2): ver Notas de implementacion del ADR."
   },
   "macro": {
-    "notes": "ADR 012: coeficientes de precios con expectativas (secc. 2), regimen cambiario efectivo (secc. 3), balance de pagos (secc. 4) y recuperacion de largo plazo (secc. 5). Los valores literales del ADR se marcan '(ADR)'; el resto son elecciones de diseno documentadas en docs/ADR_012_argentine_macro.md seccion 'Notas de implementacion' -- el ADR da la FORMA de la formula pero no un numero. NO calibrados contra series reales (eso es un run de calibracion aparte, fuera de alcance de esta entrega).",
+    "notes": "ADR 012: coeficientes de precios con expectativas (secc. 2), regimen cambiario efectivo (secc. 3), balance de pagos (secc. 4) y recuperacion de largo plazo (secc. 5). Los valores literales del ADR se marcan '(ADR)'; el resto son elecciones de diseno documentadas en docs/ADR_012_argentine_macro.md seccion 'Notas de implementacion' -- el ADR da la FORMA de la formula pero no un numero. NO calibrados contra series reales (eso es un run de calibracion aparte, fuera de alcance de esta entrega). ADR 019: `indexation_state`/`idx_adj`/`idx_accel_k`/`idx_seed_months` prenden la indexacion como ESTADO con inercia (docs/ADR_019_initial_state_sensitivity.md secc. 3); son ESTRUCTURALES y quedan fuera del vector de CMA-ES (world/economy.py::INDEXATION_FIELDS). `idx_init` NO se declara aca: lo resuelve world/countries.py::load_country_pack por fecha de arranque desde history/inflation_cpi_monthly_linked.csv.",
     "coefficients": {
       "w_adapt": 0.7,
       "rho_pi": 0.85,
@@ -353,7 +353,11 @@
       "lf_min": 18.0,
       "lf_rupture_inflation": 15.0,
       "lf_rupture_months": 3,
-      "lf_exit_window_months": 600
+      "lf_exit_window_months": 600,
+      "indexation_state": true,
+      "idx_adj": 0.12,
+      "idx_accel_k": 2.0,
+      "idx_seed_months": 24
     }
   },
   "initial_states": {
@@ -401,12 +405,12 @@
         "value": 42.0
       },
       "inflation": {
-        "source": "inflation_cpi_annual.csv (wb_inflation_cpi), a +1 meses de la fecha objetivo: (1 + ipc_anual/100)^(1/12) - 1, expresado en puntos porcentuales (ADR 011 secc. 2, escala de WorldState.inflation).",
-        "value": 17.76035988773017
+        "source": "inflation_cpi_monthly_linked.csv (bcra_data_inflacion_mensual), mes exacto 1983-12: % variacion mensual del IPC, BCRA 'Principales Variables' id 27 (serie historica empalmada de INDEC). ADR 019 secc. 3C: reemplaza al proxy anual `inflation_cpi_annual.csv` convertido con (1+anual/100)^(1/12)-1 que traia A2 -- el dato mensual real ya estaba en history/ y no lo usaba nadie. Valor anterior: 17.7604.",
+        "value": 17.7
       },
       "inflation_lag1": {
-        "source": "inflation_cpi_annual.csv (wb_inflation_cpi), mes anterior 1983-11 (a +2 meses): misma transformacion que `inflation`.",
-        "value": 17.76035988773017
+        "source": "inflation_cpi_monthly_linked.csv (bcra_data_inflacion_mensual), mes exacto 1983-11: % variacion mensual del IPC, BCRA 'Principales Variables' id 27 (serie historica empalmada de INDEC). ADR 019 secc. 3C: reemplaza al proxy anual `inflation_cpi_annual.csv` convertido con (1+anual/100)^(1/12)-1 que traia A2 -- el dato mensual real ya estaba en history/ y no lo usaba nadie. Valor anterior: 17.7604.",
+        "value": 19.2
       },
       "institutional_confidence": {
         "source": "vdem_argentina.csv (v2x_libdem, a +1 meses): v2x_libdem (indice de democracia liberal, 0-1) * 100, acotado a [0,100]. Proxy: mas garantias liberales/institucionales ~ mas confianza institucional esperada -- correlato, no una medicion directa.",
@@ -496,12 +500,12 @@
         "value": 42.0
       },
       "inflation": {
-        "source": "inflation_cpi_annual.csv (wb_inflation_cpi), a -5 meses de la fecha objetivo: (1 + ipc_anual/100)^(1/12) - 1, expresado en puntos porcentuales (ADR 011 secc. 2, escala de WorldState.inflation).",
-        "value": 13.989265074886625
+        "source": "inflation_cpi_monthly_linked.csv (bcra_data_inflacion_mensual), mes exacto 1988-06: % variacion mensual del IPC, BCRA 'Principales Variables' id 27 (serie historica empalmada de INDEC). ADR 019 secc. 3C: reemplaza al proxy anual `inflation_cpi_annual.csv` convertido con (1+anual/100)^(1/12)-1 que traia A2 -- el dato mensual real ya estaba en history/ y no lo usaba nadie. Valor anterior: 13.9893.",
+        "value": 18.0
       },
       "inflation_lag1": {
-        "source": "inflation_cpi_annual.csv (wb_inflation_cpi), mes anterior 1988-05 (a -4 meses): misma transformacion que `inflation`.",
-        "value": 13.989265074886625
+        "source": "inflation_cpi_monthly_linked.csv (bcra_data_inflacion_mensual), mes exacto 1988-05: % variacion mensual del IPC, BCRA 'Principales Variables' id 27 (serie historica empalmada de INDEC). ADR 019 secc. 3C: reemplaza al proxy anual `inflation_cpi_annual.csv` convertido con (1+anual/100)^(1/12)-1 que traia A2 -- el dato mensual real ya estaba en history/ y no lo usaba nadie. Valor anterior: 13.9893.",
+        "value": 15.7
       },
       "institutional_confidence": {
         "source": "vdem_argentina.csv (v2x_libdem, a -5 meses): v2x_libdem (indice de democracia liberal, 0-1) * 100, acotado a [0,100]. Proxy: mas garantias liberales/institucionales ~ mas confianza institucional esperada -- correlato, no una medicion directa.",

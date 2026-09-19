@@ -1096,3 +1096,212 @@ sabe cuándo no sabe, con la misma fuerza moderada de antes.
 Estos resultados describen el comportamiento de República Artificial calibrada con datos de
 Argentina; no son evidencia sobre lo que hubiera pasado.
 
+
+## Barrido de sensibilidad al mes de arranque, 1983-12 → 1990-12 (ADR 019)
+
+Entregable 4 de la tarea de ADR 019 (`docs/ADR_019_initial_state_sensitivity.md`): **85 arranques**,
+uno por cada mes entre 1983-12 y 1990-12, **10 semillas**, **24 meses**, calibración `a7_by_regime`,
+transiciones de régimen (ADR 015) y piso de legitimidad (ADR 016) activos, sin shocks forzados. Es
+lo mismo que corre `republica run --country argentina --start <mes> --calibration a7_by_regime
+--regime-transitions`. 85 × 10 corridas en **21 s** con 8 workers.
+
+Lo que se mide en cada arranque es el **mes en que se cumple el criterio terminal del propio
+modelo** (`terminal.hyper_inflation = 20 %/mes` durante `terminal.hyper_months = 3` meses seguidos).
+La columna "real" es ese MISMO criterio evaluado sobre la serie mensual real
+(`history/inflation_cpi_monthly_linked.csv`, BCRA/INDEC empalmada), no el mes de la hiperinflación
+de junio de 1989: ver ADR 019 §7.0, donde se muestra que confundir las dos cosas es lo que hacía que
+el criterio de éxito original ("después del mes 48 desde 1983-12") apuntara en la dirección
+equivocada — el dato real cumple el criterio del modelo en el **mes 15**.
+
+Las dos columnas de modelo son:
+
+- **antes**: ADR 012 puro, con el estado inicial que construía A2 / `initial_state_for` (inflación
+  anual convertida a mensual).
+- **después**: con ADR 019 (`indexation_state` prendido) y el estado inicial tomado de la serie
+  mensual REAL.
+
+### Qué salió
+
+**1. El síntoma que la tarea pedía buscar está, y es grande.** Con el estado inicial viejo, entre
+meses de arranque contiguos:
+
+| arranque | `pi0` (viejo) | `rho_eff` inicial | semillas | mediana |
+|---|---:|---:|---:|---:|
+| 1988-01 | 13.99 | 0.8536 | 3/10 | **17** |
+| 1988-02 | 17.65 | 0.8696 | 9/10 | 15 |
+| **1988-03** | 20.37 | 1.0065 | 10/10 | **3** |
+
+Dos meses de diferencia en la fecha de arranque, y la mediana del mes de hiperinflación pasa de 17 a
+3. La causa está aislada en ADR 019 §1.3: `rho_eff` cruza 1 en **17.4773 %/mes** con el vector
+`peg`/`crawl` de `a7_by_regime`, y el dato inicial de 1983-12 lo cruzaba por **0.283 pp**.
+
+**2. Y 1988-06 —el mes que mide la validación V1— era un outlier dentro de su propia vecindad.**
+1988-05 arrancaba en 24.37, 1988-07 en 27.32, y 1988-06 en **13.99**. No es un fenómeno del modelo:
+1988-06 es uno de los 8 hitos de `country.json` y usa la regla de A2 (anual del año más cercano, sin
+interpolar) mientras sus vecinos caen a `initial_state_for` (anual interpolada). Para el mismo mes,
+los dos constructores del proyecto difieren en **11.95 pp**. El dato mensual real es 18.0.
+
+**3. El dato viejo tenía sesgo de anticipación.** `initial_state_for` construía la inflación de
+1988-09 interpolando entre el promedio anual de 1988 y el de **1989** — que contiene la
+hiperinflación de junio y julio de 1989. El "estado inicial" de septiembre de 1988 (29.66 %/mes) ya
+traía adentro el dato de nueve meses después; el real de ese mes es 11.7. Toda calibración, backtest
+o validación que arranque antes de 1997-02 (donde empieza `inflation_cpi_monthly.csv`) estuvo usando
+estados iniciales contaminados con el futuro de la ventana que evalúa. Corregido en ADR 019 §3C:
+`history/inflation_cpi_monthly_linked.csv` (1943-03+) estaba en el repo y no lo usaba nadie.
+
+**4. Después del arreglo, el modelo sigue al dato.** Sobre los **31 arranques** donde modelo y dato
+cruzan dentro de los 24 meses, el error mediano es de **3 meses**. Y hay **29 arranques donde
+ninguno de los dos cruza** —entre ellos los 23 meses seguidos de 1985-07 a 1987-05, el Plan Austral
+funcionando—, que el modelo acierta en bloque sin que se le haya dicho nada de ningún plan.
+
+**5. Lo que sigue mal, medido.** Quedan 16 pares de meses contiguos donde la mediana salta más de 8
+meses, contra 4 antes y **2 en el propio dato**. Casi todos son del tipo 1988-08 → 1988-09: la
+inflación real cae de 27.6 a 11.7 %/mes y el modelo la sigue, mientras que el dato "sabe" que la
+hiperinflación llega igual nueve meses después. El modelo no tiene cómo verlo — el Plan Primavera y
+su derrumbe no están en ninguna de sus 21 variables, y 17 de esas 21 son la misma constante
+`assumed` en todas las fechas (ADR 019 §1.1).
+
+### La tabla completa
+
+`pi0` es la inflación mensual real del mes de arranque (la columna es la misma para los dos brazos
+sólo a partir del arreglo; antes del arreglo el brazo "antes" veía la conversión anual). "n/10" son
+las semillas que cumplen el criterio terminal dentro de los 24 meses; la mediana es sobre esas.
+
+| arranque | `pi0` real | antes: n/10, mediana | después: n/10, mediana | real |
+|---|---:|---:|---:|---:|
+| 1983-12 | 17.7 | 10/10, 6 | 8/10, 16 | 15 |
+| 1984-01 | 12.5 | 10/10, 7 | 0/10, — | 14 |
+| 1984-02 | 16.9 | 10/10, 6 | 10/10, 12 | 13 |
+| 1984-03 | 20.3 | 10/10, 6 | 10/10, 6 | 12 |
+| 1984-04 | 18.5 | 10/10, 6 | 10/10, 14 | 11 |
+| 1984-05 | 17.1 | 10/10, 6 | 10/10, 16 | 10 |
+| 1984-06 | 17.9 | 10/10, 6 | 10/10, 6 | 9 |
+| 1984-07 | 18.3 | 10/10, 6 | 10/10, 6 | 8 |
+| 1984-08 | 22.8 | 10/10, 6 | 10/10, 3 | 7 |
+| 1984-09 | 27.5 | 10/10, 6 | 10/10, 3 | 6 |
+| 1984-10 | 19.3 | 10/10, 6 | 10/10, 15 | 5 |
+| 1984-11 | 15.0 | 10/10, 6 | 1/10, 23 | 4 |
+| 1984-12 | 19.7 | 10/10, 6 | 10/10, 6 | 3 |
+| 1985-01 | 25.1 | 10/10, 8 | 10/10, 3 | 3 |
+| 1985-02 | 20.7 | 9/10, 12 | 10/10, 11 | 3 |
+| 1985-03 | 26.5 | 7/10, 14 | 10/10, 3 | 3 |
+| 1985-04 | 29.5 | 3/10, 17 | 10/10, 3 | — |
+| 1985-05 | 25.1 | 1/10, 13 | 10/10, 3 | — |
+| 1985-06 | 30.5 | 2/10, 18 | 10/10, 3 | — |
+| 1985-07 | 6.2 | 0/10, — | 0/10, — | — |
+| 1985-08 | 3.1 | 0/10, — | 0/10, — | — |
+| 1985-09 | 2.0 | 0/10, — | 0/10, — | — |
+| 1985-10 | 1.9 | 0/10, — | 0/10, — | — |
+| 1985-11 | 2.4 | 0/10, — | 0/10, — | — |
+| 1985-12 | 3.2 | 0/10, — | 0/10, — | — |
+| 1986-01 | 3.0 | 0/10, — | 0/10, — | — |
+| 1986-02 | 1.7 | 0/10, — | 0/10, — | — |
+| 1986-03 | 4.6 | 0/10, — | 0/10, — | — |
+| 1986-04 | 4.7 | 0/10, — | 0/10, — | — |
+| 1986-05 | 4.0 | 0/10, — | 0/10, — | — |
+| 1986-06 | 4.5 | 0/10, — | 0/10, — | — |
+| 1986-07 | 6.8 | 0/10, — | 0/10, — | — |
+| 1986-08 | 8.8 | 0/10, — | 0/10, — | — |
+| 1986-09 | 7.2 | 0/10, — | 0/10, — | — |
+| 1986-10 | 6.1 | 0/10, — | 0/10, — | — |
+| 1986-11 | 5.3 | 0/10, — | 0/10, — | — |
+| 1986-12 | 4.7 | 0/10, — | 0/10, — | — |
+| 1987-01 | 7.6 | 0/10, — | 0/10, — | — |
+| 1987-02 | 6.5 | 0/10, — | 0/10, — | — |
+| 1987-03 | 8.3 | 0/10, — | 0/10, — | — |
+| 1987-04 | 3.3 | 0/10, — | 0/10, — | — |
+| 1987-05 | 4.2 | 0/10, — | 0/10, — | — |
+| 1987-06 | 8.0 | 0/10, — | 0/10, — | 24 |
+| 1987-07 | 10.1 | 1/10, 20 | 0/10, — | 23 |
+| 1987-08 | 13.7 | 1/10, 20 | 1/10, 16 | 22 |
+| 1987-09 | 11.7 | 2/10, 19 | 1/10, 22 | 21 |
+| 1987-10 | 19.6 | 6/10, 19 | 10/10, 12 | 20 |
+| 1987-11 | 10.3 | 4/10, 19 | 0/10, — | 19 |
+| 1987-12 | 3.4 | 4/10, 18 | 0/10, — | 18 |
+| 1988-01 | 9.1 | 3/10, 17 | 0/10, — | 17 |
+| 1988-02 | 10.4 | 9/10, 15 | 0/10, — | 16 |
+| 1988-03 | 14.8 | 10/10, 3 | 3/10, 18 | 15 |
+| 1988-04 | 17.2 | 10/10, 3 | 1/10, 12 | 14 |
+| 1988-05 | 15.7 | 10/10, 3 | 3/10, 19 | 13 |
+| 1988-06 | 18.0 | 1/10, 20 | 5/10, 19 | 12 |
+| 1988-07 | 25.6 | 10/10, 3 | 10/10, 3 | 11 |
+| 1988-08 | 27.6 | 10/10, 3 | 10/10, 3 | 10 |
+| 1988-09 | 11.7 | 10/10, 3 | 0/10, — | 9 |
+| 1988-10 | 9.0 | 10/10, 3 | 0/10, — | 8 |
+| 1988-11 | 5.7 | 10/10, 3 | 0/10, — | 7 |
+| 1988-12 | 6.8 | 10/10, 3 | 0/10, — | 6 |
+| 1989-01 | 8.9 | 10/10, 3 | 0/10, — | 5 |
+| 1989-02 | 9.6 | 10/10, 3 | 0/10, — | 4 |
+| 1989-03 | 17.0 | 10/10, 3 | 6/10, 16 | 3 |
+| 1989-04 | 33.4 | 10/10, 3 | 10/10, 3 | 3 |
+| 1989-05 | 78.5 | 10/10, 3 | 10/10, 3 | 3 |
+| 1989-06 | 114.5 | 10/10, 3 | 10/10, 3 | 8 |
+| 1989-07 | 196.6 | 10/10, 3 | 10/10, 3 | 7 |
+| 1989-08 | 37.9 | 10/10, 3 | 10/10, 3 | 6 |
+| 1989-09 | 9.4 | 10/10, 3 | 0/10, — | 5 |
+| 1989-10 | 5.6 | 10/10, 3 | 0/10, — | 4 |
+| 1989-11 | 6.5 | 10/10, 3 | 0/10, — | 3 |
+| 1989-12 | 40.1 | 10/10, 3 | 10/10, 3 | 3 |
+| 1990-01 | 79.2 | 10/10, 3 | 10/10, 3 | — |
+| 1990-02 | 61.6 | 10/10, 3 | 10/10, 3 | — |
+| 1990-03 | 95.5 | 10/10, 3 | 10/10, 3 | — |
+| 1990-04 | 11.4 | 10/10, 3 | 1/10, 23 | — |
+| 1990-05 | 13.6 | 10/10, 3 | 1/10, 19 | — |
+| 1990-06 | 13.9 | 10/10, 3 | 1/10, 21 | — |
+| 1990-07 | 10.8 | 10/10, 3 | 0/10, — | — |
+| 1990-08 | 15.3 | 10/10, 3 | 0/10, — | — |
+| 1990-09 | 15.7 | 10/10, 6 | 0/10, — | — |
+| 1990-10 | 7.7 | 8/10, 16 | 0/10, — | — |
+| 1990-11 | 6.2 | 3/10, 18 | 0/10, — | — |
+| 1990-12 | 4.7 | 0/10, — | 0/10, — | — |
+
+### C1 y C2 de ADR 019, medidos
+
+| | antes | después | real |
+|---|---:|---:|---:|
+| **C1** 1983-12, mediana del mes de hiperinflación (15 semillas, 72 meses) | **6.5–7** | **15** (13/15) | **15** |
+| **C2** 1988-06, semillas que cruzan 20 %/mes en 24 meses (V1 / ADR 012 §7 test 2a) | **0/50** | **15/20 = 75 %** | cruza (mes 12) |
+| Control 2003-06 (ADR 012 §7 test 2b) | 0/20 | **0/20** | no cruza |
+
+Las dos condiciones se cumplen a la vez, y el control de no-espuriedad de 2003-06 no se movió. El
+criterio literal del enunciado de la tarea ("desde 1983-12 la hiperinflación después del mes 48")
+**no se cumple y no se intentó cumplir**: ADR 019 §7.0 muestra, con la serie del propio repositorio,
+que cumplirlo significaba alejarse del dato — la Argentina real estuvo tres meses seguidos arriba
+del 20 % mensual en enero–marzo de **1985**, catorce meses después de diciembre de 1983. El mes 66
+es el episodio de hiperinflación (114.5 %/mes), no el criterio terminal del modelo.
+
+### El filo, aislado del cambio de dato
+
+Moviendo SÓLO `inflation`/`inflation_lag1` del estado de 1983-12 (10 semillas, 36 meses), en la
+banda de 2 pp que rodea al umbral de `rho_eff = 1`:
+
+| | rango de la mediana entre `pi0` 17.0 y 19.0 | sensibilidad |
+|---|---:|---:|
+| ADR 012 (flag apagado) | 11.0 → 5.5 = **5.5 meses** | 2.75 meses por pp |
+| **ADR 019 (flag prendido)** | 13.0 → 11.5 = **1.5 meses** | **0.75 meses por pp** |
+
+**3.7 veces menos sensible**, y el nivel al que se estabiliza (11.5–13) es el del dato real (15
+desde 1983-12, 12 desde 1988-06). Entre `pi0` 17.0 y 19.0 la respuesta con el flag prendido es
+literalmente plana en 12 meses.
+
+### Qué queda (se suma a la lista de la tercera ronda)
+
+6. **El modelo sigue sin meseta de inflación alta.** Con `pi_anchor` = EMA(36) de su propia
+   inflación, el ancla alcanza al nivel y el mapa de precios queda con pendiente `1 + c_e > 1` para
+   cualquier nivel: toda corrida termina hiperinflacionando, lo único que cambia es cuánto tarda. La
+   inercia de ADR 019 hace que el "cuánto tarda" coincida con el dato, pero no crea un punto fijo
+   alto estable. Es el próximo problema del bloque de precios.
+7. **Los grupos `float` y `control` de `a7_by_regime` tienen `rho_eff` máximo 0.8086 y 0.8527**, los
+   dos por debajo de 1: para cualquier arranque en una ventana `float` o `control` la
+   hiperinflación por ese canal es **estructuralmente inalcanzable**, sin importar el estado
+   inicial. No es un problema de estructura sino del punto del espacio de parámetros al que llegó
+   la calibración; se arregla recalibrando, y conviene que la próxima corrida lo mire explícito.
+8. **Hay que recalibrar con el dato inicial corregido.** `a7_by_regime` se calibró con estados
+   iniciales que, antes de 1997-02, salían de una interpolación anual con sesgo de anticipación
+   (punto 3 de arriba). Los coeficientes de esa corrida absorbieron ese sesgo. Todo lo medido en
+   esta sección usa esos coeficientes tal cual —es la comparación honesta contra la línea de base—
+   pero una recalibración con el dato real es trabajo pendiente y debería mover el holdout
+   1983-12:1991-12 más que ninguna otra cosa probada hasta ahora.
+
+Estos resultados describen el comportamiento de República Artificial calibrada con datos de
+Argentina; no son evidencia sobre lo que hubiera pasado.

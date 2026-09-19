@@ -337,17 +337,81 @@ LEGITIMACY_FIELDS = (
 )
 
 
+#: Campos de ADR 019 (`docs/ADR_019_initial_state_sensitivity.md` secc. 5):
+#: estructurales por el MISMO motivo que `LEGITIMACY_FIELDS` -- son la
+#: afirmacion del ADR (la indexacion es un stock con inercia, sembrado con
+#: historia real), no grados de libertad para ajustar contra series. Se
+#: anotan con `StructuralFloat`/`int`/`bool` para quedar fuera de
+#: `calibration/parameters.py::MACRO_TUNABLE`, que sigue en 58 campos.
+#: Ademas `idx_seed_history` lo resuelve `world/countries.py::load_country_pack`
+#: POR FECHA DE ARRANQUE: si no viniera del paquete, una calibracion
+#: cargada con `--calibration` lo perderia (los `coefficients.json`
+#: existentes no traen ninguna clave de ADR 019).
+INDEXATION_FIELDS = (
+    "indexation_state",
+    "idx_adj",
+    "idx_accel_k",
+    "idx_seed_months",
+    "idx_seed_history",
+)
+
+
+def seed_indexation(
+    history: tuple[float, ...] | list[float], macro_coeff: MacroCoefficients
+) -> float | None:
+    """Stock de indexacion del mes 0 (ADR 019 secc. 3B): la MISMA ecuacion
+    de ajuste que corre `step_macro_economy`, aplicada a la inflacion
+    mensual REAL de los meses anteriores al arranque (`history`, en orden
+    cronologico, servida por `world/countries.py::load_country_pack` desde
+    `history/inflation_cpi_monthly_linked.csv`).
+
+    Devuelve `None` con menos de la mitad de `idx_seed_months` observaciones
+    -- el motor cae entonces al valor SIN MEMORIA de ADR 012, que es el
+    comportamiento de hoy: una semilla armada con dos o tres datos sueltos
+    no seria mejor que no tener semilla, y `PLAN_ARGENTINA.md` secc. 0.1
+    prohibe inventar dato.
+
+    Se calcula ACA y no en el paquete de pais a proposito: depende de
+    `pi_hi`/`idx_adj`/`idx_accel_k`, y esos pueden venir de una calibracion
+    (`pi_hi` va de 5.0 en el paquete a 6.2857 en el grupo `peg`/`crawl` de
+    `a7_by_regime`) mientras la historia la tiene el paquete. Calculandolo
+    en el paquete, la semilla quedaba armada con un `pi_hi` y usada con
+    otro.
+
+    Con `idx_adj = 0.12` y 24 meses, `(1 - 0.12)**24 = 0.046`: el 95 % del
+    peso sale de la historia observada y no del 0.0 con el que arranca la
+    recursion."""
+    values = list(history)
+    if len(values) * 2 < max(1, int(macro_coeff.idx_seed_months)):
+        return None
+    indexation = 0.0
+    previous: float | None = None
+    for value in values:
+        hat = (
+            value
+            if previous is None
+            else value + (macro_coeff.idx_accel_k - 1.0) * (value - previous)
+        )
+        target = clamp((hat - macro_coeff.pi_hi) / macro_coeff.pi_hi, 0.0, 2.0)
+        indexation += macro_coeff.idx_adj * (target - indexation)
+        previous = value
+    return indexation
+
+
 def merge_structural_coefficients(
     calibrated: MacroCoefficients, pack: MacroCoefficients
 ) -> MacroCoefficients:
     """Devuelve `calibrated` con los campos ESTRUCTURALES de ADR 016
-    (`LEGITIMACY_FIELDS`) tomados de `pack` (los de
-    `country.json -> macro.coefficients`). Ver `LEGITIMACY_FIELDS` para el
-    porque: sin esto, `--calibration <run_id>` ignoraria en silencio los
-    `lf_*` del paquete de pais."""
+    (`LEGITIMACY_FIELDS`) y ADR 019 (`INDEXATION_FIELDS`) tomados de `pack`
+    (los de `country.json -> macro.coefficients`, mas el `idx_seed_history` que
+    `load_country_pack` resolvio para la fecha de arranque). Ver
+    `LEGITIMACY_FIELDS`/`INDEXATION_FIELDS` para el porque: sin esto,
+    `--calibration <run_id>` ignoraria en silencio los `lf_*`/`idx_*` del
+    paquete de pais."""
     from dataclasses import replace
 
-    return replace(calibrated, **{name: getattr(pack, name) for name in LEGITIMACY_FIELDS})
+    names = LEGITIMACY_FIELDS + INDEXATION_FIELDS
+    return replace(calibrated, **{name: getattr(pack, name) for name in names})
 
 
 @dataclass(frozen=True)
@@ -505,6 +569,66 @@ class MacroCoefficients:
     #: legitimidad de origen. El contador se reinicia en cada eleccion.
     lf_exit_window_months: int = 600
 
+    # -- ADR 019: la indexacion como ESTADO con inercia --
+    # Todo detras de `indexation_state` (default OFF: apagado,
+    # `step_macro_economy` devuelve exactamente los mismos valores que antes
+    # de ADR 019). Ver `docs/ADR_019_initial_state_sensitivity.md` secc. 3.
+    #: Prende el mecanismo de ADR 019. Apagado (default), `rho_eff` sigue
+    #: siendo la rampa SIN MEMORIA de ADR 012 secc. 2
+    #: (`rho_pi + rho_slope·clamp((inflation_lag1 - pi_hi)/pi_hi, 0, 2)`),
+    #: que cruza 1 en UN punto -- `pi_hi·(1 + (1 - rho_pi)/rho_slope)`,
+    #: 17.48 %/mes con el vector `peg`/`crawl` de `a7_by_regime` -- y
+    #: convierte un dato inicial con +-4 pp de error en un veredicto
+    #: cualitativo (ADR 019 secc. 1.3/1.4).
+    indexation_state: bool = False
+    #: Velocidad de ajuste del stock de indexacion hacia su objetivo
+    #: (`indexation += idx_adj·(idx_target - indexation)`). 0.12 da una
+    #: media vida de `ln 2 / (-ln 0.88) = 5.4` meses, dentro de la banda de
+    #: renegociacion de contratos indexados (trimestral a semestral) de la
+    #: Argentina de los ochenta. Es el parametro que MATA EL FILO: con
+    #: inercia, un solo mes por encima del umbral ya no cambia el regimen
+    #: del mapa de precios -- hace falta que el exceso persista.
+    idx_adj: StructuralFloat = 0.12
+    #: Cuanto pesa la ACELERACION en el objetivo de indexacion:
+    #: `idx_hat = inflation + (idx_accel_k - 1)·(inflation - inflation_lag1)`.
+    #: NO es un parametro libre; los tres valores interpretables son:
+    #: 0 -> el objetivo depende de `inflation_lag1` (el mecanismo sin
+    #: memoria de ADR 012); 1 -> depende de `inflation` (el mes corriente);
+    #: 2 -> EXTRAPOLACION LINEAL A UN MES, o sea donde va a estar la
+    #: inflacion el mes que viene si sigue la tendencia. 2.0 es el elegido y
+    #: es el unico forward-looking: lo que indexa un contrato no es el mes
+    #: pasado, es el mes que viene (lectura estandar de Cagan). Es tambien
+    #: el unico observable del paquete que ordena 1988-06 por encima de
+    #: 1983-12 -- ver ADR 019 secc. 2 y 3B.
+    idx_accel_k: StructuralFloat = 2.0
+    #: Meses de historia mensual REAL usados para sembrar `indexation` al
+    #: mes 0 (`world/countries.py::indexation_seed_from_history`). Con
+    #: `idx_adj = 0.12`, `(1 - 0.12)^24 = 0.046`: el 95 % del peso de la
+    #: semilla viene de la historia observada y no del valor arbitrario con
+    #: el que arranca la recursion.
+    idx_seed_months: int = 24
+    #: Inflacion mensual REAL de los `idx_seed_months` meses ANTERIORES a
+    #: la fecha de arranque, en orden cronologico: el insumo con el que
+    #: `seed_indexation` reconstruye el stock de indexacion del mes 0
+    #: (ADR 019 secc. 3B). La resuelve `world/countries.py::
+    #: load_country_pack` desde `history/inflation_cpi_monthly_linked.csv`;
+    #: vacia (default) = "sin semilla", y el primer mes cae al valor SIN
+    #: MEMORIA de ADR 012 sobre el estado inicial (el comportamiento de
+    #: hoy).
+    #:
+    #: Se guarda la SERIE y no el numero ya calculado a proposito: la
+    #: semilla depende de `pi_hi`/`idx_adj`/`idx_accel_k`, y esos tres
+    #: pueden venir de una calibracion (`--calibration`, `pi_hi` va de 5.0
+    #: en el paquete a 6.2857 en el grupo `peg`/`crawl` de `a7_by_regime`)
+    #: mientras que el paquete es quien tiene la historia. Guardando el
+    #: numero, la semilla quedaba calculada con un `pi_hi` y usada con otro.
+    #:
+    #: Vive en `MacroCoefficients` y no en `MacroState` porque `MacroState`
+    #: lo arma `engine/simulation.py::run`, que no recibe el paquete de
+    #: pais ni la fecha de arranque; `MacroCoefficients` SI viaja desde el
+    #: paquete hasta `run()` sin tocar `cli.py` (ver `INDEXATION_FIELDS`).
+    idx_seed_history: tuple[float, ...] = ()
+
     @classmethod
     def from_dict(cls, raw: dict | None) -> MacroCoefficients:
         if not raw:
@@ -542,6 +666,17 @@ class MacroState:
     #: `gdp/100`, `rer/100`), tal como esta escrito el ADR.
     x0: float
     m0: float
+    #: ADR 019: stock de indexacion (`rho_eff = rho_pi + rho_slope·
+    #: indexation`). `None` = todavia sin sembrar; el primer mes con
+    #: `indexation_state` prendido lo siembra con `seed_indexation` si el
+    #: paquete lo resolvio para la fecha de arranque, y si no con el valor
+    #: SIN MEMORIA de ADR 012 sobre el estado inicial. Con
+    #: `indexation_state` apagado queda en `None` para siempre y no entra en
+    #: ninguna cuenta (el bloque `macro` del JSONL lo trae como `null`, una
+    #: clave nueva que solo aparece cuando el bloque `macro` ya aparecia
+    #: -- o sea nunca en una corrida sin `macro_coefficients`, que es la que
+    #: protege el golden de Aurora).
+    indexation: float | None = None
 
     def to_dict(self) -> dict:
         from dataclasses import asdict
@@ -596,6 +731,11 @@ class MacroAux:
     pi_exp: float
     rho_eff: float
     seigniorage_pressure: float
+    #: ADR 019: el stock de indexacion con el que se calculo `rho_eff` este
+    #: mes, y el objetivo hacia el que se esta moviendo. `None` con
+    #: `indexation_state` apagado (ADR 012 puro).
+    indexation: float | None = None
+    idx_target: float | None = None
 
 
 def step_macro_economy(
@@ -769,9 +909,38 @@ def step_macro_economy(
         pi_anchor = macro.pi_anchor_ema
 
     pi_exp = macro_coeff.w_adapt * state.inflation_lag1 + (1.0 - macro_coeff.w_adapt) * pi_anchor
-    rho_eff = macro_coeff.rho_pi + macro_coeff.rho_slope * clamp(
-        (state.inflation_lag1 - macro_coeff.pi_hi) / macro_coeff.pi_hi, 0.0, 2.0
-    )
+    #: Valor SIN MEMORIA de ADR 012 secc. 2: la rampa en el nivel del mes
+    #: anterior. Es lo que corre con `indexation_state` apagado, y tambien
+    #: el fallback de la semilla de ADR 019 cuando el paquete no resolvio
+    #: `idx_seed_history` para la fecha de arranque.
+    idx_memoryless = clamp((state.inflation_lag1 - macro_coeff.pi_hi) / macro_coeff.pi_hi, 0.0, 2.0)
+    if not macro_coeff.indexation_state:
+        rho_eff = macro_coeff.rho_pi + macro_coeff.rho_slope * idx_memoryless
+        indexation_new: float | None = None
+        idx_target: float | None = None
+    else:
+        # ADR 019 secc. 3A: la indexacion es un STOCK con inercia y su
+        # objetivo mira hacia adelante (extrapolacion lineal a un mes),
+        # no hacia el mes pasado. Ver `MacroCoefficients.idx_accel_k` /
+        # `idx_adj` para el porque de cada numero.
+        idx_hat = state.inflation + (macro_coeff.idx_accel_k - 1.0) * (
+            state.inflation - state.inflation_lag1
+        )
+        idx_target = clamp((idx_hat - macro_coeff.pi_hi) / macro_coeff.pi_hi, 0.0, 2.0)
+        if macro.indexation is None:
+            # Primer mes: se siembra con la historia REAL previa al arranque
+            # (ADR 019 secc. 3B, `idx_seed_history`, resuelta por
+            # `load_country_pack`), y si el paquete no la trae, con el valor
+            # sin memoria de ADR 012 -- o sea exactamente `rho_eff` de hoy
+            # en el mes 1.
+            seeded = seed_indexation(macro_coeff.idx_seed_history, macro_coeff)
+            indexation_prev = idx_memoryless if seeded is None else seeded
+        else:
+            indexation_prev = macro.indexation
+        indexation_new = clamp(
+            indexation_prev + macro_coeff.idx_adj * (idx_target - indexation_prev), 0.0, 2.0
+        )
+        rho_eff = macro_coeff.rho_pi + macro_coeff.rho_slope * indexation_new
     money_demand = macro_coeff.md_0 * math.exp(-macro_coeff.md_pi * state.inflation_lag1)
     financeable = (
         macro_coeff.financeable_default
@@ -939,6 +1108,7 @@ def step_macro_economy(
         exit_count=macro.exit_count + (1 if "fx_regime_exit" in events else 0),
         x0=macro.x0,
         m0=macro.m0,
+        indexation=indexation_new,
     )
 
     new_state = state.model_copy(
@@ -982,5 +1152,7 @@ def step_macro_economy(
         pi_exp=pi_exp,
         rho_eff=rho_eff,
         seigniorage_pressure=seigniorage_pressure,
+        indexation=indexation_new,
+        idx_target=idx_target,
     )
     return new_state, aux, macro_aux, new_macro, events, pending
